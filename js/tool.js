@@ -1,11 +1,12 @@
-const CANVAS_SIZE = 400;
-const MARGIN = 30;
+const CANVAS_WIDTH = 400;
+const CANVAS_HEIGHT = 300;
+const MARGIN = 20;
 let activeColor = '#1D9E75';
 let history = [];
 
 const canvas = new fabric.Canvas('c', {
-  width: CANVAS_SIZE,
-  height: CANVAS_SIZE,
+  width: CANVAS_WIDTH,
+  height: CANVAS_HEIGHT,
   selection: true,
   backgroundColor: '#7bc67e'
 });
@@ -32,12 +33,13 @@ function makeSwatches(containerId, colors, onClick, defaultIdx) {
 makeSwatches('color-swatches', fgColors, c => { activeColor = c; applyToSelected('fill', c); }, 0);
 makeSwatches('bg-swatches', bgColors, c => { canvas.backgroundColor = c; canvas.renderAll(); saveHistory(); }, 0);
 
-function drawMarginCircle() {
-  canvas.getObjects('circle').filter(o => o._isMargin).forEach(o => canvas.remove(o));
-  const margin = new fabric.Circle({
-    radius: CANVAS_SIZE / 2 - MARGIN,
+function drawMarginRect() {
+  canvas.getObjects('rect').filter(o => o._isMargin).forEach(o => canvas.remove(o));
+  const margin = new fabric.Rect({
     left: MARGIN,
     top: MARGIN,
+    width: CANVAS_WIDTH - MARGIN * 2,
+    height: CANVAS_HEIGHT - MARGIN * 2,
     fill: 'transparent',
     stroke: 'rgba(255,255,255,0.4)',
     strokeWidth: 1.5,
@@ -50,28 +52,16 @@ function drawMarginCircle() {
   canvas.sendToBack(margin);
 }
 
-function drawBombShape() {
-  const clip = new fabric.Circle({
-    radius: CANVAS_SIZE / 2,
-    left: 0,
-    top: 0,
-    absolutePositioned: true
-  });
-  canvas.clipPath = clip;
-}
-
-drawMarginCircle();
-drawBombShape();
+drawMarginRect();
 
 function isOutsideMargin(obj) {
   const br = obj.getBoundingRect();
-  const cx = CANVAS_SIZE / 2, cy = CANVAS_SIZE / 2;
-  const r = CANVAS_SIZE / 2 - MARGIN;
-  const corners = [
-    [br.left, br.top], [br.left + br.width, br.top],
-    [br.left, br.top + br.height], [br.left + br.width, br.top + br.height]
-  ];
-  return corners.some(([x, y]) => Math.sqrt((x - cx) ** 2 + (y - cy) ** 2) > r);
+  return (
+    br.left < MARGIN ||
+    br.top < MARGIN ||
+    br.left + br.width > CANVAS_WIDTH - MARGIN ||
+    br.top + br.height > CANVAS_HEIGHT - MARGIN
+  );
 }
 
 canvas.on('object:moving', function (e) {
@@ -168,7 +158,7 @@ document.getElementById('btn-delete').addEventListener('click', () => {
 
 document.getElementById('btn-front').addEventListener('click', () => {
   const obj = canvas.getActiveObject();
-  if (obj) { canvas.bringToFront(obj); drawMarginCircle(); saveHistory(); }
+  if (obj) { canvas.bringToFront(obj); drawMarginRect(); saveHistory(); }
 });
 
 document.getElementById('btn-back').addEventListener('click', () => {
@@ -181,7 +171,6 @@ document.getElementById('btn-undo').addEventListener('click', () => {
     history.pop();
     const prev = history[history.length - 1];
     canvas.loadFromJSON(prev, () => {
-      canvas.clipPath = new fabric.Circle({ radius: CANVAS_SIZE / 2, left: 0, top: 0, absolutePositioned: true });
       canvas.renderAll();
     });
   }
@@ -190,8 +179,7 @@ document.getElementById('btn-undo').addEventListener('click', () => {
 document.getElementById('btn-clear').addEventListener('click', () => {
   canvas.clear();
   canvas.backgroundColor = '#7bc67e';
-  drawMarginCircle();
-  drawBombShape();
+  drawMarginRect();
   canvas.renderAll();
   saveHistory();
 });
@@ -213,7 +201,7 @@ function saveHistory() {
 saveHistory();
 
 const demo = new fabric.IText('Jouw bedrijfsnaam', {
-  left: 60, top: 310, fontSize: 18, fill: '#ffffff',
+  left: 60, top: 220, fontSize: 18, fill: '#ffffff',
   fontFamily: 'Georgia', editable: true, opacity: 0.9
 });
 canvas.add(demo);
