@@ -194,7 +194,7 @@ document.getElementById('btn-export').addEventListener('click', () => {
   canvas.getObjects('rect').filter(o => o._isMargin).forEach(o => o.visible = false);
   canvas.renderAll();
 
-  const dataURL = canvas.toDataURL({ format: 'png', multiplier: 3 });
+  const dataURL = canvas.toDataURL({ format: 'png', multiplier: 5 });
 
   // Zet margelijn terug
   canvas.getObjects('rect').filter(o => o._isMargin).forEach(o => o.visible = true);
