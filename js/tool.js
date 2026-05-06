@@ -185,7 +185,15 @@ document.getElementById('btn-clear').addEventListener('click', () => {
 });
 
 document.getElementById('btn-export').addEventListener('click', () => {
-  const dataURL = canvas.toDataURL({ format: 'png', multiplier: 2 });
+  // Verberg margelijn
+  canvas.getObjects('rect').filter(o => o._isMargin).forEach(o => o.visible = false);
+  canvas.renderAll();
+
+  const dataURL = canvas.toDataURL({ format: 'png', multiplier: 3 });
+
+  // Zet margelijn terug
+  canvas.getObjects('rect').filter(o => o._isMargin).forEach(o => o.visible = true);
+  canvas.renderAll();
   const a = document.createElement('a');
   a.href = dataURL;
   a.download = 'blossombs-ontwerp.png';
