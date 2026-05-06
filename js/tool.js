@@ -10,8 +10,8 @@ const canvas = new fabric.Canvas('c', {
   backgroundColor: '#7bc67e'
 });
 
-const bgColors = ['#7bc67e','#f4a261','#e76f51','#457b9d','#f1c453','#ffffff','#2c2c2a','#d4a5a5'];
-const fgColors = ['#1D9E75','#ffffff','#2c2c2a','#e63946','#f4a261','#457b9d','#f1c453','#9d4edd'];
+const bgColors = ['#7bc67e', '#f4a261', '#e76f51', '#457b9d', '#f1c453', '#ffffff', '#2c2c2a', '#d4a5a5'];
+const fgColors = ['#1D9E75', '#ffffff', '#2c2c2a', '#e63946', '#f4a261', '#457b9d', '#f1c453', '#9d4edd'];
 
 function makeSwatches(containerId, colors, onClick, defaultIdx) {
   const el = document.getElementById(containerId);
@@ -35,7 +35,7 @@ makeSwatches('bg-swatches', bgColors, c => { canvas.backgroundColor = c; canvas.
 function drawMarginCircle() {
   canvas.getObjects('circle').filter(o => o._isMargin).forEach(o => canvas.remove(o));
   const margin = new fabric.Circle({
-    radius: CANVAS_SIZE/2 - MARGIN,
+    radius: CANVAS_SIZE / 2 - MARGIN,
     left: MARGIN,
     top: MARGIN,
     fill: 'transparent',
@@ -52,7 +52,7 @@ function drawMarginCircle() {
 
 function drawBombShape() {
   const clip = new fabric.Circle({
-    radius: CANVAS_SIZE/2,
+    radius: CANVAS_SIZE / 2,
     left: 0,
     top: 0,
     absolutePositioned: true
@@ -65,16 +65,16 @@ drawBombShape();
 
 function isOutsideMargin(obj) {
   const br = obj.getBoundingRect();
-  const cx = CANVAS_SIZE/2, cy = CANVAS_SIZE/2;
-  const r = CANVAS_SIZE/2 - MARGIN;
+  const cx = CANVAS_SIZE / 2, cy = CANVAS_SIZE / 2;
+  const r = CANVAS_SIZE / 2 - MARGIN;
   const corners = [
-    [br.left, br.top], [br.left+br.width, br.top],
-    [br.left, br.top+br.height], [br.left+br.width, br.top+br.height]
+    [br.left, br.top], [br.left + br.width, br.top],
+    [br.left, br.top + br.height], [br.left + br.width, br.top + br.height]
   ];
-  return corners.some(([x,y]) => Math.sqrt((x-cx)**2+(y-cy)**2) > r);
+  return corners.some(([x, y]) => Math.sqrt((x - cx) ** 2 + (y - cy) ** 2) > r);
 }
 
-canvas.on('object:moving', function(e) {
+canvas.on('object:moving', function (e) {
   const outside = isOutsideMargin(e.target);
   document.getElementById('margin-warning').style.display = outside ? 'flex' : 'none';
 });
@@ -112,12 +112,12 @@ document.getElementById('btn-logo').addEventListener('click', () => {
   document.getElementById('file-input').click();
 });
 
-document.getElementById('file-input').addEventListener('change', function(e) {
+document.getElementById('file-input').addEventListener('change', function (e) {
   const file = e.target.files[0];
   if (!file) return;
   const reader = new FileReader();
-  reader.onload = function(ev) {
-    fabric.Image.fromURL(ev.target.result, function(img) {
+  reader.onload = function (ev) {
+    fabric.Image.fromURL(ev.target.result, function (img) {
       img.scaleToWidth(120);
       img.set({ left: 140, top: 140 });
       canvas.add(img);
@@ -146,18 +146,18 @@ document.getElementById('btn-text').addEventListener('click', () => {
   saveHistory();
 });
 
-document.getElementById('font-size').addEventListener('input', function() {
+document.getElementById('font-size').addEventListener('input', function () {
   const v = parseInt(this.value);
   document.getElementById('font-size-out').textContent = v;
   const obj = canvas.getActiveObject();
   if (obj && obj.type === 'i-text') { obj.set('fontSize', v); canvas.renderAll(); }
 });
 
-document.getElementById('opacity').addEventListener('input', function() {
+document.getElementById('opacity').addEventListener('input', function () {
   const v = parseInt(this.value);
   document.getElementById('opacity-out').textContent = v + '%';
   const obj = canvas.getActiveObject();
-  if (obj) { obj.set('opacity', v/100); canvas.renderAll(); }
+  if (obj) { obj.set('opacity', v / 100); canvas.renderAll(); }
   saveHistory();
 });
 
@@ -179,9 +179,9 @@ document.getElementById('btn-back').addEventListener('click', () => {
 document.getElementById('btn-undo').addEventListener('click', () => {
   if (history.length > 1) {
     history.pop();
-    const prev = history[history.length-1];
+    const prev = history[history.length - 1];
     canvas.loadFromJSON(prev, () => {
-      canvas.clipPath = new fabric.Circle({ radius: CANVAS_SIZE/2, left: 0, top: 0, absolutePositioned: true });
+      canvas.clipPath = new fabric.Circle({ radius: CANVAS_SIZE / 2, left: 0, top: 0, absolutePositioned: true });
       canvas.renderAll();
     });
   }
