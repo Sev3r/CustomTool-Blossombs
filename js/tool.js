@@ -55,7 +55,7 @@ function drawMarginRect() {
 drawMarginRect();
 
 function isOutsideMargin(obj) {
-  const br = obj.getBoundingRect();
+  const br = obj.getBoundingRect(true, true);
   return (
     br.left < MARGIN ||
     br.top < MARGIN ||
@@ -65,6 +65,11 @@ function isOutsideMargin(obj) {
 }
 
 canvas.on('object:moving', function (e) {
+  const outside = isOutsideMargin(e.target);
+  document.getElementById('margin-warning').style.display = outside ? 'flex' : 'none';
+});
+
+canvas.on('object:rotating', function (e) {
   const outside = isOutsideMargin(e.target);
   document.getElementById('margin-warning').style.display = outside ? 'flex' : 'none';
 });

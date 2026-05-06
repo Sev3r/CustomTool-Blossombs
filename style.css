@@ -161,6 +161,26 @@ body {
     font-size: 14px;
 }
 
+#btn-delete:hover {
+    font-weight: bold;
+}
+
+#btn-front:hover {
+    font-weight: bold;
+}
+
+#btn-back:hover {
+    font-weight: bold;
+}
+
+#btn-undo:hover {
+    font-weight: bold;
+}
+
+#btn-clear:hover {
+    font-weight: bold;
+}
+
 .tb-sep {
     width: 0.5px;
     height: 20px;
