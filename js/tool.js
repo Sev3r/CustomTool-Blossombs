@@ -8,30 +8,30 @@ const canvas = new fabric.Canvas('c', {
   width: CANVAS_WIDTH,
   height: CANVAS_HEIGHT,
   selection: true,
-  backgroundColor: '#7bc67e'
+  backgroundColor: '#b7bdb8'
 });
 
-const bgColors = ['#7bc67e', '#f4a261', '#e76f51', '#457b9d', '#f1c453', '#ffffff', '#2c2c2a', '#d4a5a5'];
-const fgColors = ['#1D9E75', '#ffffff', '#2c2c2a', '#e63946', '#f4a261', '#457b9d', '#f1c453', '#9d4edd'];
+// const bgColors = ['#7bc67e', '#f4a261', '#e76f51', '#457b9d', '#f1c453', '#ffffff', '#2c2c2a', '#d4a5a5'];
+// const fgColors = ['#1D9E75', '#ffffff', '#2c2c2a', '#e63946', '#f4a261', '#457b9d', '#f1c453', '#9d4edd'];
 
-function makeSwatches(containerId, colors, onClick, defaultIdx) {
-  const el = document.getElementById(containerId);
-  colors.forEach((c, i) => {
-    const s = document.createElement('div');
-    s.className = 'color-swatch' + (i === defaultIdx ? ' active' : '');
-    s.style.background = c;
-    s.title = c;
-    s.addEventListener('click', () => {
-      el.querySelectorAll('.color-swatch').forEach(x => x.classList.remove('active'));
-      s.classList.add('active');
-      onClick(c);
-    });
-    el.appendChild(s);
-  });
-}
+// function makeSwatches(containerId, colors, onClick, defaultIdx) {
+//   const el = document.getElementById(containerId);
+//   colors.forEach((c, i) => {
+//     const s = document.createElement('div');
+//     s.className = 'color-swatch' + (i === defaultIdx ? ' active' : '');
+//     s.style.background = c;
+//     s.title = c;
+//     s.addEventListener('click', () => {
+//       el.querySelectorAll('.color-swatch').forEach(x => x.classList.remove('active'));
+//       s.classList.add('active');
+//       onClick(c);
+//     });
+//     el.appendChild(s);
+//   });
+// }
 
-makeSwatches('color-swatches', fgColors, c => { activeColor = c; applyToSelected('fill', c); }, 0);
-makeSwatches('bg-swatches', bgColors, c => { canvas.backgroundColor = c; canvas.renderAll(); saveHistory(); }, 0);
+// makeSwatches('color-swatches', fgColors, c => { activeColor = c; applyToSelected('fill', c); }, 0);
+// makeSwatches('bg-swatches', bgColors, c => { canvas.backgroundColor = c; canvas.renderAll(); saveHistory(); }, 0);
 
 function drawMarginRect() {
   canvas.getObjects('rect').filter(o => o._isMargin).forEach(o => canvas.remove(o));
@@ -215,3 +215,13 @@ const demo = new fabric.IText('Jouw bedrijfsnaam', {
 canvas.add(demo);
 canvas.renderAll();
 saveHistory();
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Backspace' || e.key === 'Delete') {
+    const obj = canvas.getActiveObject();
+    if (obj && !obj._isMargin && !(obj.type !== 'i-text' && obj.isEditing)) {
+      canvas.remove(obj);
+      saveHistory();
+    }
+  }
+});
