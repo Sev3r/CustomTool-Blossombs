@@ -74,6 +74,11 @@ canvas.on('object:rotating', function (e) {
   document.getElementById('margin-warning').style.display = outside ? 'flex' : 'none';
 });
 
+canvas.on('object:modified', function (e) {
+  const outside = isOutsideMargin(e.target);
+  document.getElementById('margin-warning').style.display = outside ? 'flex' : 'none';
+})
+
 canvas.on('object:moved', () => {
   document.getElementById('margin-warning').style.display = 'none';
   saveHistory();
