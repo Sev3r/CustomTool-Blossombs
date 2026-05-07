@@ -79,6 +79,11 @@ canvas.on('object:modified', function (e) {
   document.getElementById('margin-warning').style.display = outside ? 'flex' : 'none';
 })
 
+canvas.on('text:changed', function (e) {
+  const outside = isOutsideMargin(e.target);
+  document.getElementById('margin-warning').style.display = outside ? 'flex' : 'none';
+})
+
 canvas.on('object:moved', () => {
   document.getElementById('margin-warning').style.display = 'none';
   saveHistory();
@@ -229,7 +234,7 @@ saveHistory();
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Backspace' || e.key === 'Delete') {
     const obj = canvas.getActiveObject();
-    if (obj && !obj._isMargin && !(obj.type !== 'i-text' && obj.isEditing)) {
+    if (obj && !obj._isMargin && !(obj.type === 'i-text' && obj.isEditing)) {
       canvas.remove(obj);
       saveHistory();
     }
