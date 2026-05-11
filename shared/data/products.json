@@ -1,0 +1,30 @@
+[
+    {
+        "id": "doos-klein",
+        "label": "Kleine geschenkdoos",
+        "description": "Geschikt voor 3-5 zaadbommetjes",
+        "image": "../shared/images/doos-klein.png",
+        "width_mm": 100,
+        "height_mm": 70,
+        "margin_mm": 5,
+        "width_px": 1181,
+        "height_px": 827,
+        "margin_px": 59,
+        "canvas_display_width": 500,
+        "canvas_display_height": 350
+    },
+    {
+        "id": "doos-groot",
+        "label": "Grote geschenkdoos",
+        "description": "Geschikt voor 10-15 zaadbommetjes",
+        "image": "../shared/images/doos-groot.png",
+        "width_mm": 200,
+        "height_mm": 120,
+        "margin_mm": 8,
+        "width_px": 2362,
+        "height_px": 1417,
+        "margin_px": 94,
+        "canvas_display_width": 600,
+        "canvas_display_height": 360
+    }
+]

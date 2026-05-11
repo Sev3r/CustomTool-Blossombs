@@ -1,6 +1,6 @@
-const CANVAS_WIDTH = 400;
-const CANVAS_HEIGHT = 300;
-const MARGIN = 20;
+const CANVAS_WIDTH = product ? product.canvas_display_width : 500;
+const CANVAS_HEIGHT = product ? product.canvas_display_height : 350;
+let MARGIN = product ? product.margin_px * (product.canvas_display_width / product.width_px) : 20;
 let activeColor = '#1D9E75';
 let history = [];
 
@@ -11,7 +11,6 @@ const canvas = new fabric.Canvas('c', {
   backgroundColor: '#b7bdb8'
 });
 
-// const bgColors = ['#7bc67e', '#f4a261', '#e76f51', '#457b9d', '#f1c453', '#ffffff', '#2c2c2a', '#d4a5a5'];
 const fgColors = ['#1D9E75', '#ffffff', '#2c2c2a', '#e63946', '#f4a261', '#457b9d', '#f1c453', '#9d4edd'];
 
 function makeSwatches(containerId, colors, onClick, defaultIdx) {
@@ -31,7 +30,6 @@ function makeSwatches(containerId, colors, onClick, defaultIdx) {
 }
 
 makeSwatches('color-swatches', fgColors, c => { activeColor = c; applyToSelected('fill', c); }, 0);
-// makeSwatches('bg-swatches', bgColors, c => { canvas.backgroundColor = c; canvas.renderAll(); saveHistory(); }, 0);
 
 function drawMarginRect() {
   canvas.getObjects('rect').filter(o => o._isMargin).forEach(o => canvas.remove(o));
@@ -204,7 +202,8 @@ document.getElementById('btn-export').addEventListener('click', () => {
   canvas.getObjects('rect').filter(o => o._isMargin).forEach(o => o.visible = false);
   canvas.renderAll();
 
-  const dataURL = canvas.toDataURL({ format: 'png', multiplier: 5 });
+  const multiplier = product.width_px / product.canvas_display_width;
+  const dataURL = canvas.toDataURL({ format: 'png', multiplier: multiplier });
 
   // Zet margelijn terug
   canvas.getObjects('rect').filter(o => o._isMargin).forEach(o => o.visible = true);
