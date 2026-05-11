@@ -1,3 +1,5 @@
+const product = JSON.parse(localStorage.getItem('selectedProduct'));
+
 const CANVAS_WIDTH = product ? product.canvas_display_width : 500;
 const CANVAS_HEIGHT = product ? product.canvas_display_height : 350;
 let MARGIN = product ? product.margin_px * (product.canvas_display_width / product.width_px) : 20;
@@ -12,6 +14,37 @@ const canvas = new fabric.Canvas('c', {
 });
 
 const fgColors = ['#1D9E75', '#ffffff', '#2c2c2a', '#e63946', '#f4a261', '#457b9d', '#f1c453', '#9d4edd'];
+
+function updateLayerPanel() {
+  const panel = document.getElementById('layer-list');
+  panel.innerHTML = '';
+
+  const objects = canvas.getObjects().filter(o => !o._isMargin);
+
+  // Omgekeerd zodat bovenste laag bovenaan staat
+  [...objects].reverse().forEach((obj, i) => {
+    const item = document.createElement('div');
+    item.className = 'layer-item';
+    item.textContent = obj.type === 'i-text' ? `${i + 1}. Tekst: "${obj.text}"` : `${i + 1}. Afbeelding`;
+
+    if (canvas.getActiveObject() === obj) {
+      item.classList.add('active');
+    }
+
+    // Klik om element te selecteren
+    item.addEventListener('click', () => {
+      canvas.setActiveObject(obj);
+      canvas.renderAll();
+    });
+
+    panel.appendChild(item);
+  });
+}
+
+canvas.on('selection:created', updateLayerPanel);
+canvas.on('selection:updated', updateLayerPanel);
+canvas.on('selection:cleared', updateLayerPanel);
+canvas.on('object:scaling', updateLayerPanel);
 
 function makeSwatches(containerId, colors, onClick, defaultIdx) {
   const el = document.getElementById(containerId);
@@ -80,6 +113,8 @@ canvas.on('object:modified', function (e) {
 canvas.on('text:changed', function (e) {
   const outside = isOutsideMargin(e.target);
   document.getElementById('margin-warning').style.display = outside ? 'flex' : 'none';
+  saveHistory();
+  updateLayerPanel();
 })
 
 canvas.on('object:moved', () => {
@@ -87,7 +122,7 @@ canvas.on('object:moved', () => {
   saveHistory();
 });
 
-canvas.on('object:modified', saveHistory);
+canvas.on('object:modified', saveHistory, updateLayerPanel);
 
 canvas.on('selection:created', updateStatus);
 canvas.on('selection:updated', updateStatus);
@@ -108,6 +143,7 @@ function applyToSelected(prop, value) {
     obj.set(prop, value);
     canvas.renderAll();
     saveHistory();
+    updateLayerPanel();
   }
 }
 
@@ -127,6 +163,7 @@ document.getElementById('file-input').addEventListener('change', function (e) {
       canvas.setActiveObject(img);
       canvas.renderAll();
       saveHistory();
+      updateLayerPanel();
     });
   };
   reader.readAsDataURL(file);
@@ -135,10 +172,12 @@ document.getElementById('file-input').addEventListener('change', function (e) {
 
 document.getElementById('btn-text').addEventListener('click', () => {
   const val = document.getElementById('text-input').value || 'Mijn tekst';
+  const fontSizeEl = document.getElementById('font-size');
+  const fontSize = fontSizeEl ? parseInt(fontSizeEl.value) : 20;
   const text = new fabric.IText(val, {
     left: 100,
     top: 160,
-    fontSize: parseInt(document.getElementById('font-size').value),
+    fontSize: fontSize,
     fill: activeColor,
     fontFamily: 'Georgia',
     editable: true
@@ -147,14 +186,18 @@ document.getElementById('btn-text').addEventListener('click', () => {
   canvas.setActiveObject(text);
   canvas.renderAll();
   saveHistory();
+  updateLayerPanel();
 });
 
-document.getElementById('font-size').addEventListener('input', function () {
-  const v = parseInt(this.value);
-  document.getElementById('font-size-out').textContent = v;
-  const obj = canvas.getActiveObject();
-  if (obj && obj.type === 'i-text') { obj.set('fontSize', v); canvas.renderAll(); }
-});
+const fontSizeEl = document.getElementById('font-size');
+if (fontSizeEl) {
+  fontSizeEl.addEventListener('input', function () {
+    const v = parseInt(this.value);
+    document.getElementById('font-size-out').textContent = v;
+    const obj = canvas.getActiveObject();
+    if (obj && obj.type === 'i-text') { obj.set('fontSize', v); canvas.renderAll(); }
+  });
+}
 
 document.getElementById('opacity').addEventListener('input', function () {
   const v = parseInt(this.value);
@@ -162,21 +205,22 @@ document.getElementById('opacity').addEventListener('input', function () {
   const obj = canvas.getActiveObject();
   if (obj) { obj.set('opacity', v / 100); canvas.renderAll(); }
   saveHistory();
+  updateLayerPanel();
 });
 
 document.getElementById('btn-delete').addEventListener('click', () => {
   const obj = canvas.getActiveObject();
-  if (obj && !obj._isMargin) { canvas.remove(obj); saveHistory(); }
+  if (obj && !obj._isMargin) { canvas.remove(obj); saveHistory(); updateLayerPanel(); }
 });
 
 document.getElementById('btn-front').addEventListener('click', () => {
   const obj = canvas.getActiveObject();
-  if (obj) { canvas.bringToFront(obj); drawMarginRect(); saveHistory(); }
+  if (obj) { canvas.bringToFront(obj); drawMarginRect(); saveHistory(); updateLayerPanel(); }
 });
 
 document.getElementById('btn-back').addEventListener('click', () => {
   const obj = canvas.getActiveObject();
-  if (obj) { canvas.sendBackwards(obj); saveHistory(); }
+  if (obj) { canvas.sendBackwards(obj); saveHistory(); updateLayerPanel(); }
 });
 
 document.getElementById('btn-undo').addEventListener('click', () => {
@@ -191,10 +235,11 @@ document.getElementById('btn-undo').addEventListener('click', () => {
 
 document.getElementById('btn-clear').addEventListener('click', () => {
   canvas.clear();
-  canvas.backgroundColor = '#7bc67e';
+  canvas.backgroundColor = '#b7bdb8';
   drawMarginRect();
   canvas.renderAll();
   saveHistory();
+  updateLayerPanel();
 });
 
 document.getElementById('btn-export').addEventListener('click', () => {
@@ -221,6 +266,7 @@ function saveHistory() {
 }
 
 saveHistory();
+updateLayerPanel();
 
 const demo = new fabric.IText('Jouw bedrijfsnaam', {
   left: 60, top: 220, fontSize: 18, fill: '#ffffff',
@@ -229,6 +275,7 @@ const demo = new fabric.IText('Jouw bedrijfsnaam', {
 canvas.add(demo);
 canvas.renderAll();
 saveHistory();
+updateLayerPanel();
 
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Backspace' || e.key === 'Delete') {
@@ -236,6 +283,7 @@ document.addEventListener('keydown', (e) => {
     if (obj && !obj._isMargin && !(obj.type === 'i-text' && obj.isEditing)) {
       canvas.remove(obj);
       saveHistory();
+      updateLayerPanel();
     }
   }
 });
