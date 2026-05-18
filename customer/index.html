@@ -1,11 +1,54 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="nl">
+
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Document</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Blossombs — Custom Order</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link
+    href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600&family=DM+Sans:wght@300;400;500;600&display=swap"
+    rel="stylesheet">
+  <link rel="stylesheet" href="flow.css">
 </head>
+
 <body>
-    
+
+  <!-- HEADER -->
+  <header class="site-header">
+    <div class="header-inner">
+      <!-- <a href="/" class="logo">🌸 Blossombs</a> -->
+      <span class="header-sub">Custom order tool</span>
+    </div>
+  </header>
+
+  <!-- PROGRESS BAR -->
+  <div class="progress-wrap">
+    <div class="progress-inner" id="progress-bar">
+      <!-- Rendered by JS -->
+    </div>
+  </div>
+
+  <!-- PAGES -->
+  <main class="flow-main">
+    <div id="page-select" class="flow-page"></div>
+    <div id="page-options" class="flow-page"></div>
+    <div id="page-design" class="flow-page"></div>
+    <div id="page-wensen" class="flow-page"></div>
+    <div id="page-review" class="flow-page"></div>
+    <div id="page-confirm" class="flow-page"></div>
+  </main>
+
+  <!-- SCRIPTS -->
+  <!-- SHOPIFY INTEGRATIEPUNT: vervang dataService.js door shopify-data.js die fetch() gebruikt naar Shopify API -->
+  <script src="../admin/dataService.js"></script>
+  <script src="session.js"></script>
+  <script src="step1-select.js"></script>
+  <script src="step2-options.js"></script>
+  <script src="step3-design.js"></script>
+  <script src="step4-wensen.js"></script>
+  <script src="step5-review.js"></script>
+  <script src="flow.js"></script>
 </body>
+
 </html>
