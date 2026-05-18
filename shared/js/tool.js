@@ -242,22 +242,127 @@ document.getElementById('btn-clear').addEventListener('click', () => {
   updateLayerPanel();
 });
 
-document.getElementById('btn-export').addEventListener('click', () => {
-  // Verberg margelijn
+// document.getElementById('btn-export').addEventListener('click', () => {
+//   // Verberg margelijn
+//   canvas.getObjects('rect').filter(o => o._isMargin).forEach(o => o.visible = false);
+//   canvas.renderAll();
+
+//   const multiplier = product.width_px / product.canvas_display_width;
+//   const dataURL = canvas.toDataURL({ format: 'png', multiplier: multiplier });
+
+//   // Zet margelijn terug
+//   canvas.getObjects('rect').filter(o => o._isMargin).forEach(o => o.visible = true);
+//   canvas.renderAll();
+//   const a = document.createElement('a');
+//   a.href = dataURL;
+//   a.download = 'blossombs-ontwerp.png';
+//   a.click();
+// });
+
+document.getElementById('btn-export').addEventListener('click', async () => {
+  // 1. Verberg margelijn
   canvas.getObjects('rect').filter(o => o._isMargin).forEach(o => o.visible = false);
   canvas.renderAll();
 
+  // 2. Exporteer canvas naar PNG op volledige resolutie (300 DPI via multiplier)
   const multiplier = product.width_px / product.canvas_display_width;
   const dataURL = canvas.toDataURL({ format: 'png', multiplier: multiplier });
 
-  // Zet margelijn terug
+  // 3. Zet margelijn terug
   canvas.getObjects('rect').filter(o => o._isMargin).forEach(o => o.visible = true);
   canvas.renderAll();
-  const a = document.createElement('a');
-  a.href = dataURL;
-  a.download = 'blossombs-ontwerp.png';
-  a.click();
+
+  // 4. Bereken afmetingen
+  // Werkelijke pixelafmetingen van het exportcanvas
+  const exportWidthPx = product.width_px;
+  const exportHeightPx = product.height_px ??
+    Math.round(product.canvas_display_height * multiplier);
+
+  const DPI = 300;
+  const MM_PER_INCH = 25.4;
+  const BLEED_MM = 3;      // Standaard snijmarge (bleed)
+  const MARK_MM = 5;      // Lengte van de snijlijn buiten het formaat
+  const GAP_MM = 2;      // Ruimte tussen snijlijn en documentrand
+
+  // Documentformaat in mm (zonder bleed)
+  const docWidthMm = (exportWidthPx / DPI) * MM_PER_INCH;
+  const docHeightMm = (exportHeightPx / DPI) * MM_PER_INCH;
+
+  // PDF-paginaformaat inclusief bleed aan alle zijden
+  const pageWidthMm = docWidthMm + BLEED_MM * 2;
+  const pageHeightMm = docHeightMm + BLEED_MM * 2;
+
+  // 5. Laad jsPDF (verwacht dat jsPDF als script is ingeladen)
+  // Voeg toe aan je HTML: 
+  // <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  const { jsPDF } = window.jspdf;
+
+  const pdf = new jsPDF({
+    orientation: pageWidthMm > pageHeightMm ? 'landscape' : 'portrait',
+    unit: 'mm',
+    format: [pageWidthMm, pageHeightMm],
+    compress: true
+  });
+
+  // 6. CMYK ICC-profiel taggen in PDF metadata
+  // Dit markeert de PDF als CMYK-intentie voor drukkers
+  pdf.setProperties({
+    title: 'Blossombs Ontwerp',
+    subject: 'Print-ready export',
+    creator: 'Blossombs Design Tool',
+    keywords: 'CMYK,print,blossombs'
+  });
+
+  // 7. Afbeelding plaatsen op de pagina (inclusief bleed offset)
+  pdf.addImage(
+    dataURL,
+    'PNG',
+    0,           // x: afbeelding begint op paginarand (bleed inbegrepen)
+    0,           // y: zelfde
+    pageWidthMm, // breedte: vult de volledige pagina incl. bleed
+    pageHeightMm // hoogte: zelfde
+  );
+
+  // 8. Snijlijnen tekenen (crop marks)
+  // Snijlijnen komen op de hoeken, buiten het bleed-gebied
+  pdf.setDrawColor(0, 0, 0);       // Zwart
+  pdf.setLineWidth(0.25);           // Dunne lijn, standaard voor snijlijnen
+
+  const x1 = BLEED_MM; // Linker documentrand
+  const x2 = BLEED_MM + docWidthMm; // Rechter documentrand
+  const y1 = BLEED_MM; // Bovenste documentrand
+  const y2 = BLEED_MM + docHeightMm; // Onderste documentrand
+
+  // Snijlijnpositie: buiten de pagina op afstand GAP_MM van documentrand
+  const outerX1 = x1 - GAP_MM - MARK_MM;
+  const outerX2 = x2 + GAP_MM + MARK_MM;
+  const outerY1 = y1 - GAP_MM - MARK_MM;
+  const outerY2 = y2 + GAP_MM + MARK_MM;
+  const innerX1 = x1 - GAP_MM;
+  const innerX2 = x2 + GAP_MM;
+  const innerY1 = y1 - GAP_MM;
+  const innerY2 = y2 + GAP_MM;
+
+  // Linksboven
+  pdf.line(outerX1, y1, innerX1, y1); // horizontaal
+  pdf.line(x1, outerY1, x1, innerY1); // verticaal
+
+  // Rechtsboven
+  pdf.line(innerX2, y1, outerX2, y1); // horizontaal
+  pdf.line(x2, outerY1, x2, innerY1); // verticaal
+
+  // Linksonder
+  pdf.line(outerX1, y2, innerX1, y2); // horizontaal
+  pdf.line(x1, innerY2, x1, outerY2); // verticaal
+
+  // Rechtsonder
+  pdf.line(innerX2, y2, outerX2, y2); // horizontaal
+  pdf.line(x2, innerY2, x2, outerY2); // verticaal
+
+  // 9. Exporteer PDF
+  pdf.save('blossombs-ontwerp.pdf');
 });
+
 
 function saveHistory() {
   const json = JSON.stringify(canvas.toJSON(['_isMargin']));

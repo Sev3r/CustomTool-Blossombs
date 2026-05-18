@@ -5,30 +5,30 @@
 
 const FIXED_QUANTITIES = [50, 100, 250, 500, 1000];
 const DESIGN_CHOICES = [
-  { key: 'laat-ontwerpen',  label: 'Laat ons ontwerpen', price: 75,  addon: false },
-  { key: 'eigen-ontwerp',   label: 'Eigen ontwerp',       price: 0,   addon: false },
+  { key: 'laat-ontwerpen', label: 'Laat ons ontwerpen', price: 75, addon: false },
+  { key: 'eigen-ontwerp', label: 'Eigen ontwerp', price: 0, addon: false },
 ];
 const ADDON_CHOICES = [
   { key: 'bestandscontrole', label: 'Bestandscontrole', price: 15, addon: true },
 ];
 
 function renderOptionsPage() {
-  const el      = document.getElementById('page-options');
+  const el = document.getElementById('page-options');
   const product = Session.getProduct();
-  const saved   = Session.getOptions() || {};
+  const saved = Session.getOptions() || {};
 
   if (!product) { navigateTo('select'); return; }
 
   const images = [
-    product.imageProduct      || null,
+    product.imageProduct || null,
     product.imagePersonalize1 || null,
     product.imagePersonalize2 || null,
   ].filter(Boolean);
 
-  const activeImg    = saved.activeImageIdx || 0;
-  const designChoice = saved.designChoice   || 'laat-ontwerpen';
-  const addons       = saved.addons         || [];
-  const quantity     = saved.quantity       || '';
+  const activeImg = saved.activeImageIdx || 0;
+  const designChoice = saved.designChoice || 'laat-ontwerpen';
+  const addons = saved.addons || [];
+  const quantity = saved.quantity || '';
 
   el.innerHTML = `
     <h1 class="page-title">${escHtml(product.name)}</h1>
@@ -38,14 +38,14 @@ function renderOptionsPage() {
       <div>
         <div class="product-preview-main" id="preview-main">
           ${images.length > 0
-            ? `<img id="preview-main-img" src="${images[activeImg]}" alt="Product">`
-            : '📦'}
+      ? `<img id="preview-main-img" src="${images[activeImg]}" alt="Product">`
+      : '📦'}
         </div>
         ${images.length > 1 ? `
           <div class="thumb-row">
             ${images.map((img, i) => `
               <div class="thumb ${i === activeImg ? 'active' : ''}" data-idx="${i}">
-                <img src="${img}" alt="Afbeelding ${i+1}" onerror="this.parentElement.textContent='📦'">
+                <img src="${img}" alt="Afbeelding ${i + 1}" onerror="this.parentElement.textContent='📦'">
               </div>
             `).join('')}
           </div>
@@ -60,14 +60,14 @@ function renderOptionsPage() {
           <thead><tr><th>Stuks</th><th>Prijs / stuk</th></tr></thead>
           <tbody>
             ${FIXED_QUANTITIES.map(qty => {
-              const price = getPriceForQty(product, qty);
-              const isActive = parseInt(quantity) === qty;
-              return `
+        const price = getPriceForQty(product, qty);
+        const isActive = parseInt(quantity) === qty;
+        return `
                 <tr class="${isActive ? 'highlighted' : ''}" data-qty="${qty}" style="cursor:pointer">
                   <td>${qty}</td>
                   <td>${price !== null ? formatEuro(price) : '—'}</td>
                 </tr>`;
-            }).join('')}
+      }).join('')}
           </tbody>
         </table>
 
@@ -89,9 +89,6 @@ function renderOptionsPage() {
           </div>
         ` : ''}
 
-        <a class="template-link" href="https://www.canva.com" target="_blank" style="margin-top:16px;display:inline-flex">
-          🎨 Gratis ontwerpen met Canva
-        </a>
       </div>
 
       <!-- RECHTS: ontwerp keuzes -->
@@ -143,8 +140,8 @@ function renderOptionsPage() {
   // Thumbnail klikken
   el.querySelectorAll('.thumb').forEach(thumb => {
     thumb.addEventListener('click', () => {
-      const idx   = parseInt(thumb.dataset.idx);
-      const img   = images[idx];
+      const idx = parseInt(thumb.dataset.idx);
+      const img = images[idx];
       el.querySelectorAll('.thumb').forEach(t => t.classList.remove('active'));
       thumb.classList.add('active');
       const mainImg = document.getElementById('preview-main-img');
@@ -211,8 +208,8 @@ function renderOptionsPage() {
 
 function collectOptions(el, product) {
   const selectedRow = el.querySelector('.staffel-table tbody tr.highlighted');
-  const customQty   = document.getElementById('qty-custom')?.value;
-  const quantity    = selectedRow ? parseInt(selectedRow.dataset.qty) : (customQty ? parseInt(customQty) : null);
+  const customQty = document.getElementById('qty-custom')?.value;
+  const quantity = selectedRow ? parseInt(selectedRow.dataset.qty) : (customQty ? parseInt(customQty) : null);
 
   const designChoice = el.querySelector('input[name="design-choice"]:checked')?.value || 'laat-ontwerpen';
 
@@ -228,7 +225,7 @@ function collectOptions(el, product) {
 }
 
 function saveOptions() {
-  const el      = document.getElementById('page-options');
+  const el = document.getElementById('page-options');
   const product = Session.getProduct();
   if (!el || !product) return;
   const opts = collectOptions(el, product);
@@ -247,5 +244,5 @@ function formatEuro(n) {
 }
 
 function escHtml(str) {
-  return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
