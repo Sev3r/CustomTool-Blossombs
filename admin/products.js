@@ -21,7 +21,7 @@ function renderProductsPage() {
 }
 
 function renderProductGrid() {
-  const grid     = document.getElementById('product-grid');
+  const grid = document.getElementById('product-grid');
   if (!grid) return;
   const products = DS.getProducts();
 
@@ -65,7 +65,7 @@ function renderProductGrid() {
             ${p.width_mm ? `<span class="spec-tag">${p.width_mm}×${p.height_mm} mm</span>` : ''}
             ${p.margin_mm ? `<span class="spec-tag">Marge ${p.margin_mm} mm</span>` : ''}
             ${p.width_px ? `<span class="spec-tag">${p.width_px}×${p.height_px} px</span>` : ''}
-            ${(p.templates||[]).length ? `<span class="spec-tag">${p.templates.length} template(s)</span>` : ''}
+            ${(p.templates || []).length ? `<span class="spec-tag">${p.templates.length} template(s)</span>` : ''}
           </div>
         </div>
       </div>
@@ -95,9 +95,9 @@ async function deleteProductById(id) {
 // ─── PRODUCT MODAL ────────────────────────────────────────────────────────────
 
 function openProductModal(id = null) {
-  const p      = id ? DS.getProductById(id) : {};
+  const p = id ? DS.getProductById(id) : {};
   const isEdit = !!id;
-  const slabs  = p.priceSlabs || [{ from: 1, to: 9, price: '' }, { from: 10, to: 49, price: '' }, { from: 50, to: null, price: '' }];
+  const slabs = p.priceSlabs || [{ from: 1, to: 9, price: '' }, { from: 10, to: 49, price: '' }, { from: 50, to: null, price: '' }];
   const templates = p.templates || [''];
 
   function slabRow(s, i) {
@@ -134,48 +134,36 @@ function openProductModal(id = null) {
         <span class="form-hint">Leeg = automatisch gegenereerd</span>
       </div>
     </div>
-
+ 
     <div class="section-title" style="margin-top:4px">Afmetingen (mm)</div>
     <div class="form-row-3">
       <div class="form-group">
-        <label>Breedte (mm)</label>
-        <input type="number" id="pf-w-mm" value="${p.width_mm || ''}" placeholder="100">
+        <label>Breedte (mm) *</label>
+        <input type="number" id="pf-w-mm" value="${p.width_mm || ''}" placeholder="100" min="10" max="500" step="0.5">
       </div>
       <div class="form-group">
-        <label>Hoogte (mm)</label>
-        <input type="number" id="pf-h-mm" value="${p.height_mm || ''}" placeholder="70">
+        <label>Hoogte (mm) *</label>
+        <input type="number" id="pf-h-mm" value="${p.height_mm || ''}" placeholder="70" min="10" max="500" step="0.5">
       </div>
       <div class="form-group">
         <label>Marge (mm)</label>
-        <input type="number" id="pf-m-mm" value="${p.margin_mm || ''}" placeholder="5">
+        <input type="number" id="pf-m-mm" value="${p.margin_mm || ''}" placeholder="5" min="0" step="0.5">
       </div>
     </div>
-    <div id="px-preview" class="form-hint" style="margin-top:-8px"></div>
-
-    <div class="section-title" style="margin-top:4px">Display canvas (px — wat de klant ziet)</div>
-    <div class="form-row">
-      <div class="form-group">
-        <label>Weergavebreedte (px)</label>
-        <input type="number" id="pf-dw" value="${p.canvas_display_width || ''}" placeholder="500">
-      </div>
-      <div class="form-group">
-        <label>Weergavehoogte (px)</label>
-        <input type="number" id="pf-dh" value="${p.canvas_display_height || ''}" placeholder="350">
-      </div>
-    </div>
-
+    <div id="px-preview" class="form-hint" style="margin-top:-8px;color:var(--text-2)"></div>
+ 
     <div class="section-title" style="margin-top:4px">Staffelprijzen</div>
     <div class="slab-list" id="slab-list">
       ${slabs.map((s, i) => slabRow(s, i)).join('')}
     </div>
     <button class="btn btn-secondary btn-sm" style="margin-top:8px" id="btn-add-slab">+ Staffel toevoegen</button>
-
+ 
     <div class="section-title" style="margin-top:4px">Templates</div>
     <div class="template-list" id="template-list">
       ${templates.map(t => templateRow(t)).join('')}
     </div>
     <button class="btn btn-secondary btn-sm" style="margin-top:8px" id="btn-add-tmpl">+ Template toevoegen</button>
-
+ 
     <div class="section-title" style="margin-top:4px">Afbeeldingen (URL of pad)</div>
     <div class="form-row-1">
       <div class="form-group">
@@ -193,7 +181,7 @@ function openProductModal(id = null) {
         <input type="text" id="pf-img3" value="${escHtml(p.imagePersonalize2 || '')}" placeholder="shared/images/pers-2.png">
       </div>
     </div>
-
+ 
     <div id="pf-error" class="form-error"></div>
   `;
 
@@ -204,30 +192,32 @@ function openProductModal(id = null) {
 
   AdminUI.openModal({ title: isEdit ? 'Product bewerken' : 'Nieuw product', body, footer });
 
-  // Live DPI preview
+  // Live DPI preview — toont berekende pixelafmetingen terwijl de medewerker typt
   function updatePxPreview() {
     const w = parseFloat(document.getElementById('pf-w-mm').value);
     const h = parseFloat(document.getElementById('pf-h-mm').value);
     const m = parseFloat(document.getElementById('pf-m-mm').value);
     const prev = document.getElementById('px-preview');
     if (w && h) {
-      const wp = Math.round(w / 25.4 * 300);
-      const hp = Math.round(h / 25.4 * 300);
+      const dims = DS.calcCanvasDimensions(w, h);
       const mp = m ? Math.round(m / 25.4 * 300) : null;
-      prev.textContent = `→ 300 DPI export: ${wp} × ${hp} px${mp ? `, marge: ${mp} px` : ''}`;
+      prev.textContent =
+        `→ Exportformaat (300 DPI): ${dims.width_px} × ${dims.height_px} px` +
+        `  |  Canvas weergave: ${dims.canvas_display_width} × ${dims.canvas_display_height} px` +
+        (mp ? `  |  Marge: ${mp} px` : '');
     } else {
       prev.textContent = '';
     }
   }
 
-  ['pf-w-mm','pf-h-mm','pf-m-mm'].forEach(id => {
-    document.getElementById(id)?.addEventListener('input', updatePxPreview);
+  ['pf-w-mm', 'pf-h-mm', 'pf-m-mm'].forEach(fieldId => {
+    document.getElementById(fieldId)?.addEventListener('input', updatePxPreview);
   });
   updatePxPreview();
 
   document.getElementById('btn-add-slab').addEventListener('click', () => {
     const list = document.getElementById('slab-list');
-    const idx  = list.children.length;
+    const idx = list.children.length;
     list.insertAdjacentHTML('beforeend', slabRow({ from: '', to: '', price: '' }, idx));
   });
 
@@ -237,10 +227,12 @@ function openProductModal(id = null) {
 
   document.getElementById('btn-product-save').addEventListener('click', () => {
     const name = document.getElementById('pf-name').value.trim();
+    const errEl = document.getElementById('pf-error');
+
+    // Validatie
     if (!name) {
-      const err = document.getElementById('pf-error');
-      err.textContent = 'Productnaam is verplicht.';
-      err.classList.add('visible');
+      errEl.textContent = 'Productnaam is verplicht.';
+      errEl.classList.add('visible');
       return;
     }
 
@@ -248,36 +240,50 @@ function openProductModal(id = null) {
     const hMm = parseFloat(document.getElementById('pf-h-mm').value) || null;
     const mMm = parseFloat(document.getElementById('pf-m-mm').value) || null;
 
-    const slabRows   = document.querySelectorAll('#slab-list .slab-row');
+    if (!wMm || !hMm) {
+      errEl.textContent = 'Breedte en hoogte in mm zijn verplicht.';
+      errEl.classList.add('visible');
+      return;
+    }
+
+    errEl.classList.remove('visible');
+
+    const slabRows = document.querySelectorAll('#slab-list .slab-row');
     const priceSlabs = [...slabRows].map(row => ({
-      from:  parseFloat(row.querySelector('.slab-from').value)  || 1,
-      to:    parseFloat(row.querySelector('.slab-to').value)    || null,
+      from: parseFloat(row.querySelector('.slab-from').value) || 1,
+      to: parseFloat(row.querySelector('.slab-to').value) || null,
       price: parseFloat(row.querySelector('.slab-price').value) || 0,
     }));
 
     const tmplInputs = document.querySelectorAll('#template-list .tmpl-input');
-    const templates  = [...tmplInputs].map(i => i.value.trim()).filter(Boolean);
+    const templates = [...tmplInputs].map(i => i.value.trim()).filter(Boolean);
 
     const customId = document.getElementById('pf-id').value.trim();
 
+    // Bereken alle pixel- en canvas-afmetingen automatisch via calcCanvasDimensions
+    const dims = DS.calcCanvasDimensions(wMm, hMm);
+
     const updated = {
       ...p,
-      id:                   isEdit ? p.id : (customId || undefined),
+      id: isEdit ? p.id : (customId || undefined),
       name,
-      active:               p.active !== false,
+      active: p.active !== false,
       priceSlabs,
       templates,
-      imageProduct:         document.getElementById('pf-img1').value.trim(),
-      imagePersonalize1:    document.getElementById('pf-img2').value.trim(),
-      imagePersonalize2:    document.getElementById('pf-img3').value.trim(),
-      width_mm:             wMm,
-      height_mm:            hMm,
-      margin_mm:            mMm,
-      width_px:             wMm ? Math.round(wMm / 25.4 * 300) : null,
-      height_px:            hMm ? Math.round(hMm / 25.4 * 300) : null,
-      margin_px:            mMm ? Math.round(mMm / 25.4 * 300) : null,
-      canvas_display_width: parseInt(document.getElementById('pf-dw').value) || null,
-      canvas_display_height:parseInt(document.getElementById('pf-dh').value) || null,
+      imageProduct: document.getElementById('pf-img1').value.trim(),
+      imagePersonalize1: document.getElementById('pf-img2').value.trim(),
+      imagePersonalize2: document.getElementById('pf-img3').value.trim(),
+      // Afmetingen in mm (door medewerker ingevoerd)
+      width_mm: wMm,
+      height_mm: hMm,
+      margin_mm: mMm,
+      // Afmetingen in px — automatisch berekend op basis van 300 DPI
+      width_px: dims.width_px,
+      height_px: dims.height_px,
+      margin_px: mMm ? Math.round(mMm / 25.4 * 300) : null,
+      // Canvas weergave-afmetingen — automatisch geschaald voor de designtool
+      canvas_display_width: dims.canvas_display_width,
+      canvas_display_height: dims.canvas_display_height,
     };
 
     DS.saveProduct(updated);

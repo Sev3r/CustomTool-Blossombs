@@ -242,22 +242,7 @@ document.getElementById('btn-clear').addEventListener('click', () => {
   updateLayerPanel();
 });
 
-// document.getElementById('btn-export').addEventListener('click', () => {
-//   // Verberg margelijn
-//   canvas.getObjects('rect').filter(o => o._isMargin).forEach(o => o.visible = false);
-//   canvas.renderAll();
 
-//   const multiplier = product.width_px / product.canvas_display_width;
-//   const dataURL = canvas.toDataURL({ format: 'png', multiplier: multiplier });
-
-//   // Zet margelijn terug
-//   canvas.getObjects('rect').filter(o => o._isMargin).forEach(o => o.visible = true);
-//   canvas.renderAll();
-//   const a = document.createElement('a');
-//   a.href = dataURL;
-//   a.download = 'blossombs-ontwerp.png';
-//   a.click();
-// });
 
 document.getElementById('btn-export').addEventListener('click', async () => {
   // 1. Verberg margelijn
@@ -282,7 +267,8 @@ document.getElementById('btn-export').addEventListener('click', async () => {
   const MM_PER_INCH = 25.4;
   const BLEED_MM = 3;      // Standaard snijmarge (bleed)
   const MARK_MM = 5;      // Lengte van de snijlijn buiten het formaat
-  const GAP_MM = 2;      // Ruimte tussen snijlijn en documentrand
+  const GAP_MM = 2.117;      // Ruimte tussen snijlijn en documentrand
+  const LINE_WIDTH_PT = 0.25;
 
   // Documentformaat in mm (zonder bleed)
   const docWidthMm = (exportWidthPx / DPI) * MM_PER_INCH;
@@ -326,7 +312,7 @@ document.getElementById('btn-export').addEventListener('click', async () => {
   // 8. Snijlijnen tekenen (crop marks)
   // Snijlijnen komen op de hoeken, buiten het bleed-gebied
   pdf.setDrawColor(0, 0, 0);       // Zwart
-  pdf.setLineWidth(0.25);           // Dunne lijn, standaard voor snijlijnen
+  pdf.setLineWidth(0.088);           // Dunne lijn, standaard voor snijlijnen
 
   const x1 = BLEED_MM; // Linker documentrand
   const x2 = BLEED_MM + docWidthMm; // Rechter documentrand

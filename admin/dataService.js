@@ -13,14 +13,14 @@
  */
 
 const KEYS = {
-  orders:   'cot_orders',
+  orders: 'cot_orders',
   products: 'cot_products',
 };
 
 // ─── HELPERS ────────────────────────────────────────────────────────────────
 
 function uid(prefix = 'ORD') {
-  return prefix + '-' + Date.now().toString(36).toUpperCase() + Math.random().toString(36).slice(2,5).toUpperCase();
+  return prefix + '-' + Date.now().toString(36).toUpperCase() + Math.random().toString(36).slice(2, 5).toUpperCase();
 }
 
 function now() {
@@ -43,9 +43,9 @@ function saveAllOrders(orders) {
 function saveOrder(order) {
   const orders = getOrders();
   if (!order.id) {
-    order.id          = uid('ORD');
+    order.id = uid('ORD');
     order.orderNumber = uid('BLO');
-    order.createdAt   = now();
+    order.createdAt = now();
     orders.push(order);
   } else {
     const idx = orders.findIndex(o => o.id === order.id);
@@ -80,7 +80,7 @@ function saveAllProducts(products) {
 function saveProduct(product) {
   const products = getProducts();
   if (!product.id) {
-    product.id        = uid('PRD');
+    product.id = uid('PRD');
     product.createdAt = now();
     products.push(product);
   } else {
@@ -106,6 +106,27 @@ function getProductById(id) {
   return getProducts().find(p => p.id === id) || null;
 }
 
+// Bij het opslaan van een product, bereken canvas-dimensies automatisch:
+function calcCanvasDimensions(widthMm, heightMm) {
+  const DPI = 300;
+  const MM_PER_INCH = 25.4;
+  const MAX_DISPLAY = 700; // max breedte van de canvas in de UI (px)
+
+  // Werkelijke printpixels (300 DPI)
+  const widthPx = Math.round((widthMm / MM_PER_INCH) * DPI);
+  const heightPx = Math.round((heightMm / MM_PER_INCH) * DPI);
+
+  // Display-formaat: schaal naar max 700px breed, behoud ratio
+  const scale = MAX_DISPLAY / widthPx;
+  const displayWidth = Math.round(widthPx * scale);
+  const displayHeight = Math.round(heightPx * scale);
+
+  return {
+    width_px: widthPx, height_px: heightPx,
+    canvas_display_width: displayWidth, canvas_display_height: displayHeight
+  };
+}
+
 // ─── DEMO DATA ───────────────────────────────────────────────────────────────
 
 function seedDemoData() {
@@ -116,7 +137,7 @@ function seedDemoData() {
       id: 'PRD-DEMO1', createdAt: now(),
       name: 'Kleine geschenkdoos', active: true,
       priceSlabs: [
-        { from: 1,  to: 9,  price: 4.95 },
+        { from: 1, to: 9, price: 4.95 },
         { from: 10, to: 49, price: 3.75 },
         { from: 50, to: null, price: 2.95 },
       ],
@@ -130,7 +151,7 @@ function seedDemoData() {
       id: 'PRD-DEMO2', createdAt: now(),
       name: 'Grote geschenkdoos', active: true,
       priceSlabs: [
-        { from: 1,  to: 9,  price: 7.50 },
+        { from: 1, to: 9, price: 7.50 },
         { from: 10, to: 49, price: 5.95 },
         { from: 50, to: null, price: 4.50 },
       ],
