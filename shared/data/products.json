@@ -1,30 +1,136 @@
 [
     {
-        "id": "doos-klein",
-        "label": "Kleine geschenkdoos",
-        "description": "Geschikt voor 3-5 zaadbommetjes",
-        "image": "../shared/images/doos-klein.png",
-        "width_mm": 100,
-        "height_mm": 70,
-        "margin_mm": 5,
-        "width_px": 1181,
-        "height_px": 827,
-        "margin_px": 59,
-        "canvas_display_width": 500,
-        "canvas_display_height": 350
+        "id": "PRD-DEMO1",
+        "name": "Kleine geschenkdoos",
+        "active": true,
+        "priceSlabs": [
+            {
+                "from": 1,
+                "to": 9,
+                "price": 4.95
+            },
+            {
+                "from": 10,
+                "to": 49,
+                "price": 3.75
+            },
+            {
+                "from": 50,
+                "to": null,
+                "price": 2.95
+            }
+        ],
+        "templates": [
+            "template-klein-01.png",
+            "template-klein-02.png"
+        ],
+        "imageProduct": "",
+        "personalisatieTypes": [
+            {
+                "id": "voorkant",
+                "label": "Voorkant",
+                "previewImage": "",
+                "width_mm": 100,
+                "height_mm": 70,
+                "margin_mm": 5,
+                "width_px": 1181,
+                "height_px": 827,
+                "margin_px": 59,
+                "canvas_display_width": 500,
+                "canvas_display_height": 350,
+                "clipShape": null
+            },
+            {
+                "id": "achterkant",
+                "label": "Achterkant",
+                "previewImage": "",
+                "width_mm": 100,
+                "height_mm": 70,
+                "margin_mm": 5,
+                "width_px": 1181,
+                "height_px": 827,
+                "margin_px": 59,
+                "canvas_display_width": 500,
+                "canvas_display_height": 350,
+                "clipShape": null
+            }
+        ]
     },
     {
-        "id": "doos-groot",
-        "label": "Grote geschenkdoos",
-        "description": "Geschikt voor 10-15 zaadbommetjes",
-        "image": "../shared/images/doos-groot.png",
-        "width_mm": 200,
-        "height_mm": 120,
-        "margin_mm": 8,
-        "width_px": 2362,
-        "height_px": 1417,
-        "margin_px": 94,
-        "canvas_display_width": 600,
-        "canvas_display_height": 360
+        "id": "PRD-DEMO2",
+        "name": "Grote geschenkdoos",
+        "active": true,
+        "priceSlabs": [
+            {
+                "from": 1,
+                "to": 9,
+                "price": 7.50
+            },
+            {
+                "from": 10,
+                "to": 49,
+                "price": 5.95
+            },
+            {
+                "from": 50,
+                "to": null,
+                "price": 4.50
+            }
+        ],
+        "templates": [
+            "template-groot-01.png"
+        ],
+        "imageProduct": "",
+        "personalisatieTypes": [
+            {
+                "id": "wikkel",
+                "label": "Wikkel",
+                "previewImage": "",
+                "width_mm": 200,
+                "height_mm": 120,
+                "margin_mm": 8,
+                "width_px": 2362,
+                "height_px": 1417,
+                "margin_px": 94,
+                "canvas_display_width": 600,
+                "canvas_display_height": 360,
+                "clipShape": null
+            }
+        ]
+    },
+    {
+        "id": "PRD-DEMO3",
+        "name": "Ronde zaadbom",
+        "active": true,
+        "priceSlabs": [
+            {
+                "from": 1,
+                "to": 9,
+                "price": 2.50
+            },
+            {
+                "from": 10,
+                "to": null,
+                "price": 1.95
+            }
+        ],
+        "templates": [],
+        "imageProduct": "",
+        "personalisatieTypes": [
+            {
+                "id": "label",
+                "label": "Rond label",
+                "previewImage": "",
+                "width_mm": 60,
+                "height_mm": 60,
+                "margin_mm": 4,
+                "width_px": 709,
+                "height_px": 709,
+                "margin_px": 47,
+                "canvas_display_width": 350,
+                "canvas_display_height": 350,
+                "clipShape": "circle(50%)"
+            }
+        ]
     }
 ]

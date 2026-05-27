@@ -234,6 +234,31 @@ function initFabricTool(product) {
     backgroundColor: '#b7bdb8',
   });
 
+  const persType = Session.getOptions()?.persType || null;
+  const clipShape = persType?.clipShape || null;
+  const canvasWrap = document.getElementById('canvas-wrap');
+  const canvasEl = document.querySelector('#canvas-wrap canvas');
+
+  if (clipShape && canvasWrap) {
+    // Pas clip-path toe op de zichtbare canvas — puur visueel voor de gebruiker
+    canvasWrap.style.setProperty('--clip-shape', clipShape);
+    if (canvasEl) {
+      canvasEl.style.clipPath = clipShape;
+      canvasEl.style.borderRadius = clipShape.startsWith('circle') ? '50%' : '4px';
+    }
+
+    // Fabric.js intern clipPath voor de export — snijdt ook de export bij
+    if (clipShape.startsWith('circle')) {
+      // Cirkel: gebruik fabric.Circle als clipPath
+      const r = Math.min(CANVAS_W, CANVAS_H) / 2;
+      fabricCanvas.clipPath = new fabric.Circle({
+        radius: r, left: CANVAS_W / 2 - r, top: CANVAS_H / 2 - r,
+        absolutePositioned: true,
+      });
+    }
+    // Voor custom SVG paths: uitbreiden met fabric.Path(clipShape, { absolutePositioned: true })
+  }
+
   // ── Kleurswatches ────────────────────────────────────────────────────────
   const fgColors = ['#1D9E75', '#ffffff', '#2c2c2a', '#e63946', '#f4a261', '#457b9d', '#f1c453', '#9d4edd'];
   const swatchContainer = document.getElementById('color-swatches');

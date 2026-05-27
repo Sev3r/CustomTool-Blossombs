@@ -1281,3 +1281,47 @@ body {
     grid-template-columns: 1fr 1fr;
   }
 }
+
+.step-circle.step-clickable {
+  cursor: pointer;
+  transition: background .15s, transform .1s, box-shadow .15s;
+}
+
+.step-circle.step-clickable:hover {
+  transform: scale(1.12);
+  box-shadow: 0 0 0 4px var(--green-light);
+  background: var(--green);
+  border-color: var(--green);
+  color: white;
+}
+
+/* Personalisatietype tabs (stap 2) */
+.pers-type-tabs {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.pers-tab {
+  padding: 7px 16px;
+  border: 1.5px solid var(--cream-border);
+  border-radius: var(--radius-pill);
+  background: white;
+  color: var(--text-2);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  font-family: var(--font-body);
+  transition: border-color .15s, background .15s, color .15s;
+}
+
+.pers-tab:hover {
+  border-color: var(--green);
+  color: var(--green);
+}
+
+.pers-tab.active {
+  background: var(--green);
+  border-color: var(--green);
+  color: white;
+}
