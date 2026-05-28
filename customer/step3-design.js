@@ -344,10 +344,12 @@ function initFabricTool(product, activePers, savedState) {
   fabricCanvas.on('object:moving', e => checkMargin(e.target));
   fabricCanvas.on('object:rotating', e => checkMargin(e.target));
   fabricCanvas.on('object:modified', e => checkMargin(e.target));
+  fabricCanvas.on('object:scaling', e => checkMargin(e.target));
   fabricCanvas.on('text:changed', e => {
     checkMargin(e.target); fabricSaveHistory(); updateLayerPanel();
     autoSaveCanvasState(stateKey);
   });
+
   fabricCanvas.on('object:moved', () => {
     const warn = document.getElementById('margin-warning');
     if (warn) warn.style.display = 'none';
