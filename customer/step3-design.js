@@ -226,6 +226,22 @@ function initFabricTool(product, activePers, savedState) {
     selection: true, backgroundColor: '#b7bdb8',
   });
 
+  if (window._fabricMouseUpHandler) {
+    document.removeEventListener('mouseup', window._fabricMouseUpHandler);
+  }
+
+  window._fabricMouseUpHandler = function () {
+    if (!fabricCanvas) return;
+    const transform = fabricCanvas._currentTransform;
+    if (transform) {
+      fabricCanvas._currentTransform = null;
+      fabricCanvas.setCursor(fabricCanvas.defaultCursor);
+      fabricCanvas.renderAll();
+    }
+  };
+
+  document.addEventListener('mouseup', window._fabricMouseUpHandler);
+
   // Clip-path (punt 3)
   const canvasEl = document.querySelector('#canvas-wrap canvas');
   if (clipShape && canvasEl) {

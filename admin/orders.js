@@ -104,7 +104,7 @@ function renderOrdersTable() {
     ].filter(Boolean).join(' ') || '—';
 
     // Punt 5: toggle vergrendeld als bevestiging al verstuurd
-    const toggleHTML = (o) => o.confirmationSent
+    const toggleHTML = o.confirmationSent
       ? `<label class="toggle" title="Bevestiging verstuurd — vergrendeld"
             style="opacity:.6;cursor:not-allowed">
        <input type="checkbox" checked disabled>

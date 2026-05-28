@@ -688,7 +688,7 @@ body {
   min-height: 520px;
   border: 1px solid var(--cream-border);
   border-radius: var(--radius-card);
-  overflow: hidden;
+  overflow: Visible;
   background: var(--color-background-primary);
 }
 
@@ -837,6 +837,7 @@ body {
   flex-direction: column;
   align-items: center;
   justify-content: center;
+  min-width: 0;
 }
 
 #canvas-toolbar {
