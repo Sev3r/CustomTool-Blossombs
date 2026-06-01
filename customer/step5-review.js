@@ -274,37 +274,44 @@ function placeOrder(product, options, design, wensen, klant) {
 // ─── BEVESTIGINGSPAGINA + PDF ─────────────────────────────────────────────────
 
 function renderConfirmPage(order, product, total, unitPrice) {
-  document.querySelector('.progress-wrap').style.display = 'none';
   document.querySelectorAll('.flow-page').forEach(el => el.classList.remove('active'));
   const confirmEl = document.getElementById('page-confirm');
   confirmEl.classList.add('active');
 
+  // Verberg progress bar tijdelijk
+  const progressWrap = document.querySelector('.progress-wrap');
+  if (progressWrap) progressWrap.style.display = 'none';
+
   confirmEl.innerHTML = `
     <div class="confirm-page">
-      <div class="confirm-icon">🌸</div>
+      <div class="confirm-icon">
+        <svg width="56" height="56" viewBox="0 0 56 56" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="28" cy="28" r="26" stroke="#5C7A5C" stroke-width="2.5" fill="#EDF2ED"/>
+          <path d="M16 28L23 35L40 18" stroke="#5C7A5C" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
       <div class="confirm-number">Uw ordernummer</div>
       <div class="confirm-num-value">${order.orderNumber}</div>
       <p class="confirm-text">
-        Bedankt voor uw bestelling! We hebben uw aanvraag ontvangen.<br><br>
+        Bedankt voor uw bestelling. We hebben uw aanvraag ontvangen.<br><br>
         Een van onze medewerkers neemt zo snel mogelijk contact op via
         <strong>${escHtml(order.customerEmail)}</strong> om uw bestelling te bevestigen.<br><br>
         <em style="color:var(--text-3)">Geschatte offerte: ${formatEuro(total)} incl. BTW</em>
       </p>
-
-      <!-- Punt 5: PDF download -->
+ 
       <div style="margin-top:32px;padding:20px;background:var(--cream-dark);
                   border-radius:var(--radius-card);border:1px solid var(--cream-border)">
-        <div style="font-size:13px;font-weight:600;margin-bottom:8px">📄 Uw offerte</div>
+        <div style="font-size:13px;font-weight:600;margin-bottom:8px">Uw offerte</div>
         <p style="font-size:13px;color:var(--text-2);margin-bottom:16px">
           Download uw offerte als PDF. U ontvangt ook een bevestiging per e-mail
           zodra onze medewerker uw bestelling heeft verwerkt.
         </p>
-        <button class="btn btn-green" id="btn-download-pdf">⬇ Download offerte (PDF)</button>
+        <button class="btn btn-green" id="btn-download-pdf">Download offerte (PDF)</button>
       </div>
-
+ 
       <div style="margin-top:32px;display:flex;gap:12px;justify-content:center;flex-wrap:wrap">
-        <a href="/" class="btn btn-outline">← Terug naar de webshop</a>
-        <button class="btn btn-outline" onclick="startNieuweOrder()">Nieuwe bestelling</button>
+        <a href="/" class="btn btn-outline">Terug naar de webshop</a>
+        <button class="btn btn-outline" onclick="resetFlow()">Nieuwe bestelling plaatsen</button>
       </div>
     </div>
   `;

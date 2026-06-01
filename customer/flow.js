@@ -1,7 +1,7 @@
 /**
  * flow.js
  * SPA router + klikbare progress bar
- * Punt 1: bezochte stappen zijn klikbaar, vooruit navigeren geblokkeerd
+ * Punt 1: progressbar + sessie volledig gereset na afronding bestelling
  */
 
 const STEPS = [
@@ -18,7 +18,7 @@ let highestStep = 0;
 function navigate(hash) {
   const idx = STEPS.findIndex(s => s.hash === hash);
   if (idx === -1) return navigate('select');
-  if (idx > highestStep) return; // blokkeer vooruit navigeren
+  if (idx > highestStep) return;
 
   currentStep = idx;
 
@@ -36,6 +36,32 @@ function navigateTo(hash) {
   const idx = STEPS.findIndex(s => s.hash === hash);
   if (idx !== -1 && idx > highestStep) highestStep = idx;
   navigate(hash);
+}
+
+// Punt 1: volledig reset — progressbar, sessie, highestStep, fabricCanvas
+function resetFlow() {
+  // Reset state
+  currentStep = 0;
+  highestStep = 0;
+
+  // Reset sessie
+  if (typeof Session !== 'undefined') Session.clear();
+
+  // Reset Fabric canvas als die bestaat
+  if (typeof fabricCanvas !== 'undefined' && fabricCanvas) {
+    try { fabricCanvas.dispose(); } catch (e) { }
+  }
+  window.fabricCanvas = null;
+
+  // Verberg bevestigingspagina, toon progress bar terug
+  const progressWrap = document.querySelector('.progress-wrap');
+  if (progressWrap) progressWrap.style.display = '';
+
+  // Verberg confirm pagina
+  document.querySelectorAll('.flow-page').forEach(el => el.classList.remove('active'));
+
+  // Navigeer naar stap 1
+  navigateTo('select');
 }
 
 function renderProgressBar(activeIdx) {
@@ -63,13 +89,20 @@ function renderProgressBar(activeIdx) {
         <div class="step-wrap">
           <div class="step-circle ${clickable ? 'step-clickable' : ''}"
                ${clickable ? `onclick="navigate('${step.hash}')" title="Naar ${step.label}"` : ''}>
-            ${isDone ? '✓' : i + 1}
+            ${isDone ? checkIcon() : i + 1}
           </div>
           <div class="step-label">${step.label}</div>
         </div>
       </div>${line}
     `;
   }).join('');
+}
+
+// Punt 2: SVG icoon in plaats van emoji
+function checkIcon() {
+  return `<svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M2 7L5.5 10.5L12 3.5" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  </svg>`;
 }
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -81,3 +114,4 @@ document.addEventListener('DOMContentLoaded', () => {
 window.addEventListener('hashchange', () => navigate(location.hash.replace('#', '')));
 window.navigate = navigate;
 window.navigateTo = navigateTo;
+window.resetFlow = resetFlow;

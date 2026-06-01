@@ -992,3 +992,74 @@ td.mono {
 .file-badge:hover {
   background: var(--accent-light);
 }
+
+/* filters */
+
+.filter-group {
+  display: flex;
+  gap: 0;
+  border: 1px solid var(--border, #E5E4DE);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.filter-pill {
+  padding: 7px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  font-family: var(--font-body, var(--font-sans));
+  background: var(--surface, #fff);
+  color: var(--text-2, #6B6660);
+  border: none;
+  cursor: pointer;
+  transition: background .12s, color .12s;
+  border-right: 1px solid var(--border, #E5E4DE);
+}
+
+.filter-pill:last-child {
+  border-right: none;
+}
+
+.filter-pill:hover {
+  background: var(--surface-2, #f5f5f3);
+}
+
+.filter-pill.active {
+  background: var(--accent, #5C7A5C);
+  color: white;
+}
+
+/* Afgehandelde werk-kaarten */
+.work-card-done {
+  opacity: 0.65;
+}
+
+.work-card-done:hover {
+  opacity: 1;
+}
+
+/* Punt 3: orders filter pills (ook voor orders pagina) */
+.orders-filter-group {
+  display: flex;
+  gap: 0;
+  border: 1px solid var(--border, #E5E4DE);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+/* Preview placeholder zonder emoji */
+.preview-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--cream-border);
+}
+
+/* Product card placeholder zonder emoji */
+.product-card-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--cream-border);
+  font-size: 32px;
+}

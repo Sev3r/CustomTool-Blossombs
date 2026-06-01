@@ -623,8 +623,11 @@ body {
 }
 
 .upload-icon {
-  font-size: 36px;
   margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--cream-border);
 }
 
 .upload-title {
@@ -1189,8 +1192,10 @@ body {
 }
 
 .confirm-icon {
-  font-size: 56px;
   margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .confirm-number {
@@ -1222,8 +1227,10 @@ body {
 }
 
 .empty-state-icon {
-  font-size: 48px;
   margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .empty-state h3 {
