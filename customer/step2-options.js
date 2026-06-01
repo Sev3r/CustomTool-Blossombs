@@ -89,10 +89,6 @@ function renderOptionsPage() {
             <a class="template-link" href="#" onclick="return false">📋 Aanleverinformatie</a>
           </div>
         ` : ''}
-        <a class="template-link" href="https://www.canva.com" target="_blank"
-           style="margin-top:16px;display:inline-flex">
-          🎨 Gratis ontwerpen met Canva
-        </a>
       </div>
 
       <!-- RECHTS: ontwerp keuze -->
