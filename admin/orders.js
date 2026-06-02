@@ -280,18 +280,49 @@ function viewOrderFiles(id) {
 
 function downloadDesign(id) {
   const order = DS.getOrderById(id);
-  if (!order?.designDataURL) return;
-  const a = document.createElement('a');
-  a.href = order.designDataURL;
-  a.download = `ontwerp-${order.orderNumber}.png`;
-  a.click();
+
+  if (!order?.designDataURL) {
+    AdminUI.showToast('Geen downloadbaar ontwerpbestand beschikbaar', 'error');
+    return;
+  }
+
+  const extension = order.designDataURL.startsWith('data:application/pdf') ? 'pdf' : 'png';
+  const fileName = order.designFile || `ontwerp-${order.orderNumber}.${extension}`;
+
+  const link = document.createElement('a');
+  link.href = order.designDataURL;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
 }
 
 function generateOrderPDF(id) {
   const order = DS.getOrderById(id);
-  if (!order) return;
+
+  if (!order) {
+    return;
+  }
+
+  const product = DS.getProductById(order.productId) || {
+    id: order.productId,
+    name: order.productName,
+    priceSlabs: [],
+  };
+
+  const pricing = {
+    quantity: Number(order.quantity || 0),
+    unitPrice: Number(order.unitPrice || 0),
+    productsTotal: Number(order.unitPrice || 0) * Number(order.quantity || 0),
+    designService: order.workType === 'ontwerp' ? 75 : 0,
+    fileCheck: order.addons?.includes('bestandscontrole') ? 15 : 0,
+    totalIncl: Number(order.quoteAmount || 0),
+    totalExcl: Number(order.quoteAmount || 0) / 1.21,
+    vat: Number(order.quoteAmount || 0) - Number(order.quoteAmount || 0) / 1.21,
+  };
+
   if (typeof generateOffertePDF === 'function') {
-    generateOffertePDF(order, { name: order.productName }, order.quoteAmount || 0, 0);
+    generateOffertePDF(order, product, pricing);
   } else {
     AdminUI.showToast('PDF functie niet beschikbaar', 'error');
   }
@@ -361,9 +392,11 @@ function openOrderModal(id = null) {
   `;
 
   const footer = `
-    <button class="btn btn-secondary" onclick="AdminUI.closeModal()">Annuleren</button>
-    <button class="btn btn-primary" id="btn-order-save">Opslaan</button>
-  `;
+  ${isEdit ? `<button class="btn btn-secondary" type="button" onclick="generateOrderPDF('${order.id}')">Download offerte PDF</button>` : ''}
+  ${isEdit && (order.designDataURL || order.designFile) ? `<button class="btn btn-secondary" type="button" onclick="downloadDesign('${order.id}')">Download ontwerp</button>` : ''}
+  <button class="btn btn-secondary" type="button" onclick="AdminUI.closeModal()">Annuleren</button>
+  <button class="btn btn-primary" type="button" id="btn-order-save">Opslaan</button>
+`;
 
   AdminUI.openModal({ title: isEdit ? 'Order bewerken' : 'Nieuwe order', body, footer });
 

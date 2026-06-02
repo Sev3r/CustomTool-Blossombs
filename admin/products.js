@@ -1,74 +1,93 @@
 /**
  * products.js
  * Pagina: Producten beheer
- * Uitgebreid met: personalisatietypes beheer per product
+ * Productafbeeldingen, personalisatieafbeeldingen en template PDF's worden via admin geüpload.
  */
 
 function renderProductsPage() {
   const el = document.getElementById('page-products');
+
   el.innerHTML = `
     <div class="page-header">
       <div>
         <h1>Producten</h1>
         <p>Beheer het productaanbod dat zichtbaar is in de klantflow</p>
       </div>
-      <button class="btn btn-primary" id="btn-product-add">+ Nieuw product</button>
+      <button class="btn btn-primary" type="button" id="btn-product-add">+ Nieuw product</button>
     </div>
+
     <div class="product-grid" id="product-grid"></div>
   `;
+
   document.getElementById('btn-product-add').addEventListener('click', () => openProductModal());
   renderProductGrid();
 }
 
 function renderProductGrid() {
   const grid = document.getElementById('product-grid');
-  if (!grid) return;
+
+  if (!grid) {
+    return;
+  }
+
   const products = DS.getProducts();
 
   if (products.length === 0) {
     grid.innerHTML = `
       <div class="empty-state" style="grid-column:1/-1">
-        <div class="empty-state-icon">📦</div>
+        <div class="empty-state-icon">Producten</div>
         <h3>Geen producten</h3>
         <p>Voeg een product toe om te beginnen.</p>
-      </div>`;
+      </div>
+    `;
     return;
   }
 
-  grid.innerHTML = products.map(p => {
-    const slabHTML = (p.priceSlabs || []).map(s =>
-      `<div class="price-slab">
-        <span class="range">${s.from}${s.to ? `–${s.to}` : '+'} stuks</span>
-        <span>${formatEuro(s.price)} / stuk</span>
-      </div>`
-    ).join('');
+  grid.innerHTML = products.map(product => {
+    const slabHTML = (product.priceSlabs || []).map(slab => `
+      <div class="price-slab">
+        <span class="range">${slab.from}${slab.to ? `–${slab.to}` : '+'} stuks</span>
+        <span>${formatEuro(slab.price)} / stuk</span>
+      </div>
+    `).join('');
 
-    const persHTML = (p.personalisatieTypes || []).map(pt =>
-      `<span class="spec-tag">📐 ${escHtml(pt.label)}: ${pt.width_mm}×${pt.height_mm}mm</span>`
-    ).join('');
+    const personalisationHTML = (product.personalisatieTypes || []).map(type => `
+      <span class="spec-tag">${escHtml(type.label)}: ${type.width_mm || '—'}×${type.height_mm || '—'}mm</span>
+    `).join('');
 
     return `
-      <div class="product-card ${p.active === false ? 'inactive' : ''}">
+      <div class="product-card ${product.active === false ? 'inactive' : ''}">
         <div class="product-card-header">
-          <span class="badge ${p.active === false ? 'badge-gray' : 'badge-green'}">
-            ${p.active === false ? '⊘ Inactief' : '✓ Actief'}
+          <span class="badge ${product.active === false ? 'badge-gray' : 'badge-green'}">
+            ${product.active === false ? 'Inactief' : 'Actief'}
           </span>
+
           <div style="display:flex;gap:4px">
-            <button class="icon-btn" onclick="openProductModal('${p.id}')" title="Bewerken">✏️</button>
-            <button class="icon-btn" onclick="toggleProductActive('${p.id}')"
-                    title="${p.active === false ? 'Activeren' : 'Deactiveren'}">
-              ${p.active === false ? '👁️' : '🙈'}
+            <button class="icon-btn" type="button" onclick="openProductModal('${product.id}')" title="Bewerken">✎</button>
+            <button class="icon-btn" type="button" onclick="toggleProductActive('${product.id}')"
+                    title="${product.active === false ? 'Activeren' : 'Deactiveren'}">
+              ${product.active === false ? 'Tonen' : 'Verbergen'}
             </button>
-            <button class="icon-btn danger" onclick="deleteProductById('${p.id}')" title="Verwijderen">🗑️</button>
+            <button class="icon-btn danger" type="button" onclick="deleteProductById('${product.id}')" title="Verwijderen">×</button>
           </div>
         </div>
+
         <div class="product-card-body">
-          <h3>${escHtml(p.name)}</h3>
-          <div class="product-card-id">${p.id}</div>
-          <div class="price-slabs">${slabHTML || '<span style="font-size:12px;color:var(--text-3)">Geen prijzen</span>'}</div>
+          <h3>${escHtml(product.name)}</h3>
+          <div class="product-card-id">${escHtml(product.id)}</div>
+
+          ${product.imageProduct ? `
+            <div class="file-preview-box" style="margin-bottom:12px">
+              <img src="${product.imageProduct}" alt="${escHtml(product.name)}">
+            </div>
+          ` : ''}
+
+          <div class="price-slabs">
+            ${slabHTML || '<span style="font-size:12px;color:var(--text-3)">Geen prijzen</span>'}
+          </div>
+
           <div class="product-specs" style="margin-top:8px">
-            ${persHTML || '<span class="spec-tag" style="color:var(--text-3)">Geen personalisatietypes</span>'}
-            ${(p.templates || []).length ? `<span class="spec-tag">${p.templates.length} template(s)</span>` : ''}
+            ${personalisationHTML || '<span class="spec-tag" style="color:var(--text-3)">Geen personalisatietypes</span>'}
           </div>
         </div>
       </div>
@@ -77,302 +96,549 @@ function renderProductGrid() {
 }
 
 function toggleProductActive(id) {
-  const p = DS.getProductById(id);
-  if (!p) return;
-  p.active = p.active === false ? true : false;
-  DS.saveProduct(p);
+  const product = DS.getProductById(id);
+
+  if (!product) {
+    return;
+  }
+
+  product.active = product.active === false;
+  DS.saveProduct(product);
+
   renderProductGrid();
-  AdminUI.showToast(p.active ? 'Product geactiveerd' : 'Product gedeactiveerd');
+  AdminUI.showToast(product.active ? 'Product geactiveerd' : 'Product gedeactiveerd');
 }
 
 async function deleteProductById(id) {
   const result = DS.deleteProduct(id);
-  if (result.error) { AdminUI.showToast(result.error, 'error'); return; }
+
+  if (result.error) {
+    AdminUI.showToast(result.error, 'error');
+    return;
+  }
+
   renderProductGrid();
   AdminUI.showToast('Product verwijderd');
 }
 
-// ─── PRODUCT MODAL ────────────────────────────────────────────────────────────
-
 function openProductModal(id = null) {
-  const p = id ? DS.getProductById(id) : {};
-  const isEdit = !!id;
-  const slabs = p.priceSlabs || [{ from: 1, to: 9, price: '' }, { from: 10, to: 49, price: '' }, { from: 50, to: null, price: '' }];
-  const templates = p.templates || [''];
-  const persTypes = p.personalisatieTypes || [];
+  const product = id ? DS.getProductById(id) : {};
+  const isEdit = Boolean(id);
 
-  function slabRow(s, i) {
-    return `
-      <div class="slab-row" id="slab-${i}">
-        <input type="number" class="slab-from"  value="${s.from}"     placeholder="Van"  min="1">
-        <span>–</span>
-        <input type="number" class="slab-to"    value="${s.to || ''}" placeholder="Tot (leeg = ∞)">
-        <span>stuks</span>
-        <input type="number" class="slab-price" value="${s.price}"    placeholder="Prijs" step="0.01">
-        <span>€</span>
-        <button class="icon-btn danger" onclick="this.closest('.slab-row').remove()">✕</button>
-      </div>`;
-  }
+  const slabs = product.priceSlabs || [
+    { from: 1, to: 9, price: '' },
+    { from: 10, to: 49, price: '' },
+    { from: 50, to: null, price: '' },
+  ];
 
-  function templateRow(t) {
-    return `
-      <div class="template-item">
-        <input type="text" class="tmpl-input" value="${escHtml(t)}" placeholder="template-naam.png">
-        <button class="icon-btn danger" onclick="this.closest('.template-item').remove()">✕</button>
-      </div>`;
-  }
+  const persTypes = product.personalisatieTypes || [];
 
-  // ── Personalisatietype rij ─────────────────────────────────────────────────
-  function persTypeRow(pt, idx) {
-    const wMm = pt.width_mm || '';
-    const hMm = pt.height_mm || '';
-    const mMm = pt.margin_mm || '';
-    return `
-      <div class="pers-type-row" data-idx="${idx}" style="
-        border:1px solid var(--border);border-radius:var(--radius);
-        padding:12px;margin-bottom:8px;background:var(--surface-2)">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-          <strong style="font-size:13px">Personalisatietype ${idx + 1}</strong>
-          <button class="icon-btn danger" onclick="this.closest('.pers-type-row').remove()" title="Verwijder">✕</button>
-        </div>
-        <div class="form-row" style="margin-bottom:8px">
-          <div class="form-group">
-            <label>Label (bijv. "Voorkant")</label>
-            <input type="text" class="pers-label" value="${escHtml(pt.label || '')}" placeholder="Voorkant">
-          </div>
-          <div class="form-group">
-            <label>Preview afbeelding (pad)</label>
-            <input type="text" class="pers-preview" value="${escHtml(pt.previewImage || '')}" placeholder="shared/images/voorkant.png">
-          </div>
-        </div>
-        <div class="form-row-3" style="margin-bottom:8px">
-          <div class="form-group">
-            <label>Breedte (mm)</label>
-            <input type="number" class="pers-w-mm" value="${wMm}" placeholder="100" min="10" step="0.5">
-          </div>
-          <div class="form-group">
-            <label>Hoogte (mm)</label>
-            <input type="number" class="pers-h-mm" value="${hMm}" placeholder="70"  min="10" step="0.5">
-          </div>
-          <div class="form-group">
-            <label>Marge (mm)</label>
-            <input type="number" class="pers-m-mm" value="${mMm}" placeholder="5"   min="0"  step="0.5">
-          </div>
-        </div>
-        <div class="form-row">
-          <div class="form-group">
-            <label>Clip-vorm (optioneel)</label>
-            <input type="text" class="pers-clip" value="${escHtml(pt.clipShape || '')}" placeholder="circle(50%) of leeg voor rechthoek">
-            <span class="form-hint">CSS clip-path voor niet-rechthoekige printzone</span>
-          </div>
-        </div>
-        <div class="pers-px-preview form-hint" style="color:var(--text-2);margin-top:4px"></div>
-      </div>`;
-  }
+  const uploadState = {
+    imageProductFile: product.imageProductFile || (product.imageProduct ? {
+      name: 'Productafbeelding',
+      type: 'image/png',
+      size: 0,
+      dataURL: product.imageProduct,
+    } : null),
+    persFiles: {},
+  };
+
+  persTypes.forEach(type => {
+    uploadState.persFiles[type.id] = {
+      previewImageFile: type.previewImageFile || (type.previewImage ? {
+        name: 'Personalisatieafbeelding',
+        type: 'image/png',
+        size: 0,
+        dataURL: type.previewImage,
+      } : null),
+      templatePdf: type.templatePdf || null,
+    };
+  });
 
   const body = `
     <div class="section-title">Algemeen</div>
+
     <div class="form-row">
       <div class="form-group">
         <label>Productnaam *</label>
-        <input type="text" id="pf-name" value="${escHtml(p.name || '')}" placeholder="Kleine geschenkdoos">
+        <input type="text" id="pf-name" value="${escHtml(product.name || '')}" placeholder="Kleine geschenkdoos">
       </div>
+
       <div class="form-group">
         <label>Product-ID</label>
-        <input type="text" id="pf-id" value="${escHtml(p.id || '')}" placeholder="Automatisch"
+        <input type="text" id="pf-id" value="${escHtml(product.id || '')}" placeholder="Automatisch"
                ${isEdit ? 'readonly style="background:var(--surface-2);color:var(--text-3)"' : ''}>
         <span class="form-hint">Leeg = automatisch gegenereerd</span>
       </div>
     </div>
 
     <div class="section-title" style="margin-top:4px">Staffelprijzen</div>
-    <div class="slab-list" id="slab-list">
-      ${slabs.map((s, i) => slabRow(s, i)).join('')}
-    </div>
-    <button class="btn btn-secondary btn-sm" style="margin-top:8px" id="btn-add-slab">+ Staffel toevoegen</button>
 
-    <div class="section-title" style="margin-top:4px">Templates</div>
-    <div class="template-list" id="template-list">
-      ${templates.map(t => templateRow(t)).join('')}
+    <div class="slab-list" id="slab-list">
+      ${slabs.map((slab, index) => slabRow(slab, index)).join('')}
     </div>
-    <button class="btn btn-secondary btn-sm" style="margin-top:8px" id="btn-add-tmpl">+ Template toevoegen</button>
+
+    <button class="btn btn-secondary btn-sm" type="button" style="margin-top:8px" id="btn-add-slab">
+      + Staffel toevoegen
+    </button>
 
     <div class="section-title" style="margin-top:4px">Productafbeelding</div>
+
     <div class="form-row-1">
       <div class="form-group">
-        <label>Productafbeelding (URL of pad)</label>
-        <input type="text" id="pf-img1" value="${escHtml(p.imageProduct || '')}" placeholder="shared/images/product.png">
+        <label>Productafbeelding</label>
+        <div class="file-upload-field">
+          <div id="pf-img-preview">
+            ${renderStoredFile(uploadState.imageProductFile, 'Productafbeelding')}
+          </div>
+          <div class="file-upload-actions">
+            <input type="file" id="pf-img-file" accept="image/*">
+            <button type="button" class="btn btn-secondary btn-sm" id="pf-img-remove">Verwijderen</button>
+          </div>
+        </div>
       </div>
     </div>
 
     <div class="section-title" style="margin-top:4px">
       Personalisatietypes
       <span class="form-hint" style="text-transform:none;font-weight:400;letter-spacing:0">
-        — elk type heeft eigen afmetingen en canvas
+        Elk type heeft eigen afmetingen, afbeelding en template PDF
       </span>
     </div>
+
     <div id="pers-type-list">
-      ${persTypes.map((pt, i) => persTypeRow(pt, i)).join('')}
+      ${persTypes.map((type, index) => persTypeRow(type, index, type.id)).join('')}
     </div>
-    <button class="btn btn-secondary btn-sm" style="margin-top:8px" id="btn-add-pers">+ Personalisatietype toevoegen</button>
+
+    <button class="btn btn-secondary btn-sm" type="button" style="margin-top:8px" id="btn-add-pers">
+      + Personalisatietype toevoegen
+    </button>
 
     <div id="pf-error" class="form-error"></div>
   `;
 
   const footer = `
-    <button class="btn btn-secondary" onclick="AdminUI.closeModal()">Annuleren</button>
-    <button class="btn btn-primary"   id="btn-product-save">Opslaan</button>
+    <button class="btn btn-secondary" type="button" onclick="AdminUI.closeModal()">Annuleren</button>
+    <button class="btn btn-primary" type="button" id="btn-product-save">Opslaan</button>
   `;
 
-  AdminUI.openModal({ title: isEdit ? 'Product bewerken' : 'Nieuw product', body, footer });
+  AdminUI.openModal({
+    title: isEdit ? 'Product bewerken' : 'Nieuw product',
+    body,
+    footer,
+  });
 
-  // Live DPI preview per personalisatietype
-  function bindPersPreview(row) {
-    const wEl = row.querySelector('.pers-w-mm');
-    const hEl = row.querySelector('.pers-h-mm');
-    const mEl = row.querySelector('.pers-m-mm');
-    const prev = row.querySelector('.pers-px-preview');
-    function update() {
-      const w = parseFloat(wEl?.value); const h = parseFloat(hEl?.value);
-      const m = parseFloat(mEl?.value);
-      if (w && h) {
-        const wp = Math.round(w / 25.4 * 300);
-        const hp = Math.round(h / 25.4 * 300);
-        const mp = m ? Math.round(m / 25.4 * 300) : null;
-        // Canvas display: max 600px breed, hoogte proportioneel
-        const scale = Math.min(1, 600 / wp);
-        const dispW = Math.round(wp * scale);
-        const dispH = Math.round(hp * scale);
-        prev.textContent = `→ Export: ${wp}×${hp}px (300 DPI)  |  Canvas: ${dispW}×${dispH}px${mp ? `  |  Marge: ${mp}px` : ''}`;
-      } else {
-        prev.textContent = '';
-      }
+  bindProductImageUpload(uploadState);
+  bindExistingPersRows(uploadState, persTypes);
+  bindProductModalActions(uploadState, product, isEdit);
+}
+
+function slabRow(slab, index) {
+  return `
+    <div class="slab-row" id="slab-${index}">
+      <input type="number" class="slab-from" value="${escHtml(slab.from || '')}" placeholder="Van" min="1">
+      <span>–</span>
+      <input type="number" class="slab-to" value="${escHtml(slab.to || '')}" placeholder="Tot leeg is oneindig">
+      <span>stuks</span>
+      <input type="number" class="slab-price" value="${escHtml(slab.price || '')}" placeholder="Prijs" step="0.01">
+      <span>€</span>
+      <button class="icon-btn danger" type="button" onclick="this.closest('.slab-row').remove()">×</button>
+    </div>
+  `;
+}
+
+function persTypeRow(type, index, uploadKey) {
+  const key = uploadKey || createUploadKey();
+  const previewFile = type.previewImageFile || (type.previewImage ? {
+    name: 'Personalisatieafbeelding',
+    type: 'image/png',
+    size: 0,
+    dataURL: type.previewImage,
+  } : null);
+
+  const templatePdf = type.templatePdf || null;
+
+  return `
+    <div class="pers-type-row"
+         data-upload-key="${escHtml(key)}"
+         data-persisted-id="${escHtml(type.id || '')}"
+         style="border:1px solid var(--border);border-radius:var(--radius);
+                padding:12px;margin-bottom:8px;background:var(--surface-2)">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <strong style="font-size:13px">Personalisatietype ${index + 1}</strong>
+        <button class="icon-btn danger" type="button" onclick="this.closest('.pers-type-row').remove()" title="Verwijder">×</button>
+      </div>
+
+      <div class="form-row" style="margin-bottom:8px">
+        <div class="form-group">
+          <label>Label</label>
+          <input type="text" class="pers-label" value="${escHtml(type.label || '')}" placeholder="Voorkant">
+        </div>
+
+        <div class="form-group">
+          <label>Clip-vorm optioneel</label>
+          <input type="text" class="pers-clip" value="${escHtml(type.clipShape || '')}" placeholder="circle(50%) of leeg voor rechthoek">
+          <span class="form-hint">CSS clip-path voor niet-rechthoekige printzone</span>
+        </div>
+      </div>
+
+      <div class="form-row-3" style="margin-bottom:8px">
+        <div class="form-group">
+          <label>Breedte mm</label>
+          <input type="number" class="pers-w-mm" value="${escHtml(type.width_mm || '')}" placeholder="100" min="10" step="0.5">
+        </div>
+
+        <div class="form-group">
+          <label>Hoogte mm</label>
+          <input type="number" class="pers-h-mm" value="${escHtml(type.height_mm || '')}" placeholder="70" min="10" step="0.5">
+        </div>
+
+        <div class="form-group">
+          <label>Marge mm</label>
+          <input type="number" class="pers-m-mm" value="${escHtml(type.margin_mm || '')}" placeholder="5" min="0" step="0.5">
+        </div>
+      </div>
+
+      <div class="form-row" style="margin-bottom:8px">
+        <div class="form-group">
+          <label>Personalisatieafbeelding</label>
+          <div class="file-upload-field">
+            <div class="pers-preview-output">
+              ${renderStoredFile(previewFile, 'Personalisatieafbeelding')}
+            </div>
+            <div class="file-upload-actions">
+              <input type="file" class="pers-preview-file" accept="image/*">
+              <button type="button" class="btn btn-secondary btn-sm pers-preview-remove">Verwijderen</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>Template PDF</label>
+          <div class="file-upload-field">
+            <div class="pers-template-output">
+              ${renderStoredFile(templatePdf, 'Template PDF')}
+            </div>
+            <div class="file-upload-actions">
+              <input type="file" class="pers-template-file" accept="application/pdf">
+              <button type="button" class="btn btn-secondary btn-sm pers-template-remove">Verwijderen</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="pers-px-preview form-hint" style="color:var(--text-2);margin-top:4px"></div>
+    </div>
+  `;
+}
+
+function bindProductImageUpload(uploadState) {
+  document.getElementById('pf-img-file')?.addEventListener('change', async event => {
+    const file = event.target.files?.[0];
+
+    if (!file) {
+      return;
     }
-    [wEl, hEl, mEl].forEach(el => el?.addEventListener('input', update));
-    update();
-  }
 
-  // Bind preview op bestaande rijen
-  document.querySelectorAll('.pers-type-row').forEach(row => bindPersPreview(row));
+    uploadState.imageProductFile = await fileToDataURL(file);
+    document.getElementById('pf-img-preview').innerHTML = renderStoredFile(uploadState.imageProductFile);
+    event.target.value = '';
+  });
 
-  // Staffel toevoegen
+  document.getElementById('pf-img-remove')?.addEventListener('click', () => {
+    uploadState.imageProductFile = null;
+    document.getElementById('pf-img-preview').innerHTML = renderStoredFile(null);
+  });
+}
+
+function bindExistingPersRows(uploadState, persTypes) {
+  document.querySelectorAll('.pers-type-row').forEach((row, index) => {
+    const existingType = persTypes[index] || {};
+    const uploadKey = row.dataset.uploadKey || existingType.id || createUploadKey();
+
+    row.dataset.uploadKey = uploadKey;
+
+    uploadState.persFiles[uploadKey] = uploadState.persFiles[uploadKey] || {
+      previewImageFile: existingType.previewImageFile || null,
+      templatePdf: existingType.templatePdf || null,
+    };
+
+    bindPersRowUploads(row, uploadState);
+    bindPersPreview(row);
+  });
+}
+
+function bindPersRowUploads(row, uploadState) {
+  const uploadKey = row.dataset.uploadKey;
+
+  uploadState.persFiles[uploadKey] = uploadState.persFiles[uploadKey] || {
+    previewImageFile: null,
+    templatePdf: null,
+  };
+
+  const previewInput = row.querySelector('.pers-preview-file');
+  const previewRemove = row.querySelector('.pers-preview-remove');
+  const previewOutput = row.querySelector('.pers-preview-output');
+
+  const templateInput = row.querySelector('.pers-template-file');
+  const templateRemove = row.querySelector('.pers-template-remove');
+  const templateOutput = row.querySelector('.pers-template-output');
+
+  previewInput?.addEventListener('change', async event => {
+    const file = event.target.files?.[0];
+
+    if (!file) {
+      return;
+    }
+
+    uploadState.persFiles[uploadKey].previewImageFile = await fileToDataURL(file);
+    previewOutput.innerHTML = renderStoredFile(uploadState.persFiles[uploadKey].previewImageFile);
+    event.target.value = '';
+  });
+
+  previewRemove?.addEventListener('click', () => {
+    uploadState.persFiles[uploadKey].previewImageFile = null;
+    previewOutput.innerHTML = renderStoredFile(null);
+  });
+
+  templateInput?.addEventListener('change', async event => {
+    const file = event.target.files?.[0];
+
+    if (!file) {
+      return;
+    }
+
+    if (file.type !== 'application/pdf') {
+      AdminUI.showToast('Upload een PDF bestand als template', 'error');
+      event.target.value = '';
+      return;
+    }
+
+    uploadState.persFiles[uploadKey].templatePdf = await fileToDataURL(file);
+    templateOutput.innerHTML = renderStoredFile(uploadState.persFiles[uploadKey].templatePdf, 'Template PDF');
+    event.target.value = '';
+  });
+
+  templateRemove?.addEventListener('click', () => {
+    uploadState.persFiles[uploadKey].templatePdf = null;
+    templateOutput.innerHTML = renderStoredFile(null);
+  });
+}
+
+function bindPersPreview(row) {
+  const widthInput = row.querySelector('.pers-w-mm');
+  const heightInput = row.querySelector('.pers-h-mm');
+  const marginInput = row.querySelector('.pers-m-mm');
+  const preview = row.querySelector('.pers-px-preview');
+
+  const update = () => {
+    const widthMm = parseFloat(widthInput?.value);
+    const heightMm = parseFloat(heightInput?.value);
+    const marginMm = parseFloat(marginInput?.value);
+
+    if (widthMm && heightMm) {
+      const widthPx = Math.round(widthMm / 25.4 * 300);
+      const heightPx = Math.round(heightMm / 25.4 * 300);
+      const marginPx = marginMm ? Math.round(marginMm / 25.4 * 300) : null;
+      const scale = Math.min(1, 600 / widthPx);
+      const displayWidth = Math.round(widthPx * scale);
+      const displayHeight = Math.round(heightPx * scale);
+
+      preview.textContent = `Export: ${widthPx}×${heightPx}px 300 DPI | Canvas: ${displayWidth}×${displayHeight}px${marginPx ? ` | Marge: ${marginPx}px` : ''}`;
+    } else {
+      preview.textContent = '';
+    }
+  };
+
+  [widthInput, heightInput, marginInput].forEach(input => input?.addEventListener('input', update));
+  update();
+}
+
+function bindProductModalActions(uploadState, product, isEdit) {
   document.getElementById('btn-add-slab').addEventListener('click', () => {
     const list = document.getElementById('slab-list');
     list.insertAdjacentHTML('beforeend', slabRow({ from: '', to: '', price: '' }, list.children.length));
   });
 
-  // Template toevoegen
-  document.getElementById('btn-add-tmpl').addEventListener('click', () => {
-    document.getElementById('template-list').insertAdjacentHTML('beforeend', templateRow(''));
-  });
-
-  // Personalisatietype toevoegen
   document.getElementById('btn-add-pers').addEventListener('click', () => {
     const list = document.getElementById('pers-type-list');
-    const newIdx = list.children.length;
-    const html = persTypeRow({ label: '', previewImage: '', width_mm: '', height_mm: '', margin_mm: '', clipShape: '' }, newIdx);
-    list.insertAdjacentHTML('beforeend', html);
+    const uploadKey = createUploadKey();
+
+    uploadState.persFiles[uploadKey] = {
+      previewImageFile: null,
+      templatePdf: null,
+    };
+
+    list.insertAdjacentHTML('beforeend', persTypeRow({
+      label: '',
+      width_mm: '',
+      height_mm: '',
+      margin_mm: '',
+      clipShape: '',
+    }, list.children.length, uploadKey));
+
     const newRow = list.lastElementChild;
+    bindPersRowUploads(newRow, uploadState);
     bindPersPreview(newRow);
   });
 
-  // Opslaan
   document.getElementById('btn-product-save').addEventListener('click', () => {
-    const name = document.getElementById('pf-name').value.trim();
-    const errEl = document.getElementById('pf-error');
-
-    if (!name) {
-      errEl.textContent = 'Productnaam is verplicht.';
-      errEl.classList.add('visible');
-      return;
-    }
-
-    // Verzamel personalisatietypes
-    const persRows = document.querySelectorAll('#pers-type-list .pers-type-row');
-    const personalisatieTypes = [...persRows].map(row => {
-      const wMm = parseFloat(row.querySelector('.pers-w-mm').value) || null;
-      const hMm = parseFloat(row.querySelector('.pers-h-mm').value) || null;
-      const mMm = parseFloat(row.querySelector('.pers-m-mm').value) || null;
-      const label = row.querySelector('.pers-label').value.trim();
-
-      // Bereken pixel afmetingen automatisch
-      const wp = wMm ? Math.round(wMm / 25.4 * 300) : null;
-      const hp = hMm ? Math.round(hMm / 25.4 * 300) : null;
-      const mp = mMm ? Math.round(mMm / 25.4 * 300) : null;
-      const scale = wp ? Math.min(1, 600 / wp) : 1;
-      const dispW = wp ? Math.round(wp * scale) : null;
-      const dispH = hp ? Math.round(hp * scale) : null;
-
-      return {
-        id: label.toLowerCase().replace(/\s+/g, '-') || `type-${Date.now()}`,
-        label: label || 'Standaard',
-        previewImage: row.querySelector('.pers-preview').value.trim(),
-        clipShape: row.querySelector('.pers-clip').value.trim() || null,
-        width_mm: wMm,
-        height_mm: hMm,
-        margin_mm: mMm,
-        width_px: wp,
-        height_px: hp,
-        margin_px: mp,
-        canvas_display_width: dispW,
-        canvas_display_height: dispH,
-      };
-    });
-
-    if (personalisatieTypes.length === 0) {
-      errEl.textContent = 'Voeg minimaal één personalisatietype toe.';
-      errEl.classList.add('visible');
-      return;
-    }
-
-    errEl.classList.remove('visible');
-
-    const slabRows = document.querySelectorAll('#slab-list .slab-row');
-    const priceSlabs = [...slabRows].map(row => ({
-      from: parseFloat(row.querySelector('.slab-from').value) || 1,
-      to: parseFloat(row.querySelector('.slab-to').value) || null,
-      price: parseFloat(row.querySelector('.slab-price').value) || 0,
-    }));
-
-    const tmplInputs = document.querySelectorAll('#template-list .tmpl-input');
-    const templates = [...tmplInputs].map(i => i.value.trim()).filter(Boolean);
-    const customId = document.getElementById('pf-id').value.trim();
-
-    // Gebruik afmetingen van het eerste personalisatietype als product-level fallback
-    const firstPers = personalisatieTypes[0];
-
-    const updated = {
-      ...p,
-      id: isEdit ? p.id : (customId || undefined),
-      name,
-      active: p.active !== false,
-      priceSlabs,
-      templates,
-      imageProduct: document.getElementById('pf-img1').value.trim(),
-      personalisatieTypes,
-      // Product-level fallbacks (voor backwards compatibility)
-      width_mm: firstPers.width_mm,
-      height_mm: firstPers.height_mm,
-      margin_mm: firstPers.margin_mm,
-      width_px: firstPers.width_px,
-      height_px: firstPers.height_px,
-      margin_px: firstPers.margin_px,
-      canvas_display_width: firstPers.canvas_display_width,
-      canvas_display_height: firstPers.canvas_display_height,
-    };
-
-    DS.saveProduct(updated);
-    AdminUI.closeModal();
-    renderProductGrid();
-    AdminUI.showToast(isEdit ? 'Product bijgewerkt' : 'Product aangemaakt');
+    saveProductFromModal(uploadState, product, isEdit);
   });
 }
 
-// helpers
-function formatEuro(n) {
-  if (n === null || n === undefined) return '—';
-  return '€ ' + parseFloat(n).toFixed(2).replace('.', ',');
+function saveProductFromModal(uploadState, product, isEdit) {
+  const name = document.getElementById('pf-name').value.trim();
+  const error = document.getElementById('pf-error');
+
+  if (!name) {
+    error.textContent = 'Productnaam is verplicht.';
+    error.classList.add('visible');
+    return;
+  }
+
+  const personalisatieTypes = collectPersonalisationTypes(uploadState);
+
+  if (personalisatieTypes.length === 0) {
+    error.textContent = 'Voeg minimaal één personalisatietype toe.';
+    error.classList.add('visible');
+    return;
+  }
+
+  error.classList.remove('visible');
+
+  const priceSlabs = [...document.querySelectorAll('#slab-list .slab-row')].map(row => ({
+    from: parseFloat(row.querySelector('.slab-from').value) || 1,
+    to: parseFloat(row.querySelector('.slab-to').value) || null,
+    price: parseFloat(row.querySelector('.slab-price').value) || 0,
+  }));
+
+  const customId = document.getElementById('pf-id').value.trim();
+  const firstPers = personalisatieTypes[0];
+
+  const updated = {
+    ...product,
+    id: isEdit ? product.id : (customId || undefined),
+    name,
+    active: product.active !== false,
+    priceSlabs,
+    imageProductFile: uploadState.imageProductFile || null,
+    imageProduct: uploadState.imageProductFile?.dataURL || '',
+    personalisatieTypes,
+
+    width_mm: firstPers.width_mm,
+    height_mm: firstPers.height_mm,
+    margin_mm: firstPers.margin_mm,
+    width_px: firstPers.width_px,
+    height_px: firstPers.height_px,
+    margin_px: firstPers.margin_px,
+    canvas_display_width: firstPers.canvas_display_width,
+    canvas_display_height: firstPers.canvas_display_height,
+  };
+
+  DS.saveProduct(updated);
+  AdminUI.closeModal();
+  renderProductGrid();
+  AdminUI.showToast(isEdit ? 'Product bijgewerkt' : 'Product aangemaakt');
 }
-function escHtml(str) {
-  return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+function collectPersonalisationTypes(uploadState) {
+  return [...document.querySelectorAll('#pers-type-list .pers-type-row')].map(row => {
+    const label = row.querySelector('.pers-label').value.trim();
+    const uploadKey = row.dataset.uploadKey;
+    const persistedId = row.dataset.persistedId;
+    const stableId = persistedId || slugify(label) || uploadKey;
+    const fileState = uploadState.persFiles[uploadKey] || {};
+
+    const widthMm = parseFloat(row.querySelector('.pers-w-mm').value) || null;
+    const heightMm = parseFloat(row.querySelector('.pers-h-mm').value) || null;
+    const marginMm = parseFloat(row.querySelector('.pers-m-mm').value) || null;
+
+    const widthPx = widthMm ? Math.round(widthMm / 25.4 * 300) : null;
+    const heightPx = heightMm ? Math.round(heightMm / 25.4 * 300) : null;
+    const marginPx = marginMm ? Math.round(marginMm / 25.4 * 300) : null;
+
+    const scale = widthPx ? Math.min(1, 600 / widthPx) : 1;
+    const displayWidth = widthPx ? Math.round(widthPx * scale) : null;
+    const displayHeight = heightPx ? Math.round(heightPx * scale) : null;
+
+    return {
+      id: stableId,
+      label: label || 'Standaard',
+      previewImageFile: fileState.previewImageFile || null,
+      previewImage: fileState.previewImageFile?.dataURL || '',
+      templatePdf: fileState.templatePdf || null,
+      clipShape: row.querySelector('.pers-clip').value.trim() || null,
+      width_mm: widthMm,
+      height_mm: heightMm,
+      margin_mm: marginMm,
+      width_px: widthPx,
+      height_px: heightPx,
+      margin_px: marginPx,
+      canvas_display_width: displayWidth,
+      canvas_display_height: displayHeight,
+    };
+  });
+}
+
+function fileToDataURL(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+
+    reader.onload = event => {
+      resolve({
+        name: file.name,
+        type: file.type,
+        size: file.size,
+        dataURL: event.target.result,
+      });
+    };
+
+    reader.onerror = () => reject(new Error('Bestand kon niet worden gelezen.'));
+    reader.readAsDataURL(file);
+  });
+}
+
+function renderStoredFile(file, fallbackLabel = 'Bestand opgeslagen') {
+  if (!file?.dataURL) {
+    return `<span class="form-hint">Geen bestand gekozen</span>`;
+  }
+
+  if (file.type?.startsWith('image/')) {
+    return `
+      <div class="file-preview-box">
+        <img src="${file.dataURL}" alt="${escHtml(file.name || fallbackLabel)}">
+      </div>
+      <span class="form-hint">${escHtml(file.name || fallbackLabel)}</span>
+    `;
+  }
+
+  return `<span class="form-hint">${escHtml(file.name || fallbackLabel)}</span>`;
+}
+
+function createUploadKey() {
+  return `upload-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function slugify(value) {
+  return String(value || '')
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+function formatEuro(value) {
+  if (value === null || value === undefined || Number.isNaN(Number(value))) {
+    return '—';
+  }
+
+  return `€ ${Number(value).toFixed(2).replace('.', ',')}`;
+}
+
+function escHtml(value) {
+  return String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
 }
