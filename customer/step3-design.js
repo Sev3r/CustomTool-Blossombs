@@ -11,6 +11,7 @@ const DESIGN_STATE_KEY = 'cot_design_state';
 let fabricCanvas = null;
 let fabricHistory = [];
 let fabricActiveColor = '#1D9E75';
+let fabricBackgroundColor = '#b7bdb8';
 let uploadedDataURL = null;
 let uploadedFileName = null;
 let activeDesignTab = 'tool';
@@ -41,21 +42,22 @@ function renderDesignPage() {
   activeDesignTab = saved.tab || savedState?.tab || 'tool';
 
   el.innerHTML = `
-    <h1 class="page-title">Ontwerp uw verpakking</h1>
-    <p class="page-subtitle">Gebruik de ontwerptool of upload een eigen bestand</p>
+         <h1 class="page-title">Ontwerp uw verpakking</h1>
+         <p class="page-subtitle">Gebruik de ontwerptool of upload een eigen bestand</p>
 
-    <div class="design-tabs" style="margin-bottom:24px">
-      <button class="design-tab ${activeDesignTab === 'tool' ? 'active' : ''}" type="button" data-tab="tool">Ontwerptool</button>
-      <button class="design-tab ${activeDesignTab === 'upload' ? 'active' : ''}" type="button" data-tab="upload">Bestand uploaden</button>
-    </div>
+         <div class="design-tabs" style="margin-bottom:24px">
+         <button class="design-tab ${activeDesignTab === 'tool' ? 'active' : ''}" type="button" data-tab="tool">Ontwerptool</button>
+          <button class="design-tab ${activeDesignTab === 'upload' ? 'active' : ''}" type="button" data-tab="upload">Bestand uploaden</button>
+         </div>
 
-    <div id="tab-tool" style="${activeDesignTab === 'tool' ? '' : 'display:none'}">
+              <div id="tab-tool" style="${activeDesignTab === 'tool' ? '' : 'display:none'}">
       <div id="app">
-        <div id="sidebar">
+        <aside id="sidebar">
           <div id="sidebar-header"></div>
 
           <div class="side-section">
             <div class="side-label">Toevoegen</div>
+
             <button class="tool-btn" type="button" id="btn-logo">+ Logo uploaden</button>
             <input type="file" id="file-input" accept="image/*" style="display:none">
 
@@ -67,8 +69,16 @@ function renderDesignPage() {
           </div>
 
           <div class="side-section">
-            <div class="side-label">Kleur</div>
+            <div class="side-label">Elementkleur</div>
             <div class="color-row" id="color-swatches"></div>
+
+            <div class="custom-color-row">
+              <label for="custom-element-color">Eigen kleur</label>
+              <input type="color"
+                     id="custom-element-color"
+                     class="custom-color-input"
+                     value="${fabricActiveColor}">
+            </div>
 
             <div class="prop-row">
               <div class="prop-top">
@@ -78,9 +88,28 @@ function renderDesignPage() {
               <input type="range" id="opacity" min="10" max="100" value="100" step="1">
             </div>
           </div>
-        </div>
 
-        <div id="canvas-area">
+          ${activePers?.allowBackgroundColor ? `
+            <div class="side-section">
+              <div class="side-label">Achtergrondkleur</div>
+              <div class="color-row" id="background-color-swatches"></div>
+
+              <div class="custom-color-row">
+                <label for="custom-background-color">Eigen kleur</label>
+                <input type="color"
+                       id="custom-background-color"
+                       class="custom-color-input"
+                       value="${fabricBackgroundColor}">
+              </div>
+
+              <span class="form-hint">
+                Deze kleur wordt meegenomen in het drukbestand.
+              </span>
+            </div>
+          ` : ''}
+        </aside>
+
+        <section id="canvas-area">
           <div id="canvas-toolbar">
             <button class="tb-btn" type="button" id="btn-delete">Verwijder</button>
             <button class="tb-btn" type="button" id="btn-front">Voorgrond</button>
@@ -96,12 +125,12 @@ function renderDesignPage() {
           </div>
 
           <div id="status">Selecteer een element om te bewerken. Klik en sleep om te verplaatsen.</div>
-        </div>
+        </section>
 
-        <div id="layer-panel">
+        <aside id="layer-panel">
           <div id="layer-header">Layers</div>
           <div id="layer-list"></div>
-        </div>
+        </aside>
       </div>
     </div>
 
@@ -249,11 +278,13 @@ function bindDesignNextButton(product, activePers, stateKey) {
         tab: 'tool',
         source: 'fabric',
         fabricJSON: snapshot.json,
+        backgroundColor: snapshot.backgroundColor,
       });
 
       persistDesignState(stateKey, {
         dataURL: snapshot.dataURL,
         fabricJSON: snapshot.json,
+        backgroundColor: snapshot.backgroundColor,
         tab: 'tool',
       });
     }
@@ -308,6 +339,7 @@ function initFabricTool(product, activePers, savedState, stateKey) {
 
   fabricHistory = [];
   fabricActiveColor = '#1D9E75';
+  fabricBackgroundColor = savedState?.backgroundColor || activePers?.backgroundColor || '#b7bdb8';
 
   const display = getResponsiveCanvasSize(activePers, product);
   const canvasWidth = display.width;
@@ -320,12 +352,13 @@ function initFabricTool(product, activePers, savedState, stateKey) {
     width: canvasWidth,
     height: canvasHeight,
     selection: true,
-    backgroundColor: '#b7bdb8',
+    backgroundColor: fabricBackgroundColor,
   });
 
   bindFabricDocumentHandlers();
   applyCanvasClipPath(clipShape, canvasWidth, canvasHeight);
   renderColorSwatches();
+  renderBackgroundColorSwatches(activePers, stateKey);
   drawMarginRect(fabricCanvas, margin, canvasWidth, canvasHeight);
   loadBackgroundImage(fabricCanvas, activePers, product, canvasWidth, canvasHeight);
   restoreCanvasStateOrDefault(fabricCanvas, savedState, canvasHeight, margin, canvasWidth, canvasHeight);
@@ -425,6 +458,108 @@ function renderColorSwatches() {
 
     swatchContainer.appendChild(swatch);
   });
+
+  const customColorInput = document.getElementById('custom-element-color');
+
+  if (customColorInput) {
+    customColorInput.value = fabricActiveColor;
+
+    customColorInput.addEventListener('input', event => {
+      const color = event.target.value;
+      fabricActiveColor = color;
+
+      swatchContainer.querySelectorAll('.color-swatch').forEach(item => {
+        item.classList.remove('active');
+      });
+
+      applyToSelected('fill', color);
+    });
+  }
+}
+
+
+function renderBackgroundColorSwatches(activePers, stateKey) {
+  if (!activePers?.allowBackgroundColor) {
+    return;
+  }
+
+  const swatchContainer = document.getElementById('background-color-swatches');
+
+  if (!swatchContainer) {
+    return;
+  }
+
+  const colors = [
+    '#b7bdb8',
+    '#ffffff',
+    '#F7F4EE',
+    '#EDF2ED',
+    '#FDF4DC',
+    '#5C7A5C',
+    '#C9A84C',
+    '#2A2A22',
+  ];
+
+  swatchContainer.innerHTML = '';
+
+  colors.forEach(color => {
+    const swatch = document.createElement('div');
+    swatch.className = `color-swatch${color.toLowerCase() === fabricBackgroundColor.toLowerCase() ? ' active' : ''}`;
+    swatch.style.background = color;
+
+    swatch.addEventListener('click', () => {
+      setCanvasBackgroundColor(color, stateKey);
+
+      swatchContainer.querySelectorAll('.color-swatch').forEach(item => {
+        item.classList.remove('active');
+      });
+
+      swatch.classList.add('active');
+
+      const customBackgroundInput = document.getElementById('custom-background-color');
+
+      if (customBackgroundInput) {
+        customBackgroundInput.value = color;
+      }
+    });
+
+    swatchContainer.appendChild(swatch);
+  });
+
+  const customBackgroundInput = document.getElementById('custom-background-color');
+
+  if (customBackgroundInput) {
+    customBackgroundInput.value = fabricBackgroundColor;
+
+    customBackgroundInput.addEventListener('input', event => {
+      setCanvasBackgroundColor(event.target.value, stateKey);
+
+      swatchContainer.querySelectorAll('.color-swatch').forEach(item => {
+        item.classList.remove('active');
+      });
+    });
+  }
+}
+
+function setCanvasBackgroundColor(color, stateKey) {
+  fabricBackgroundColor = color;
+
+  if (!fabricCanvas) {
+    return;
+  }
+
+  if (typeof fabricCanvas.setBackgroundColor === 'function') {
+    fabricCanvas.setBackgroundColor(color, fabricCanvas.renderAll.bind(fabricCanvas));
+  } else {
+    fabricCanvas.backgroundColor = color;
+    fabricCanvas.renderAll();
+  }
+
+  autoSaveCanvasState(stateKey);
+
+  persistDesignState(stateKey, {
+    backgroundColor: color,
+  });
 }
 
 function drawMarginRect(canvas, margin, canvasWidth, canvasHeight) {
@@ -451,6 +586,10 @@ function drawMarginRect(canvas, margin, canvasWidth, canvasHeight) {
 }
 
 function loadBackgroundImage(canvas, activePers, product, canvasWidth, canvasHeight) {
+  if (activePers?.allowBackgroundColor) {
+    return;
+  }
+
   const bgImg = activePers?.previewImage || product.imageProduct || null;
 
   if (!bgImg) {
@@ -802,8 +941,9 @@ function snapshotCanvas(canvas, product, activePers) {
   canvas.renderAll();
 
   const json = JSON.stringify(canvas.toJSON(['_isMargin']));
+  const backgroundColor = canvas.backgroundColor || fabricBackgroundColor;
 
-  return { dataURL, json };
+  return { dataURL, json, backgroundColor };
 }
 
 function autoSaveCanvasState(stateKey) {
@@ -812,7 +952,10 @@ function autoSaveCanvasState(stateKey) {
   }
 
   const json = JSON.stringify(fabricCanvas.toJSON(['_isMargin']));
-  persistDesignState(stateKey, { fabricJSON: json });
+  persistDesignState(stateKey, {
+    fabricJSON: json,
+    backgroundColor: fabricCanvas.backgroundColor || fabricBackgroundColor,
+  });
 }
 
 function persistDesignState(stateKey, data) {

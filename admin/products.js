@@ -270,17 +270,32 @@ function persTypeRow(type, index, uploadKey) {
       </div>
 
       <div class="form-row" style="margin-bottom:8px">
-        <div class="form-group">
-          <label>Label</label>
-          <input type="text" class="pers-label" value="${escHtml(type.label || '')}" placeholder="Voorkant">
-        </div>
+  <div class="form-group">
+    <label>Label</label>
+    <input type="text" class="pers-label" value="${escHtml(type.label || '')}" placeholder="Voorkant">
+  </div>
 
-        <div class="form-group">
-          <label>Clip-vorm optioneel</label>
-          <input type="text" class="pers-clip" value="${escHtml(type.clipShape || '')}" placeholder="circle(50%) of leeg voor rechthoek">
-          <span class="form-hint">CSS clip-path voor niet-rechthoekige printzone</span>
-        </div>
-      </div>
+  <div class="form-group">
+    <label>Clip-vorm optioneel</label>
+    <input type="text" class="pers-clip" value="${escHtml(type.clipShape || '')}" placeholder="circle(50%) of leeg voor rechthoek">
+    <span class="form-hint">CSS clip-path voor niet-rechthoekige printzone</span>
+  </div>
+</div>
+
+<div class="form-row-1" style="margin-bottom:8px">
+  <div class="form-group">
+    <label class="toggle-wrap" style="flex-direction:row;align-items:center;gap:10px">
+      <span class="toggle">
+        <input type="checkbox" class="pers-bg-allowed" ${type.allowBackgroundColor ? 'checked' : ''}>
+        <span class="toggle-slider"></span>
+      </span>
+      <span>Achtergrondkleur canvas mag aangepast worden</span>
+    </label>
+    <span class="form-hint">
+      Zet dit alleen aan wanneer de achtergrondkleur ook echt bedrukt of zichtbaar mag worden.
+    </span>
+  </div>
+</div>
 
       <div class="form-row-3" style="margin-bottom:8px">
         <div class="form-group">
@@ -569,6 +584,7 @@ function collectPersonalisationTypes(uploadState) {
       previewImage: fileState.previewImageFile?.dataURL || '',
       templatePdf: fileState.templatePdf || null,
       clipShape: row.querySelector('.pers-clip').value.trim() || null,
+      allowBackgroundColor: row.querySelector('.pers-bg-allowed')?.checked || false,
       width_mm: widthMm,
       height_mm: heightMm,
       margin_mm: marginMm,
