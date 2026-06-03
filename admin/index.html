@@ -1,13 +1,17 @@
 <!DOCTYPE html>
 <html lang="nl">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Blossombs Admin</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link
+    href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap"
+    rel="stylesheet">
   <link rel="stylesheet" href="admin.css">
 </head>
+
 <body>
 
   <!-- SIDEBAR NAV -->
@@ -21,7 +25,7 @@
     </div>
 
     <nav class="sidebar-nav">
-      <a href="#orders"   class="nav-item" data-page="orders">
+      <a href="#orders" class="nav-item" data-page="orders">
         <span class="nav-icon">📋</span>
         <span>Orders</span>
         <span class="nav-badge" id="badge-orders"></span>
@@ -30,7 +34,7 @@
         <span class="nav-icon">📦</span>
         <span>Producten</span>
       </a>
-      <a href="#work"     class="nav-item" data-page="work">
+      <a href="#work" class="nav-item" data-page="work">
         <span class="nav-icon">🛠️</span>
         <span>Werkvoorraad</span>
         <span class="nav-badge urgent" id="badge-work"></span>
@@ -44,9 +48,9 @@
 
   <!-- MAIN CONTENT -->
   <main class="main-content">
-    <div id="page-orders"   class="page"></div>
+    <div id="page-orders" class="page"></div>
     <div id="page-products" class="page"></div>
-    <div id="page-work"     class="page"></div>
+    <div id="page-work" class="page"></div>
   </main>
 
   <!-- MODAL CONTAINER -->
@@ -64,10 +68,13 @@
   <!-- TOAST -->
   <div id="toast" class="toast hidden"></div>
 
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="dataService.js"></script>
+  <script src="../shared/js/offertePdf.js"></script>
   <script src="orders.js"></script>
   <script src="products.js"></script>
   <script src="work.js"></script>
   <script src="admin.js"></script>
 </body>
+
 </html>
