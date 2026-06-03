@@ -160,28 +160,6 @@ async function generateOffertePDF(order, product, pricingInput = null) {
 
     y += 18;
 
-    if (order.designDataURL && order.designDataURL.startsWith('data:image')) {
-        doc.setDrawColor(221, 216, 204);
-        doc.line(margin, y, pageWidth - margin, y);
-        y += 10;
-
-        doc.setTextColor(168, 163, 155);
-        doc.setFontSize(8);
-        doc.setFont('helvetica', 'bold');
-        doc.text('UW ONTWERP', margin, y);
-        y += 6;
-
-        try {
-            doc.addImage(order.designDataURL, 'PNG', margin, y, 60, 40);
-            y += 48;
-        } catch {
-            doc.setFontSize(9);
-            doc.setTextColor(107, 102, 96);
-            doc.text('(Preview niet beschikbaar)', margin, y);
-            y += 8;
-        }
-    }
-
     doc.setFillColor(247, 244, 238);
     doc.rect(0, 280, pageWidth, 17, 'F');
 
