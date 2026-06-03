@@ -16,6 +16,17 @@ let uploadedDataURL = null;
 let uploadedFileName = null;
 let activeDesignTab = 'tool';
 
+const AVAILABLE_FONTS = [
+  { label: 'Georgia', value: 'Georgia' },
+  { label: 'Playfair Display', value: "'Playfair Display', serif" },
+  { label: 'Montserrat', value: "'Montserrat', sans-serif" },
+  { label: 'Lato', value: "'Lato', sans-serif" },
+  { label: 'Raleway', value: "'Raleway', sans-serif" },
+  { label: 'Oswald', value: "'Oswald', sans-serif" },
+  { label: 'Pacifico', value: "'Pacifico', cursive" },
+  { label: 'Courier Prime', value: "'Courier Prime', monospace" },
+];
+
 function renderDesignPage() {
   const el = document.getElementById('page-design');
   const product = Session.getProduct();
@@ -67,6 +78,16 @@ function renderDesignPage() {
 
             <button class="tool-btn" type="button" id="btn-text">+ Tekst toevoegen</button>
           </div>
+
+          <div class="side-section">
+  <div class="side-label">Lettertype</div>
+  <select id="font-select" class="font-select">
+    ${AVAILABLE_FONTS.map(f =>
+    `<option value="${f.value}" style="font-family:${f.value}">${f.label}</option>`
+  ).join('')}
+  </select>
+  <div id="font-preview" class="font-preview">Voorbeeld tekst</div>
+</div>
 
           <div class="side-section">
             <div class="side-label">Elementkleur</div>
@@ -292,6 +313,45 @@ function bindDesignNextButton(product, activePers, stateKey) {
     document.getElementById('design-error').style.display = 'none';
     navigateTo('review');
   });
+}
+
+function bindFontSelector(canvas, stateKey) {
+  const select = document.getElementById('font-select');
+  const preview = document.getElementById('font-preview');
+
+  if (!select) return;
+
+  // Update preview on change
+  select.addEventListener('change', () => {
+    const fontValue = select.value;
+
+    if (preview) {
+      preview.style.fontFamily = fontValue;
+    }
+
+    // Apply to selected text object
+    const object = canvas.getActiveObject();
+    if (object && object.type === 'i-text') {
+      object.set('fontFamily', fontValue);
+      canvas.renderAll();
+      fabricSaveHistory();
+      autoSaveCanvasState(stateKey);
+    }
+  });
+
+  // Sync selector when a text object is selected
+  canvas.on('selection:created', syncFontSelector);
+  canvas.on('selection:updated', syncFontSelector);
+
+  function syncFontSelector() {
+    const object = canvas.getActiveObject();
+    if (object && object.type === 'i-text') {
+      const currentFont = object.fontFamily || 'Georgia';
+      const match = AVAILABLE_FONTS.find(f => f.value === currentFont);
+      if (match) select.value = match.value;
+      if (preview) preview.style.fontFamily = currentFont;
+    }
+  }
 }
 
 function getResponsiveCanvasSize(activePers, product) {
@@ -622,12 +682,14 @@ function restoreCanvasStateOrDefault(canvas, savedState, canvasHeight, margin, c
 }
 
 function addDefaultText(canvas, canvasHeight) {
+  const selectedFont = document.getElementById('font-select')?.value || 'Georgia';
+
   const demo = new fabric.IText('Jouw bedrijfsnaam', {
     left: 60,
     top: Math.round(canvasHeight * 0.65),
     fontSize: 18,
     fill: '#ffffff',
-    fontFamily: 'Georgia',
+    fontFamily: selectedFont,  // ← gebruik gekozen font
     editable: true,
     opacity: 0.9,
   });
@@ -743,7 +805,7 @@ function bindFabricButtons(canvas, margin, canvasWidth, canvasHeight, stateKey) 
       top: 160,
       fontSize: 20,
       fill: fabricActiveColor,
-      fontFamily: 'Georgia',
+      fontFamily: document.getElementById('font-select')?.value || 'Georgia',
       editable: true,
     });
 
@@ -835,6 +897,8 @@ function bindFabricButtons(canvas, margin, canvasWidth, canvasHeight, stateKey) 
     updateLayerPanel();
     clearDesignState(stateKey);
   });
+
+  bindFontSelector(canvas, stateKey);
 }
 
 function isOutsideMargin(object, margin, canvasWidth, canvasHeight) {

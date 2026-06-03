@@ -1458,3 +1458,27 @@ body {
   border: none;
   border-radius: 6px;
 }
+
+
+/* Google Fonts */
+
+.font-select {
+  width: 100%;
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-card);
+  color: var(--text-1);
+  font-size: 13px;
+  cursor: pointer;
+  margin-bottom: 8px;
+}
+
+.font-preview {
+  font-size: 15px;
+  color: var(--text-2);
+  padding: 6px 0;
+  border-top: 1px solid var(--border);
+  min-height: 28px;
+  transition: font-family 0.2s;
+}
