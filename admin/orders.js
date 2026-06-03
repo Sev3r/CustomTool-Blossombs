@@ -1,16 +1,18 @@
 /**
  * orders.js
- * Punt 2: emoji's vervangen door SVG iconen
- * Punt 3: filter pills voor actief/verwerkt/alles
+ * Orders overzicht en orderdetails.
+ * PNG download is verwijderd.
+ * Drukklare PDF download wordt getoond wanneer designPdfDataURL beschikbaar is.
  */
 
 let orderSort = { field: 'createdAt', dir: 'desc' };
 let orderSearch = '';
 let orderStatusFilter = '';
-let orderPillFilter = 'active'; // 'active' | 'processed' | 'all'
+let orderPillFilter = 'active';
 
 function renderOrdersPage() {
   const el = document.getElementById('page-orders');
+
   el.innerHTML = `
     <div class="page-header">
       <div>
@@ -18,20 +20,22 @@ function renderOrdersPage() {
         <p>Alle binnengekomen aanvragen via de custom order tool</p>
       </div>
       <div class="header-actions">
-        <button class="btn btn-primary" id="btn-order-add">+ Nieuwe order</button>
+        <button class="btn btn-primary" type="button" id="btn-order-add">+ Nieuwe order</button>
       </div>
     </div>
 
     <div class="filter-bar" style="flex-wrap:wrap;gap:8px">
       <div class="filter-group">
-        <button class="filter-pill ${orderPillFilter === 'active' ? 'active' : ''}" data-pill="active">Actief</button>
-        <button class="filter-pill ${orderPillFilter === 'processed' ? 'active' : ''}" data-pill="processed">Verwerkt</button>
-        <button class="filter-pill ${orderPillFilter === 'all' ? 'active' : ''}" data-pill="all">Alles</button>
+        <button class="filter-pill ${orderPillFilter === 'active' ? 'active' : ''}" type="button" data-pill="active">Actief</button>
+        <button class="filter-pill ${orderPillFilter === 'processed' ? 'active' : ''}" type="button" data-pill="processed">Verwerkt</button>
+        <button class="filter-pill ${orderPillFilter === 'all' ? 'active' : ''}" type="button" data-pill="all">Alles</button>
       </div>
+
       <div class="search-wrap">
         <span class="search-icon">${iconSearch()}</span>
         <input type="text" id="order-search" placeholder="Zoek op naam, ordernummer..." value="${escHtml(orderSearch)}">
       </div>
+
       <select class="filter-select" id="order-status-filter">
         <option value="">Alle statussen</option>
         <option value="wacht-op-ontwerp">Wacht op ontwerp</option>
@@ -49,18 +53,23 @@ function renderOrdersPage() {
 
   document.getElementById('btn-order-add').addEventListener('click', () => openOrderModal());
 
-  document.getElementById('order-search').addEventListener('input', e => {
-    orderSearch = e.target.value; renderOrdersTable();
-  });
-  document.getElementById('order-status-filter').addEventListener('change', e => {
-    orderStatusFilter = e.target.value; renderOrdersTable();
+  document.getElementById('order-search').addEventListener('input', event => {
+    orderSearch = event.target.value;
+    renderOrdersTable();
   });
 
-  el.querySelectorAll('.filter-pill[data-pill]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      orderPillFilter = btn.dataset.pill;
-      el.querySelectorAll('.filter-pill[data-pill]').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
+  document.getElementById('order-status-filter').addEventListener('change', event => {
+    orderStatusFilter = event.target.value;
+    renderOrdersTable();
+  });
+
+  el.querySelectorAll('.filter-pill[data-pill]').forEach(button => {
+    button.addEventListener('click', () => {
+      orderPillFilter = button.dataset.pill;
+
+      el.querySelectorAll('.filter-pill[data-pill]').forEach(item => item.classList.remove('active'));
+      button.classList.add('active');
+
       renderOrdersTable();
     });
   });
@@ -71,33 +80,39 @@ function renderOrdersPage() {
 function renderOrdersTable() {
   let orders = DS.getOrders();
 
-  // Pill filter
   if (orderPillFilter === 'active') {
-    orders = orders.filter(o => o.status !== 'afgerond');
+    orders = orders.filter(order => order.status !== 'afgerond');
   } else if (orderPillFilter === 'processed') {
-    orders = orders.filter(o => o.status === 'afgerond');
+    orders = orders.filter(order => order.status === 'afgerond');
   }
 
-  // Zoeken
   if (orderSearch) {
-    const q = orderSearch.toLowerCase();
-    orders = orders.filter(o =>
-      (o.customerName || '').toLowerCase().includes(q) ||
-      (o.orderNumber || '').toLowerCase().includes(q)
+    const query = orderSearch.toLowerCase();
+
+    orders = orders.filter(order =>
+      (order.customerName || '').toLowerCase().includes(query) ||
+      (order.orderNumber || '').toLowerCase().includes(query)
     );
   }
 
-  // Status dropdown
-  if (orderStatusFilter) orders = orders.filter(o => o.status === orderStatusFilter);
+  if (orderStatusFilter) {
+    orders = orders.filter(order => order.status === orderStatusFilter);
+  }
 
-  // Sorteren
   orders = orders.slice().sort((a, b) => {
-    const av = a[orderSort.field] || '', bv = b[orderSort.field] || '';
-    return orderSort.dir === 'asc' ? (av > bv ? 1 : -1) : (av < bv ? 1 : -1);
+    const aValue = a[orderSort.field] || '';
+    const bValue = b[orderSort.field] || '';
+
+    return orderSort.dir === 'asc'
+      ? (aValue > bValue ? 1 : -1)
+      : (aValue < bValue ? 1 : -1);
   });
 
   const wrap = document.getElementById('orders-table-wrap');
-  if (!wrap) return;
+
+  if (!wrap) {
+    return;
+  }
 
   if (orders.length === 0) {
     wrap.innerHTML = `
@@ -105,11 +120,12 @@ function renderOrdersTable() {
         <div class="empty-state-icon">${iconClipboard()}</div>
         <h3>Geen orders gevonden</h3>
         <p>Pas het filter aan of voeg een nieuwe order toe.</p>
-      </div>`;
+      </div>
+    `;
     return;
   }
 
-  const cols = [
+  const columns = [
     { key: 'orderNumber', label: 'Order #' },
     { key: 'createdAt', label: 'Datum' },
     { key: 'customerName', label: 'Klant' },
@@ -123,65 +139,78 @@ function renderOrdersTable() {
     { key: '_actions', label: '' },
   ];
 
-  const thHTML = cols.map(c => {
-    if (c.key === '_actions' || c.key === '_files') return `<th></th>`;
-    const cls = orderSort.field === c.key ? `sort-${orderSort.dir}` : '';
-    return `<th class="${cls}" data-sort="${c.key}">${c.label}</th>`;
+  const headerHTML = columns.map(column => {
+    if (column.key === '_actions' || column.key === '_files') {
+      return '<th></th>';
+    }
+
+    const className = orderSort.field === column.key ? `sort-${orderSort.dir}` : '';
+
+    return `<th class="${className}" data-sort="${column.key}">${column.label}</th>`;
   }).join('');
 
-  const rowsHTML = orders.map(o => {
-    const hasDesign = !!(o.designDataURL || o.designFile);
-    const hasWensen = !!(o.wensen && (o.wensen.tekst || o.wensen.kleur || o.wensen.stijl));
+  const rowsHTML = orders.map(order => {
+    const hasFiles = hasOrderFiles(order);
 
-    const fileBadges = [
-      hasDesign ? `<button class="icon-btn" onclick="viewOrderFiles('${o.id}')" title="Ontwerp bekijken">${iconImage()}</button>` : '',
-      hasWensen ? `<button class="icon-btn" onclick="viewOrderFiles('${o.id}')" title="Wensen bekijken">${iconNote()}</button>` : '',
-    ].filter(Boolean).join('') || '—';
+    const fileButtons = hasFiles
+      ? `<button class="icon-btn" type="button" onclick="viewOrderFiles('${order.id}')" title="Bestanden bekijken">${iconImage()}</button>`
+      : '—';
 
-    // Punt 5: toggle vergrendeld na versturen
-    const toggleHTML = o.confirmationSent
-      ? `<label class="toggle" title="Bevestiging verstuurd — vergrendeld" style="opacity:.6;cursor:not-allowed">
+    const toggleHTML = order.confirmationSent
+      ? `<label class="toggle" title="Bevestiging verstuurd en vergrendeld" style="opacity:.6;cursor:not-allowed">
            <input type="checkbox" checked disabled>
            <span class="toggle-slider"></span>
          </label>`
       : `<label class="toggle" title="Markeer als verstuurd">
-           <input type="checkbox" onchange="toggleOrderConfirmation('${o.id}', this.checked)">
+           <input type="checkbox" onchange="toggleOrderConfirmation('${order.id}', this.checked)">
            <span class="toggle-slider"></span>
          </label>`;
 
     return `
       <tr>
-        <td class="mono">${escHtml(o.orderNumber)}</td>
-        <td>${formatDate(o.createdAt)}</td>
+        <td class="mono">${escHtml(order.orderNumber)}</td>
+        <td>${formatDate(order.createdAt)}</td>
         <td>
-          <div style="font-weight:500">${escHtml(o.customerName)}</div>
-          <div style="font-size:11px;color:var(--text-3)">${escHtml(o.customerEmail)}</div>
+          <div style="font-weight:500">${escHtml(order.customerName)}</div>
+          <div style="font-size:11px;color:var(--text-3)">${escHtml(order.customerEmail)}</div>
         </td>
-        <td>${escHtml(o.productName)}</td>
-        <td>${o.quantity || '—'}</td>
-        <td>${formatDate(o.deliveryDate)}</td>
-        <td style="font-weight:500">${formatEuro(o.quoteAmount)}</td>
-        <td>${orderStatusBadge(o.status)}</td>
+        <td>${escHtml(order.productName)}</td>
+        <td>${order.quantity || '—'}</td>
+        <td>${formatDate(order.deliveryDate)}</td>
+        <td style="font-weight:500">${formatEuro(order.quoteAmount)}</td>
+        <td>${orderStatusBadge(order.status)}</td>
         <td>${toggleHTML}</td>
-        <td>${fileBadges}</td>
+        <td>${fileButtons}</td>
         <td class="td-actions">
-          <button class="icon-btn" onclick="openOrderModal('${o.id}')" title="Bewerken">${iconPen()}</button>
-          <button class="icon-btn danger" onclick="deleteOrderById('${o.id}')" title="Verwijderen">${iconTrash()}</button>
+          <button class="icon-btn" type="button" onclick="openOrderModal('${order.id}')" title="Bewerken">${iconPen()}</button>
+          <button class="icon-btn danger" type="button" onclick="deleteOrderById('${order.id}')" title="Verwijderen">${iconTrash()}</button>
         </td>
-      </tr>`;
+      </tr>
+    `;
   }).join('');
 
-  wrap.innerHTML = `<table><thead><tr>${thHTML}</tr></thead><tbody>${rowsHTML}</tbody></table>`;
+  wrap.innerHTML = `<table><thead><tr>${headerHTML}</tr></thead><tbody>${rowsHTML}</tbody></table>`;
 
-  wrap.querySelectorAll('th[data-sort]').forEach(th => {
-    th.addEventListener('click', () => {
-      const field = th.dataset.sort;
+  wrap.querySelectorAll('th[data-sort]').forEach(header => {
+    header.addEventListener('click', () => {
+      const field = header.dataset.sort;
+
       orderSort = orderSort.field === field
         ? { field, dir: orderSort.dir === 'asc' ? 'desc' : 'asc' }
         : { field, dir: 'asc' };
+
       renderOrdersTable();
     });
   });
+}
+
+function hasOrderFiles(order) {
+  return Boolean(
+    order.designDataURL ||
+    order.designPdfDataURL ||
+    order.designFile ||
+    order.wensen
+  );
 }
 
 function orderStatusBadge(status) {
@@ -191,16 +220,26 @@ function orderStatusBadge(status) {
     'wacht-op-goedkeuring': ['badge-blue', `${iconClock()} Wacht op goedkeuring`],
     'afgerond': ['badge-green', `${iconCheck()} Afgerond`],
   };
-  const [cls, label] = map[status] || ['badge-gray', status || '—'];
-  return `<span class="badge ${cls}">${label}</span>`;
+
+  const [className, label] = map[status] || ['badge-gray', status || '—'];
+
+  return `<span class="badge ${className}">${label}</span>`;
 }
 
 function toggleOrderConfirmation(id, checked) {
-  if (!checked) return;
+  if (!checked) {
+    return;
+  }
+
   const order = DS.getOrderById(id);
-  if (!order || order.confirmationSent) return;
+
+  if (!order || order.confirmationSent) {
+    return;
+  }
+
   order.confirmationSent = true;
   DS.saveOrder(order);
+
   renderOrdersTable();
   AdminUI.updateBadges();
   AdminUI.showToast('Orderbevestiging gemarkeerd als verstuurd');
@@ -208,8 +247,13 @@ function toggleOrderConfirmation(id, checked) {
 
 async function deleteOrderById(id) {
   const ok = await AdminUI.confirmDialog('Weet je zeker dat je deze order wilt verwijderen?');
-  if (!ok) return;
+
+  if (!ok) {
+    return;
+  }
+
   DS.deleteOrder(id);
+
   renderOrdersTable();
   AdminUI.updateBadges();
   AdminUI.showToast('Order verwijderd');
@@ -217,81 +261,104 @@ async function deleteOrderById(id) {
 
 function viewOrderFiles(id) {
   const order = DS.getOrderById(id);
-  if (!order) return;
 
-  const hasDesign = !!(order.designDataURL);
-  const hasUpload = !!(order.designFile && !order.designDataURL);
-  const hasWensen = !!(order.wensen);
+  if (!order) {
+    return;
+  }
 
   const body = document.createElement('div');
   body.style.cssText = 'display:flex;flex-direction:column;gap:20px';
 
-  if (hasDesign) {
+  const hasImagePreview = Boolean(order.designDataURL && order.designDataURL.startsWith('data:image'));
+  const hasPrintPdf = Boolean(order.designPdfDataURL || (order.designDataURL && order.designDataURL.startsWith('data:application/pdf')));
+  const hasUploadNameOnly = Boolean(order.designFile && !order.designDataURL && !order.designPdfDataURL);
+  const hasWensen = Boolean(order.wensen);
+
+  if (hasImagePreview) {
     body.innerHTML += `
       <div>
-        <div class="section-title">Ontwerp</div>
+        <div class="section-title">Ontwerp preview</div>
         <div style="margin-top:10px;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;display:inline-block">
-          <img src="${order.designDataURL}" alt="Ontwerp" style="max-width:100%;max-height:320px;display:block">
+          <img src="${order.designDataURL}" alt="Ontwerp preview" style="max-width:100%;max-height:320px;display:block">
         </div>
-        <div style="margin-top:8px;display:flex;gap:8px">
-          <button class="btn btn-secondary btn-sm" onclick="downloadDesign('${id}')">Download PNG</button>
-          <button class="btn btn-secondary btn-sm" onclick="window.open('${order.designDataURL}','_blank')">Openen</button>
-          <button class="btn btn-secondary btn-sm" onclick="generateOrderPDF('${id}')">Download offerte PDF</button>
-        </div>
-      </div>`;
+      </div>
+    `;
   }
 
-  if (hasUpload) {
+  if (hasPrintPdf) {
+    body.innerHTML += `
+      <div>
+        <div class="section-title">Drukbestand PDF</div>
+        <p style="font-size:12px;color:var(--text-2);margin-top:4px">
+          Dit is het drukklare PDF bestand van het ontwerp.
+        </p>
+        <div style="margin-top:8px">
+          <button class="btn btn-secondary btn-sm" type="button" onclick="downloadPrintPDF('${id}')">
+            Download drukbestand PDF
+          </button>
+        </div>
+      </div>
+    `;
+  }
+
+  if (hasUploadNameOnly) {
     body.innerHTML += `
       <div>
         <div class="section-title">Geüpload bestand</div>
         <p style="font-size:13px;margin-top:6px">${iconNote()} ${escHtml(order.designFile)}</p>
         <p style="font-size:12px;color:var(--text-2);margin-top:4px">
-          Bestand is lokaal geüpload — niet beschikbaar zonder backend opslag.
+          Bestand is lokaal geregistreerd, maar er is geen downloadbare DataURL opgeslagen.
         </p>
-      </div>`;
+      </div>
+    `;
   }
 
   if (hasWensen) {
-    const w = order.wensen;
+    const wensen = order.wensen;
+
     body.innerHTML += `
       <div>
         <div class="section-title">Wensenformulier</div>
         <div style="margin-top:10px;display:flex;flex-direction:column;gap:6px;font-size:13px">
-          ${w.tekst ? `<div><strong>Tekst:</strong> ${escHtml(w.tekst)}</div>` : ''}
-          ${w.kleur ? `<div><strong>Kleur:</strong> ${escHtml(w.kleur)}</div>` : ''}
-          ${w.stijl ? `<div><strong>Stijl:</strong> ${escHtml(w.stijl)}</div>` : ''}
-          ${w.opmerkingen ? `<div><strong>Opmerkingen:</strong> ${escHtml(w.opmerkingen)}</div>` : ''}
-          ${w.refFileName ? `<div><strong>Referentie:</strong> ${escHtml(w.refFileName)}</div>` : ''}
+          ${wensen.tekst ? `<div><strong>Tekst:</strong> ${escHtml(wensen.tekst)}</div>` : ''}
+          ${wensen.kleur ? `<div><strong>Kleur:</strong> ${escHtml(wensen.kleur)}</div>` : ''}
+          ${wensen.stijl ? `<div><strong>Stijl:</strong> ${escHtml(wensen.stijl)}</div>` : ''}
+          ${wensen.opmerkingen ? `<div><strong>Opmerkingen:</strong> ${escHtml(wensen.opmerkingen)}</div>` : ''}
+          ${wensen.refFileName ? `<div><strong>Referentie:</strong> ${escHtml(wensen.refFileName)}</div>` : ''}
         </div>
-      </div>`;
+      </div>
+    `;
   }
 
-  if (!hasDesign && !hasUpload && !hasWensen) {
+  if (!hasImagePreview && !hasPrintPdf && !hasUploadNameOnly && !hasWensen) {
     body.innerHTML = '<p style="color:var(--text-3);font-size:13px">Geen bestanden gekoppeld aan deze order.</p>';
   }
 
   AdminUI.openModal({
     title: `Bestanden — ${order.orderNumber}`,
     body,
-    footer: `<button class="btn btn-secondary" onclick="AdminUI.closeModal()">Sluiten</button>`,
+    footer: `<button class="btn btn-secondary" type="button" onclick="AdminUI.closeModal()">Sluiten</button>`,
   });
 }
 
-function downloadDesign(id) {
+function downloadPrintPDF(id) {
   const order = DS.getOrderById(id);
 
-  if (!order?.designDataURL) {
-    AdminUI.showToast('Geen downloadbaar ontwerpbestand beschikbaar', 'error');
+  if (!order) {
     return;
   }
 
-  const extension = order.designDataURL.startsWith('data:application/pdf') ? 'pdf' : 'png';
-  const fileName = order.designFile || `ontwerp-${order.orderNumber}.${extension}`;
+  const pdfDataURL = order.designPdfDataURL ||
+    (order.designDataURL && order.designDataURL.startsWith('data:application/pdf') ? order.designDataURL : '');
+
+  if (!pdfDataURL) {
+    AdminUI.showToast('Geen drukbestand PDF beschikbaar', 'error');
+    return;
+  }
 
   const link = document.createElement('a');
-  link.href = order.designDataURL;
-  link.download = fileName;
+  link.href = pdfDataURL;
+  link.download = `drukbestand-${order.orderNumber}.pdf`;
   document.body.appendChild(link);
   link.click();
   link.remove();
@@ -330,11 +397,11 @@ function generateOrderPDF(id) {
 
 function openOrderModal(id = null) {
   const order = id ? DS.getOrderById(id) : {};
-  const products = DS.getProducts().filter(p => p.active !== false);
-  const isEdit = !!id;
+  const products = DS.getProducts().filter(product => product.active !== false);
+  const isEdit = Boolean(id);
 
-  const productOptions = products.map(p =>
-    `<option value="${p.id}" ${order.productId === p.id ? 'selected' : ''}>${escHtml(p.name)}</option>`
+  const productOptions = products.map(product =>
+    `<option value="${product.id}" ${order.productId === product.id ? 'selected' : ''}>${escHtml(product.name)}</option>`
   ).join('');
 
   const statusOptions = [
@@ -342,82 +409,131 @@ function openOrderModal(id = null) {
     ['wacht-op-bestandscheck', 'Wacht op bestandscheck'],
     ['wacht-op-goedkeuring', 'Wacht op goedkeuring klant'],
     ['afgerond', 'Afgerond'],
-  ].map(([v, l]) => `<option value="${v}" ${order.status === v ? 'selected' : ''}>${l}</option>`).join('');
+  ].map(([value, label]) =>
+    `<option value="${value}" ${order.status === value ? 'selected' : ''}>${label}</option>`
+  ).join('');
 
   const workTypeOptions = [
     ['ontwerp', 'Ontwerp nodig'],
     ['bestandscheck', 'Bestandscheck'],
-  ].map(([v, l]) => `<option value="${v}" ${order.workType === v ? 'selected' : ''}>${l}</option>`).join('');
+  ].map(([value, label]) =>
+    `<option value="${value}" ${order.workType === value ? 'selected' : ''}>${label}</option>`
+  ).join('');
 
   const body = `
     <div class="section-title">Klantgegevens</div>
+
     <div class="form-row">
-      <div class="form-group"><label>Naam *</label>
-        <input type="text" id="of-name" value="${escHtml(order.customerName || '')}" placeholder="Emma de Vries"></div>
-      <div class="form-group"><label>E-mail *</label>
-        <input type="email" id="of-email" value="${escHtml(order.customerEmail || '')}" placeholder="emma@bedrijf.nl"></div>
+      <div class="form-group">
+        <label>Naam *</label>
+        <input type="text" id="of-name" value="${escHtml(order.customerName || '')}" placeholder="Emma de Vries">
+      </div>
+
+      <div class="form-group">
+        <label>E-mail *</label>
+        <input type="email" id="of-email" value="${escHtml(order.customerEmail || '')}" placeholder="emma@bedrijf.nl">
+      </div>
     </div>
+
     <div class="form-row-1">
-      <div class="form-group"><label>Leveradres</label>
-        <input type="text" id="of-address" value="${escHtml(order.deliveryAddress || '')}" placeholder="Straat 1, 1234 AB Stad"></div>
+      <div class="form-group">
+        <label>Leveradres</label>
+        <input type="text" id="of-address" value="${escHtml(order.deliveryAddress || '')}" placeholder="Straat 1, 1234 AB Stad">
+      </div>
     </div>
+
     <div class="section-title" style="margin-top:4px">Order details</div>
+
     <div class="form-row">
-      <div class="form-group"><label>Product *</label>
-        <select id="of-product"><option value="">Kies product...</option>${productOptions}</select></div>
-      <div class="form-group"><label>Aantal *</label>
-        <input type="number" id="of-qty" value="${order.quantity || ''}" min="1" placeholder="10"></div>
+      <div class="form-group">
+        <label>Product *</label>
+        <select id="of-product">
+          <option value="">Kies product...</option>
+          ${productOptions}
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label>Aantal *</label>
+        <input type="number" id="of-qty" value="${order.quantity || ''}" min="1" placeholder="10">
+      </div>
     </div>
+
     <div class="form-row">
-      <div class="form-group"><label>Leverdatum</label>
-        <input type="date" id="of-delivery" value="${order.deliveryDate || ''}"></div>
-      <div class="form-group"><label>Offerte (€)</label>
-        <input type="number" id="of-quote" value="${order.quoteAmount || ''}" step="0.01" placeholder="0.00"></div>
+      <div class="form-group">
+        <label>Leverdatum</label>
+        <input type="date" id="of-delivery" value="${order.deliveryDate || ''}">
+      </div>
+
+      <div class="form-group">
+        <label>Offerte (€)</label>
+        <input type="number" id="of-quote" value="${order.quoteAmount || ''}" step="0.01" placeholder="0.00">
+      </div>
     </div>
+
     <div class="form-row">
-      <div class="form-group"><label>Status</label>
-        <select id="of-status">${statusOptions}</select></div>
-      <div class="form-group"><label>Werktype</label>
-        <select id="of-worktype">${workTypeOptions}</select></div>
+      <div class="form-group">
+        <label>Status</label>
+        <select id="of-status">${statusOptions}</select>
+      </div>
+
+      <div class="form-group">
+        <label>Werktype</label>
+        <select id="of-worktype">${workTypeOptions}</select>
+      </div>
     </div>
+
     <div class="form-row">
-      <div class="form-group"><label>Ontwerp bestandsnaam</label>
-        <input type="text" id="of-file" value="${escHtml(order.designFile || '')}" placeholder="ontwerp-klant.png"></div>
+      <div class="form-group">
+        <label>Ontwerp bestandsnaam</label>
+        <input type="text" id="of-file" value="${escHtml(order.designFile || '')}" placeholder="ontwerp-klant.pdf">
+      </div>
     </div>
+
     <div class="form-row-1">
-      <div class="form-group"><label>Notities</label>
-        <textarea id="of-notes">${escHtml(order.notes || '')}</textarea></div>
+      <div class="form-group">
+        <label>Notities</label>
+        <textarea id="of-notes">${escHtml(order.notes || '')}</textarea>
+      </div>
     </div>
+
     <div id="of-error" class="form-error"></div>
   `;
 
   const footer = `
-  ${isEdit ? `<button class="btn btn-secondary" type="button" onclick="generateOrderPDF('${order.id}')">Download offerte PDF</button>` : ''}
-  ${isEdit && (order.designDataURL || order.designFile) ? `<button class="btn btn-secondary" type="button" onclick="downloadDesign('${order.id}')">Download ontwerp</button>` : ''}
-  <button class="btn btn-secondary" type="button" onclick="AdminUI.closeModal()">Annuleren</button>
-  <button class="btn btn-primary" type="button" id="btn-order-save">Opslaan</button>
-`;
+    ${isEdit ? `<button class="btn btn-secondary" type="button" onclick="generateOrderPDF('${order.id}')">Download offerte PDF</button>` : ''}
+    ${isEdit && getOrderPdfDataURL(order) ? `<button class="btn btn-secondary" type="button" onclick="downloadPrintPDF('${order.id}')">Download drukbestand PDF</button>` : ''}
+    <button class="btn btn-secondary" type="button" onclick="AdminUI.closeModal()">Annuleren</button>
+    <button class="btn btn-primary" type="button" id="btn-order-save">Opslaan</button>
+  `;
 
-  AdminUI.openModal({ title: isEdit ? 'Order bewerken' : 'Nieuwe order', body, footer });
+  AdminUI.openModal({
+    title: isEdit ? 'Order bewerken' : 'Nieuwe order',
+    body,
+    footer,
+  });
 
   document.getElementById('btn-order-save').addEventListener('click', () => {
     const productId = document.getElementById('of-product').value;
     const productName = productId ? (DS.getProductById(productId)?.name || '') : '';
     const name = document.getElementById('of-name').value.trim();
     const email = document.getElementById('of-email').value.trim();
+
     if (!name || !email || !productId) {
-      const err = document.getElementById('of-error');
-      err.textContent = 'Vul naam, e-mail en product in.';
-      err.classList.add('visible');
+      const error = document.getElementById('of-error');
+      error.textContent = 'Vul naam, e-mail en product in.';
+      error.classList.add('visible');
       return;
     }
+
     DS.saveOrder({
       ...order,
       customerName: name,
       customerEmail: email,
       deliveryAddress: document.getElementById('of-address').value.trim(),
-      productId, productName,
-      quantity: parseInt(document.getElementById('of-qty').value) || null,
+      productId,
+      productName,
+      quantity: parseInt(document.getElementById('of-qty').value, 10) || null,
       deliveryDate: document.getElementById('of-delivery').value,
       quoteAmount: parseFloat(document.getElementById('of-quote').value) || null,
       status: document.getElementById('of-status').value,
@@ -425,6 +541,7 @@ function openOrderModal(id = null) {
       designFile: document.getElementById('of-file').value.trim(),
       notes: document.getElementById('of-notes').value.trim(),
     });
+
     AdminUI.closeModal();
     renderOrdersTable();
     AdminUI.updateBadges();
@@ -432,28 +549,36 @@ function openOrderModal(id = null) {
   });
 }
 
-// ─── SVG ICONEN ───────────────────────────────────────────────────────────────
+function getOrderPdfDataURL(order) {
+  return order.designPdfDataURL ||
+    (order.designDataURL && order.designDataURL.startsWith('data:application/pdf') ? order.designDataURL : '');
+}
+
 function iconSearch() {
   return `<svg width="13" height="13" viewBox="0 0 13 13" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline;vertical-align:middle">
     <circle cx="5.5" cy="5.5" r="4" stroke="currentColor" stroke-width="1.5"/>
     <path d="M9 9L12 12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
   </svg>`;
 }
+
 function iconCheck() {
   return `<svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline;vertical-align:middle">
     <path d="M1.5 6L4.5 9L10.5 3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
   </svg>`;
 }
+
 function iconPen() {
   return `<svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline;vertical-align:middle">
     <path d="M8.5 1.5L10.5 3.5L4 10H2V8L8.5 1.5Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
   </svg>`;
 }
+
 function iconTrash() {
   return `<svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline;vertical-align:middle">
     <path d="M1.5 3H10.5M4.5 3V2H7.5V3M2.5 3L3.5 10H8.5L9.5 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
   </svg>`;
 }
+
 function iconImage() {
   return `<svg width="13" height="13" viewBox="0 0 13 13" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline;vertical-align:middle">
     <rect x="1" y="1" width="11" height="11" rx="2" stroke="currentColor" stroke-width="1.5"/>
@@ -461,18 +586,21 @@ function iconImage() {
     <path d="M1 9L4 6L6.5 8.5L8.5 6.5L12 10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
   </svg>`;
 }
+
 function iconNote() {
   return `<svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline;vertical-align:middle">
     <rect x="1.5" y="1" width="9" height="10" rx="1.5" stroke="currentColor" stroke-width="1.5"/>
     <path d="M4 4.5H8M4 6.5H8M4 8.5H6.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
   </svg>`;
 }
+
 function iconClock() {
   return `<svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline;vertical-align:middle">
     <circle cx="6" cy="6" r="4.5" stroke="currentColor" stroke-width="1.5"/>
     <path d="M6 3.5V6L7.5 7.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
   </svg>`;
 }
+
 function iconClipboard() {
   return `<svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
     <rect x="6" y="8" width="20" height="20" rx="3" stroke="currentColor" stroke-width="2"/>
@@ -481,20 +609,34 @@ function iconClipboard() {
   </svg>`;
 }
 
-// helpers
 function formatDate(iso) {
-  if (!iso) return '—';
-  return new Date(iso).toLocaleDateString('nl-NL', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  if (!iso) {
+    return '—';
+  }
+
+  return new Date(iso).toLocaleDateString('nl-NL', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  });
 }
-function formatEuro(n) {
-  if (n === null || n === undefined) return '—';
-  return '€ ' + parseFloat(n).toFixed(2).replace('.', ',');
+
+function formatEuro(value) {
+  if (value === null || value === undefined || Number.isNaN(Number(value))) {
+    return '—';
+  }
+
+  return `€ ${Number(value).toFixed(2).replace('.', ',')}`;
 }
-function escHtml(str) {
-  return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+function escHtml(value) {
+  return String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
 }
 
 window.viewOrderFiles = viewOrderFiles;
-window.downloadDesign = downloadDesign;
+window.downloadPrintPDF = downloadPrintPDF;
 window.generateOrderPDF = generateOrderPDF;
 window.toggleOrderConfirmation = toggleOrderConfirmation;

@@ -3,6 +3,7 @@
  * Stap 5: Review & bestellen.
  * Gebruikt centrale Pricing helper.
  * Gebruikt gedeelde generateOffertePDF functie uit shared/js/offertePdf.js.
+ * Slaat drukklare ontwerp PDF op als designPdfDataURL.
  */
 
 function renderReviewPage() {
@@ -23,7 +24,7 @@ function renderReviewPage() {
   const persType = options.persType || null;
   const clipShape = persType?.clipShape || null;
 
-  const designPreviewHTML = design?.dataURL ? `
+  const designPreviewHTML = design?.dataURL && design.dataURL.startsWith('data:image') ? `
     <div style="margin-bottom:16px">
       <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
                   color:var(--text-3);margin-bottom:8px">Uw ontwerp</div>
@@ -33,6 +34,17 @@ function renderReviewPage() {
         <img src="${design.dataURL}" alt="Uw ontwerp"
              style="width:100%;max-width:280px;display:block;
                     ${clipShape ? `clip-path:${clipShape}` : ''}">
+      </div>
+    </div>
+  ` : '';
+
+  const uploadedPdfHTML = design?.dataURL && design.dataURL.startsWith('data:application/pdf') ? `
+    <div style="margin-bottom:16px">
+      <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
+                  color:var(--text-3);margin-bottom:8px">Uw bestand</div>
+      <div style="font-size:13px;color:var(--text-2);padding:12px;border:1px solid var(--cream-border);
+                  border-radius:var(--radius-sm);background:var(--cream-dark)">
+        ${escHtml(design.fileName || 'PDF bestand geüpload')}
       </div>
     </div>
   ` : '';
@@ -126,6 +138,7 @@ function renderReviewPage() {
         <div class="review-section-title">Uw bestelling</div>
         <div class="review-section-body">
           ${designPreviewHTML}
+          ${uploadedPdfHTML}
 
           ${!design?.dataURL ? `
             <div class="order-summary-product">
@@ -301,6 +314,9 @@ function buildOrder(product, options, design, wensen, klant, orderNumber, forced
   const hasFileCheck = finalOptions.addons?.includes('bestandscontrole');
   const persType = finalOptions.persType || null;
 
+  const uploadedDesignIsPdf = design?.dataURL?.startsWith('data:application/pdf');
+  const designPdfDataURL = design?.pdfDataURL || (uploadedDesignIsPdf ? design.dataURL : '');
+
   return {
     orderNumber,
     createdAt: new Date().toISOString(),
@@ -317,7 +333,8 @@ function buildOrder(product, options, design, wensen, klant, orderNumber, forced
     quantity: pricing.quantity,
     unitPrice: pricing.unitPrice,
     designFile: design?.fileName || '',
-    designDataURL: design?.dataURL || '',
+    designDataURL: uploadedDesignIsPdf ? '' : (design?.dataURL || ''),
+    designPdfDataURL,
     wensen: wensen || null,
     quoteAmount: pricing.totalIncl,
     workType: isLatOntwerpen ? 'ontwerp' : (hasFileCheck ? 'bestandscheck' : null),

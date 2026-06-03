@@ -296,6 +296,7 @@ function bindDesignNextButton(product, activePers, stateKey) {
 
       Session.setDesign({
         dataURL: snapshot.dataURL,
+        pdfDataURL: snapshot.pdfDataURL,
         tab: 'tool',
         source: 'fabric',
         fabricJSON: snapshot.json,
@@ -979,16 +980,13 @@ function fabricSaveHistory() {
 }
 
 function snapshotCanvas(canvas, product, activePers) {
-  const marginObjects = canvas.getObjects('rect').filter(object => object._isMargin);
-
-  marginObjects.forEach(object => {
-    object.visible = false;
-  });
-
+  const marginObjects = canvas.getObjects('rect').filter(o => o._isMargin);
+  marginObjects.forEach(o => o.visible = false);
   canvas.discardActiveObject();
   canvas.renderAll();
 
   const printWidthPx = activePers?.width_px || product.width_px || 1181;
+  const printHeightPx = activePers?.height_px || product.height_px || 827;
   const displayWidthPx = canvas.getWidth();
   const multiplier = printWidthPx / displayWidthPx;
 
@@ -998,16 +996,68 @@ function snapshotCanvas(canvas, product, activePers) {
     enableRetinaScaling: false,
   });
 
-  marginObjects.forEach(object => {
-    object.visible = true;
-  });
-
+  marginObjects.forEach(o => o.visible = true);
   canvas.renderAll();
 
   const json = JSON.stringify(canvas.toJSON(['_isMargin']));
   const backgroundColor = canvas.backgroundColor || fabricBackgroundColor;
 
-  return { dataURL, json, backgroundColor };
+  // Genereer drukklare PDF met snijlijnen
+  const pdfDataURL = generatePrintPDF(
+    dataURL,
+    activePers?.width_mm || product.width_mm || 100,
+    activePers?.height_mm || product.height_mm || 70
+  );
+
+  return { dataURL, json, backgroundColor, pdfDataURL };
+}
+
+function generatePrintPDF(pngDataURL, widthMm, heightMm) {
+  if (!window.jspdf) {
+    console.warn('jsPDF niet geladen');
+    return null;
+  }
+
+  const { jsPDF } = window.jspdf;
+
+  const BLEED_MM = 3;
+  const MARK_MM = 5;
+  const GAP_MM = 2.117;
+
+  const pageW = widthMm + BLEED_MM * 2;
+  const pageH = heightMm + BLEED_MM * 2;
+
+  const pdf = new jsPDF({
+    orientation: pageW > pageH ? 'landscape' : 'portrait',
+    unit: 'mm',
+    format: [pageW, pageH],
+    compress: true,
+  });
+
+  // PNG op ware grootte ingeplakt (vult volledige pagina incl. bleed)
+  pdf.addImage(pngDataURL, 'PNG', 0, 0, pageW, pageH, '', 'FAST');
+
+  // Snijlijnen
+  pdf.setDrawColor(0, 0, 0);
+  pdf.setLineWidth(0.088);
+
+  const x1 = BLEED_MM, x2 = BLEED_MM + widthMm;
+  const y1 = BLEED_MM, y2 = BLEED_MM + heightMm;
+
+  // Linksboven
+  pdf.line(x1 - GAP_MM - MARK_MM, y1, x1 - GAP_MM, y1);
+  pdf.line(x1, y1 - GAP_MM - MARK_MM, x1, y1 - GAP_MM);
+  // Rechtsboven
+  pdf.line(x2 + GAP_MM, y1, x2 + GAP_MM + MARK_MM, y1);
+  pdf.line(x2, y1 - GAP_MM - MARK_MM, x2, y1 - GAP_MM);
+  // Linksonder
+  pdf.line(x1 - GAP_MM - MARK_MM, y2, x1 - GAP_MM, y2);
+  pdf.line(x1, y2 + GAP_MM, x1, y2 + GAP_MM + MARK_MM);
+  // Rechtsonder
+  pdf.line(x2 + GAP_MM, y2, x2 + GAP_MM + MARK_MM, y2);
+  pdf.line(x2, y2 + GAP_MM, x2, y2 + GAP_MM + MARK_MM);
+
+  return pdf.output('datauristring');
 }
 
 function autoSaveCanvasState(stateKey) {
