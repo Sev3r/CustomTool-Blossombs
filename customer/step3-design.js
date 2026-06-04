@@ -15,6 +15,8 @@ let fabricBackgroundColor = '#b7bdb8';
 let uploadedDataURL = null;
 let uploadedFileName = null;
 let activeDesignTab = 'tool';
+let fabricInitToken = 0;
+let fabricInitTimer = null;
 
 const AVAILABLE_FONTS = [
   { label: 'Georgia', value: 'Georgia' },
@@ -53,15 +55,15 @@ function renderDesignPage() {
   activeDesignTab = saved.tab || savedState?.tab || 'tool';
 
   el.innerHTML = `
-         <h1 class="page-title">Ontwerp uw verpakking</h1>
-         <p class="page-subtitle">Gebruik de ontwerptool of upload een eigen bestand</p>
+    <h1 class="page-title">Ontwerp uw verpakking</h1>
+    <p class="page-subtitle">Gebruik de ontwerptool of upload een eigen bestand</p>
 
-         <div class="design-tabs" style="margin-bottom:24px">
-         <button class="design-tab ${activeDesignTab === 'tool' ? 'active' : ''}" type="button" data-tab="tool">Ontwerptool</button>
-          <button class="design-tab ${activeDesignTab === 'upload' ? 'active' : ''}" type="button" data-tab="upload">Bestand uploaden</button>
-         </div>
+    <div class="design-tabs" style="margin-bottom:24px">
+      <button class="design-tab ${activeDesignTab === 'tool' ? 'active' : ''}" type="button" data-tab="tool">Ontwerptool</button>
+      <button class="design-tab ${activeDesignTab === 'upload' ? 'active' : ''}" type="button" data-tab="upload">Bestand uploaden</button>
+    </div>
 
-              <div id="tab-tool" style="${activeDesignTab === 'tool' ? '' : 'display:none'}">
+    <div id="tab-tool" style="${activeDesignTab === 'tool' ? '' : 'display:none'}">
       <div id="app">
         <aside id="sidebar">
           <div id="sidebar-header"></div>
@@ -76,14 +78,14 @@ function renderDesignPage() {
           </div>
 
           <div class="side-section">
-  <div class="side-label">Lettertype</div>
-  <select id="font-select" class="font-select">
-    ${AVAILABLE_FONTS.map(f =>
-    `<option value="${f.value}" style="font-family:${f.value}">${f.label}</option>`
-  ).join('')}
-  </select>
-  <div id="font-preview" class="font-preview">Voorbeeld tekst</div>
-</div>
+            <div class="side-label">Lettertype</div>
+            <select id="font-select" class="font-select">
+              ${AVAILABLE_FONTS.map(font => `
+                <option value="${font.value}" style="font-family:${font.value}">${font.label}</option>
+              `).join('')}
+            </select>
+            <div id="font-preview" class="font-preview">Voorbeeld tekst</div>
+          </div>
 
           <div class="side-section">
             <div class="side-label">Elementkleur</div>
@@ -173,7 +175,7 @@ function renderDesignPage() {
 
         <div>
           <div class="preview-box" id="preview-box">
-           ${uploadedDataURL && uploadedDataURL.startsWith('data:image')
+            ${uploadedDataURL && uploadedDataURL.startsWith('data:image')
       ? `<img src="${uploadedDataURL}" alt="Preview">`
       : `<div class="preview-placeholder">${uploadedDataURL ? escHtml(uploadedFileName || 'Bestand') : 'Preview'}</div>`}
             <div class="preview-zoom" id="btn-zoom" ${!uploadedDataURL ? 'style="display:none"' : ''}>🔍</div>
@@ -204,7 +206,7 @@ function renderDesignPage() {
   });
 
   if (activeDesignTab === 'tool') {
-    setTimeout(() => initFabricTool(product, activePers, savedState, stateKey), 50);
+    scheduleFabricInit(product, activePers, savedState, stateKey);
   }
 }
 
@@ -219,13 +221,18 @@ function bindDesignTabs(product, activePers, savedState, stateKey) {
       const toolTab = document.getElementById('tab-tool');
       const uploadTab = document.getElementById('tab-upload');
 
-      if (toolTab) toolTab.style.display = activeDesignTab === 'tool' ? '' : 'none';
-      if (uploadTab) uploadTab.style.display = activeDesignTab === 'upload' ? '' : 'none';
+      if (toolTab) {
+        toolTab.style.display = activeDesignTab === 'tool' ? '' : 'none';
+      }
+
+      if (uploadTab) {
+        uploadTab.style.display = activeDesignTab === 'upload' ? '' : 'none';
+      }
 
       persistDesignState(stateKey, { tab: activeDesignTab });
 
-      if (activeDesignTab === 'tool' && !fabricCanvas) {
-        initFabricTool(product, activePers, savedState, stateKey);
+      if (activeDesignTab === 'tool') {
+        scheduleFabricInit(product, activePers, savedState, stateKey);
       }
     });
   });
@@ -280,6 +287,7 @@ function bindDesignNextButton(product, activePers, stateKey) {
 
       const designData = {
         dataURL: uploadedDataURL,
+        pdfDataURL: uploadedDataURL.startsWith('data:application/pdf') ? uploadedDataURL : '',
         fileName: uploadedFileName,
         tab: 'upload',
         source: 'upload',
@@ -301,6 +309,7 @@ function bindDesignNextButton(product, activePers, stateKey) {
 
       persistDesignState(stateKey, {
         dataURL: snapshot.dataURL,
+        pdfDataURL: snapshot.pdfDataURL,
         fabricJSON: snapshot.json,
         backgroundColor: snapshot.backgroundColor,
         tab: 'tool',
@@ -316,9 +325,10 @@ function bindFontSelector(canvas, stateKey) {
   const select = document.getElementById('font-select');
   const preview = document.getElementById('font-preview');
 
-  if (!select) return;
+  if (!select) {
+    return;
+  }
 
-  // Update preview on change
   select.addEventListener('change', () => {
     const fontValue = select.value;
 
@@ -326,8 +336,8 @@ function bindFontSelector(canvas, stateKey) {
       preview.style.fontFamily = fontValue;
     }
 
-    // Apply to selected text object
     const object = canvas.getActiveObject();
+
     if (object && object.type === 'i-text') {
       object.set('fontFamily', fontValue);
       canvas.renderAll();
@@ -336,17 +346,23 @@ function bindFontSelector(canvas, stateKey) {
     }
   });
 
-  // Sync selector when a text object is selected
   canvas.on('selection:created', syncFontSelector);
   canvas.on('selection:updated', syncFontSelector);
 
   function syncFontSelector() {
     const object = canvas.getActiveObject();
+
     if (object && object.type === 'i-text') {
       const currentFont = object.fontFamily || 'Georgia';
-      const match = AVAILABLE_FONTS.find(f => f.value === currentFont);
-      if (match) select.value = match.value;
-      if (preview) preview.style.fontFamily = currentFont;
+      const match = AVAILABLE_FONTS.find(font => font.value === currentFont);
+
+      if (match) {
+        select.value = match.value;
+      }
+
+      if (preview) {
+        preview.style.fontFamily = currentFont;
+      }
     }
   }
 }
@@ -354,7 +370,6 @@ function bindFontSelector(canvas, stateKey) {
 function getResponsiveCanvasSize(activePers, product) {
   const printWidthPx = activePers?.width_px || product.width_px || 1181;
   const printHeightPx = activePers?.height_px || product.height_px || 827;
-
   const canvasWrap = document.getElementById('canvas-wrap');
 
   const fallbackWidth = Math.max(280, window.innerWidth - 560);
@@ -375,23 +390,102 @@ function getResponsiveCanvasSize(activePers, product) {
   );
 
   return {
-    width: Math.floor(printWidthPx * scale),
-    height: Math.floor(printHeightPx * scale),
+    width: Math.max(1, Math.floor(printWidthPx * scale)),
+    height: Math.max(1, Math.floor(printHeightPx * scale)),
     scale,
     printWidthPx,
     printHeightPx,
   };
 }
 
-function initFabricTool(product, activePers, savedState, stateKey) {
+function scheduleFabricInit(product, activePers, savedState, stateKey) {
+  fabricInitToken += 1;
+  const token = fabricInitToken;
+
+  if (fabricInitTimer) {
+    clearTimeout(fabricInitTimer);
+  }
+
+  fabricInitTimer = setTimeout(() => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (token !== fabricInitToken) {
+          return;
+        }
+
+        const canvasWrap = document.getElementById('canvas-wrap');
+        const canvasElement = document.getElementById('c');
+
+        if (!canvasWrap || !canvasElement) {
+          return;
+        }
+
+        if (canvasWrap.clientWidth <= 0 || canvasWrap.clientHeight <= 0) {
+          scheduleFabricInit(product, activePers, savedState, stateKey);
+          return;
+        }
+
+        initFabricTool(product, activePers, savedState, stateKey, token);
+      });
+    });
+  }, 60);
+}
+
+function destroyFabricCanvas() {
+  if (fabricCanvas) {
+    try {
+      fabricCanvas.off();
+      fabricCanvas.dispose();
+    } catch (error) {
+      console.warn('Fabric canvas opruimen mislukt', error);
+    }
+
+    fabricCanvas = null;
+  }
+
+  const canvasWrap = document.getElementById('canvas-wrap');
+
+  if (!canvasWrap) {
+    return;
+  }
+
+  canvasWrap.querySelectorAll('.canvas-container').forEach(container => {
+    const nestedCanvas = container.querySelector('canvas#c');
+
+    if (nestedCanvas) {
+      canvasWrap.appendChild(nestedCanvas);
+    }
+
+    container.remove();
+  });
+
+  const canvas = document.getElementById('c');
+
+  if (canvas) {
+    canvas.removeAttribute('style');
+    canvas.removeAttribute('width');
+    canvas.removeAttribute('height');
+    canvas.className = '';
+  }
+}
+
+function initFabricTool(product, activePers, savedState, stateKey, token = fabricInitToken) {
   if (!window.fabric) {
     console.warn('Fabric.js niet geladen.');
     return;
   }
 
-  if (fabricCanvas) {
-    fabricCanvas.dispose();
-    fabricCanvas = null;
+  const canvasElement = document.getElementById('c');
+  const canvasWrap = document.getElementById('canvas-wrap');
+
+  if (!canvasElement || !canvasWrap) {
+    return;
+  }
+
+  destroyFabricCanvas();
+
+  if (token !== fabricInitToken) {
+    return;
   }
 
   fabricHistory = [];
@@ -410,21 +504,40 @@ function initFabricTool(product, activePers, savedState, stateKey) {
     height: canvasHeight,
     selection: true,
     backgroundColor: fabricBackgroundColor,
+    preserveObjectStacking: true,
   });
+
+  window._currentDesignStateKey = stateKey;
 
   bindFabricDocumentHandlers();
   applyCanvasClipPath(clipShape, canvasWidth, canvasHeight);
   renderColorSwatches();
   renderBackgroundColorSwatches(activePers, stateKey);
+
   loadBackgroundImage(fabricCanvas, activePers, product, canvasWidth, canvasHeight);
-  restoreCanvasStateOrDefault(fabricCanvas, savedState, canvasHeight, margin, canvasWidth, canvasHeight, activePers, product);
+
+  restoreCanvasStateOrDefault(
+    fabricCanvas,
+    savedState,
+    canvasHeight,
+    margin,
+    canvasWidth,
+    canvasHeight,
+    activePers,
+    product
+  );
+
   bindFabricEvents(fabricCanvas, margin, canvasWidth, canvasHeight, stateKey, activePers, product);
   bindFabricButtons(fabricCanvas, margin, canvasWidth, canvasHeight, stateKey, activePers, product);
 
-  window._currentDesignStateKey = stateKey;
-
   fabricSaveHistory();
   updateLayerPanel();
+
+  setTimeout(() => {
+    if (fabricCanvas && token === fabricInitToken) {
+      redrawGuides(fabricCanvas, activePers, product, margin, canvasWidth, canvasHeight);
+    }
+  }, 120);
 }
 
 function bindFabricDocumentHandlers() {
@@ -433,7 +546,9 @@ function bindFabricDocumentHandlers() {
   }
 
   window._fabricMouseUpHandler = () => {
-    if (!fabricCanvas) return;
+    if (!fabricCanvas) {
+      return;
+    }
 
     const transform = fabricCanvas._currentTransform;
 
@@ -457,7 +572,7 @@ function bindFabricDocumentHandlers() {
 
     const object = fabricCanvas?.getActiveObject();
 
-    if (object && !object._isMargin && !(object.type === 'i-text' && object.isEditing)) {
+    if (object && !isGuideObject(object) && !(object.type === 'i-text' && object.isEditing)) {
       fabricCanvas.remove(object);
       fabricSaveHistory();
       updateLayerPanel();
@@ -471,7 +586,14 @@ function bindFabricDocumentHandlers() {
 function applyCanvasClipPath(clipShape, canvasWidth, canvasHeight) {
   const canvasEl = document.querySelector('#canvas-wrap canvas');
 
-  if (!clipShape || !canvasEl) {
+  if (!canvasEl) {
+    return;
+  }
+
+  canvasEl.style.clipPath = '';
+  canvasEl.style.borderRadius = '';
+
+  if (!clipShape) {
     return;
   }
 
@@ -532,7 +654,6 @@ function renderColorSwatches() {
     });
   }
 }
-
 
 function renderBackgroundColorSwatches(activePers, stateKey) {
   if (!activePers?.allowBackgroundColor) {
@@ -619,26 +740,27 @@ function setCanvasBackgroundColor(color, stateKey) {
 }
 
 function drawMarginRect(canvas, margin, canvasWidth, canvasHeight) {
-  canvas.getObjects('rect')
-    .filter(object => object._isMargin)
+  canvas.getObjects()
+    .filter(object => object._isMargin && !object._isBlockedZone)
     .forEach(object => canvas.remove(object));
 
   const marginRect = new fabric.Rect({
     left: margin,
     top: margin,
-    width: canvasWidth - margin * 2,
-    height: canvasHeight - margin * 2,
+    width: Math.max(1, canvasWidth - margin * 2),
+    height: Math.max(1, canvasHeight - margin * 2),
     fill: 'transparent',
-    stroke: 'rgba(255,255,255,0.4)',
+    stroke: 'rgba(255,255,255,0.75)',
     strokeWidth: 1.5,
     strokeDashArray: [6, 4],
     selectable: false,
     evented: false,
+    excludeFromExport: true,
     _isMargin: true,
+    _isGuide: true,
   });
 
   canvas.add(marginRect);
-  canvas.sendToBack(marginRect);
 }
 
 function drawBlockedZones(canvas, activePers, product, canvasWidth, canvasHeight) {
@@ -706,18 +828,37 @@ function drawBlockedZones(canvas, activePers, product, canvasWidth, canvasHeight
   canvas.renderAll();
 }
 
+function redrawGuides(canvas, activePers, product, margin, canvasWidth, canvasHeight) {
+  if (!canvas) {
+    return;
+  }
+
+  removeGuideObjects(canvas);
+  drawMarginRect(canvas, margin, canvasWidth, canvasHeight);
+  drawBlockedZones(canvas, activePers, product, canvasWidth, canvasHeight);
+  bringGuidesToFront(canvas);
+  canvas.renderAll();
+}
+
 function bringGuidesToFront(canvas) {
   canvas.getObjects()
-    .filter(object => object._isGuide || object._isBlockedZone || object._isMargin)
+    .filter(object => isGuideObject(object))
     .forEach(object => {
+      object.selectable = false;
+      object.evented = false;
+      object.hoverCursor = 'default';
       canvas.bringToFront(object);
     });
 }
 
 function removeGuideObjects(canvas) {
   canvas.getObjects()
-    .filter(object => object._isGuide || object._isBlockedZone || object._isMargin)
+    .filter(object => isGuideObject(object))
     .forEach(object => canvas.remove(object));
+}
+
+function isGuideObject(object) {
+  return Boolean(object?._isGuide || object?._isBlockedZone || object?._isMargin);
 }
 
 function getBlockedCircleCanvasData(zone, activePers, product, canvasWidth, canvasHeight) {
@@ -778,26 +919,25 @@ function loadBackgroundImage(canvas, activePers, product, canvasWidth, canvasHei
       scaleY: scale,
     });
 
-    canvas.setBackgroundImage(image, canvas.renderAll.bind(canvas));
+    canvas.setBackgroundImage(image, () => {
+      canvas.renderAll();
+    });
   }, {
     crossOrigin: 'anonymous',
   });
 }
 
 function restoreCanvasStateOrDefault(canvas, savedState, canvasHeight, margin, canvasWidth, canvasHeightValue, activePers, product) {
-  const redrawGuides = () => {
-    removeGuideObjects(canvas);
-    drawMarginRect(canvas, margin, canvasWidth, canvasHeightValue);
-    drawBlockedZones(canvas, activePers, product, canvasWidth, canvasHeightValue);
-    bringGuidesToFront(canvas);
-    canvas.renderAll();
+  const redrawAfterRestore = () => {
+    redrawGuides(canvas, activePers, product, margin, canvasWidth, canvasHeightValue);
     updateLayerPanel();
   };
 
   if (savedState?.fabricJSON) {
     try {
       canvas.loadFromJSON(savedState.fabricJSON, () => {
-        redrawGuides();
+        removeGuideObjects(canvas);
+        redrawAfterRestore();
       });
       return;
     } catch (error) {
@@ -806,7 +946,7 @@ function restoreCanvasStateOrDefault(canvas, savedState, canvasHeight, margin, c
   }
 
   addDefaultText(canvas, canvasHeight);
-  redrawGuides();
+  redrawAfterRestore();
 }
 
 function addDefaultText(canvas, canvasHeight) {
@@ -817,7 +957,7 @@ function addDefaultText(canvas, canvasHeight) {
     top: Math.round(canvasHeight * 0.65),
     fontSize: 18,
     fill: '#ffffff',
-    fontFamily: selectedFont,  // ← gebruik gekozen font
+    fontFamily: selectedFont,
     editable: true,
     opacity: 0.9,
   });
@@ -830,7 +970,9 @@ function addDefaultText(canvas, canvasHeight) {
 
 function bindFabricEvents(canvas, margin, canvasWidth, canvasHeight, stateKey, activePers, product) {
   const checkMargin = object => {
-    if (!object) return;
+    if (!object || isGuideObject(object)) {
+      return;
+    }
 
     const warning = document.getElementById('margin-warning');
 
@@ -976,7 +1118,7 @@ function bindFabricButtons(canvas, margin, canvasWidth, canvasHeight, stateKey, 
 
     const object = canvas.getActiveObject();
 
-    if (object) {
+    if (object && !isGuideObject(object)) {
       object.set('opacity', value / 100);
       canvas.renderAll();
     }
@@ -989,7 +1131,7 @@ function bindFabricButtons(canvas, margin, canvasWidth, canvasHeight, stateKey, 
   document.getElementById('btn-delete')?.addEventListener('click', () => {
     const object = canvas.getActiveObject();
 
-    if (object && !object._isMargin) {
+    if (object && !isGuideObject(object)) {
       canvas.remove(object);
       fabricSaveHistory();
       updateLayerPanel();
@@ -1000,9 +1142,9 @@ function bindFabricButtons(canvas, margin, canvasWidth, canvasHeight, stateKey, 
   document.getElementById('btn-front')?.addEventListener('click', () => {
     const object = canvas.getActiveObject();
 
-    if (object) {
+    if (object && !isGuideObject(object)) {
       canvas.bringToFront(object);
-      drawMarginRect(canvas, margin, canvasWidth, canvasHeight);
+      redrawGuides(canvas, activePers, product, margin, canvasWidth, canvasHeight);
       fabricSaveHistory();
       updateLayerPanel();
       autoSaveCanvasState(stateKey);
@@ -1012,8 +1154,9 @@ function bindFabricButtons(canvas, margin, canvasWidth, canvasHeight, stateKey, 
   document.getElementById('btn-back')?.addEventListener('click', () => {
     const object = canvas.getActiveObject();
 
-    if (object) {
+    if (object && !isGuideObject(object)) {
       canvas.sendBackwards(object);
+      redrawGuides(canvas, activePers, product, margin, canvasWidth, canvasHeight);
       fabricSaveHistory();
       updateLayerPanel();
       autoSaveCanvasState(stateKey);
@@ -1028,7 +1171,7 @@ function bindFabricButtons(canvas, margin, canvasWidth, canvasHeight, stateKey, 
     fabricHistory.pop();
 
     canvas.loadFromJSON(fabricHistory[fabricHistory.length - 1], () => {
-      canvas.renderAll();
+      redrawGuides(canvas, activePers, product, margin, canvasWidth, canvasHeight);
       updateLayerPanel();
       autoSaveCanvasState(stateKey);
     });
@@ -1036,11 +1179,10 @@ function bindFabricButtons(canvas, margin, canvasWidth, canvasHeight, stateKey, 
 
   document.getElementById('btn-clear')?.addEventListener('click', () => {
     canvas.clear();
-    canvas.backgroundColor = '#b7bdb8';
+    canvas.backgroundColor = fabricBackgroundColor;
 
-    drawMarginRect(canvas, margin, canvasWidth, canvasHeight);
-    drawBlockedZones(canvas, activePers, product, canvasWidth, canvasHeight);
-    canvas.renderAll();
+    loadBackgroundImage(canvas, activePers, product, canvasWidth, canvasHeight);
+    redrawGuides(canvas, activePers, product, margin, canvasWidth, canvasHeight);
 
     fabricSaveHistory();
     updateLayerPanel();
@@ -1060,7 +1202,7 @@ function isOutsideMargin(object, margin, canvasWidth, canvasHeight) {
 }
 
 function isObjectOverlappingBlockedZones(object, activePers, product, canvasWidth, canvasHeight) {
-  if (!object || object._isGuide || object._isBlockedZone || object._isMargin) {
+  if (!object || isGuideObject(object)) {
     return false;
   }
 
@@ -1102,7 +1244,7 @@ function clamp(value, min, max) {
 }
 
 function updateFabricStatus() {
-  const object = fabricCanvas.getActiveObject();
+  const object = fabricCanvas?.getActiveObject();
   const status = document.getElementById('status');
 
   if (!object || !status) {
@@ -1122,7 +1264,7 @@ function updateLayerPanel() {
   panel.innerHTML = '';
 
   fabricCanvas.getObjects()
-    .filter(object => !object._isMargin)
+    .filter(object => !isGuideObject(object))
     .reverse()
     .forEach((object, index) => {
       const item = document.createElement('div');
@@ -1147,7 +1289,7 @@ function updateLayerPanel() {
 function applyToSelected(property, value) {
   const object = fabricCanvas?.getActiveObject();
 
-  if (object && object.type === 'i-text') {
+  if (object && object.type === 'i-text' && !isGuideObject(object)) {
     object.set(property, value);
     fabricCanvas.renderAll();
     fabricSaveHistory();
@@ -1161,27 +1303,38 @@ function fabricSaveHistory() {
     return;
   }
 
-  const json = JSON.stringify(fabricCanvas.toJSON(['_isMargin']));
+  const guideObjects = getGuideObjects(fabricCanvas);
+
+  guideObjects.forEach(object => {
+    object.visible = false;
+  });
+
+  const json = JSON.stringify(fabricCanvas.toJSON());
+
+  guideObjects.forEach(object => {
+    object.visible = true;
+  });
+
   fabricHistory.push(json);
 
   if (fabricHistory.length > 20) {
     fabricHistory.shift();
   }
+
+  fabricCanvas.renderAll();
 }
 
 function snapshotCanvas(canvas, product, activePers) {
-  const marginObjects = canvas.getObjects().filter(object =>
-    object._isMargin || object._isGuide || object._isBlockedZone
-  );
+  const guideObjects = getGuideObjects(canvas);
 
-  marginObjects.forEach(object => {
+  guideObjects.forEach(object => {
     object.visible = false;
   });
+
   canvas.discardActiveObject();
   canvas.renderAll();
 
   const printWidthPx = activePers?.width_px || product.width_px || 1181;
-  const printHeightPx = activePers?.height_px || product.height_px || 827;
   const displayWidthPx = canvas.getWidth();
   const multiplier = printWidthPx / displayWidthPx;
 
@@ -1191,20 +1344,27 @@ function snapshotCanvas(canvas, product, activePers) {
     enableRetinaScaling: false,
   });
 
-  marginObjects.forEach(object => object.visible = true);
+  guideObjects.forEach(object => {
+    object.visible = true;
+  });
+
   canvas.renderAll();
 
-  const json = JSON.stringify(canvas.toJSON(['_isMargin']));
+  const json = JSON.stringify(canvas.toJSON());
   const backgroundColor = canvas.backgroundColor || fabricBackgroundColor;
 
-  // Genereer drukklare PDF met snijlijnen
   const pdfDataURL = generatePrintPDF(
     dataURL,
     activePers?.width_mm || product.width_mm || 100,
     activePers?.height_mm || product.height_mm || 70
   );
 
-  return { dataURL, json, backgroundColor, pdfDataURL };
+  return {
+    dataURL,
+    json,
+    backgroundColor,
+    pdfDataURL,
+  };
 }
 
 function generatePrintPDF(pngDataURL, widthMm, heightMm) {
@@ -1229,26 +1389,25 @@ function generatePrintPDF(pngDataURL, widthMm, heightMm) {
     compress: true,
   });
 
-  // PNG op ware grootte ingeplakt (vult volledige pagina incl. bleed)
   pdf.addImage(pngDataURL, 'PNG', 0, 0, pageW, pageH, '', 'FAST');
 
-  // Snijlijnen
   pdf.setDrawColor(0, 0, 0);
   pdf.setLineWidth(0.088);
 
-  const x1 = BLEED_MM, x2 = BLEED_MM + widthMm;
-  const y1 = BLEED_MM, y2 = BLEED_MM + heightMm;
+  const x1 = BLEED_MM;
+  const x2 = BLEED_MM + widthMm;
+  const y1 = BLEED_MM;
+  const y2 = BLEED_MM + heightMm;
 
-  // Linksboven
   pdf.line(x1 - GAP_MM - MARK_MM, y1, x1 - GAP_MM, y1);
   pdf.line(x1, y1 - GAP_MM - MARK_MM, x1, y1 - GAP_MM);
-  // Rechtsboven
+
   pdf.line(x2 + GAP_MM, y1, x2 + GAP_MM + MARK_MM, y1);
   pdf.line(x2, y1 - GAP_MM - MARK_MM, x2, y1 - GAP_MM);
-  // Linksonder
+
   pdf.line(x1 - GAP_MM - MARK_MM, y2, x1 - GAP_MM, y2);
   pdf.line(x1, y2 + GAP_MM, x1, y2 + GAP_MM + MARK_MM);
-  // Rechtsonder
+
   pdf.line(x2 + GAP_MM, y2, x2 + GAP_MM + MARK_MM, y2);
   pdf.line(x2, y2 + GAP_MM, x2, y2 + GAP_MM + MARK_MM);
 
@@ -1260,11 +1419,28 @@ function autoSaveCanvasState(stateKey) {
     return;
   }
 
-  const json = JSON.stringify(fabricCanvas.toJSON(['_isMargin']));
+  const guideObjects = getGuideObjects(fabricCanvas);
+
+  guideObjects.forEach(object => {
+    object.visible = false;
+  });
+
+  const json = JSON.stringify(fabricCanvas.toJSON());
+
+  guideObjects.forEach(object => {
+    object.visible = true;
+  });
+
   persistDesignState(stateKey, {
     fabricJSON: json,
     backgroundColor: fabricCanvas.backgroundColor || fabricBackgroundColor,
   });
+
+  fabricCanvas.renderAll();
+}
+
+function getGuideObjects(canvas) {
+  return canvas.getObjects().filter(object => isGuideObject(object));
 }
 
 function persistDesignState(stateKey, data) {
@@ -1323,6 +1499,7 @@ function handleUpload(file, stateKey) {
 
     const data = {
       dataURL: uploadedDataURL,
+      pdfDataURL: uploadedDataURL.startsWith('data:application/pdf') ? uploadedDataURL : '',
       fileName: uploadedFileName,
       tab: 'upload',
       source: 'upload',
@@ -1342,6 +1519,7 @@ function clearUpload() {
 
   Session.setDesign({
     dataURL: null,
+    pdfDataURL: null,
     fileName: null,
     tab: 'upload',
     source: null,
