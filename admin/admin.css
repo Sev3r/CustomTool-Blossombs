@@ -1100,3 +1100,30 @@ td.mono {
   height: 100%;
   object-fit: cover;
 }
+
+/* ─── BLOCKED ZONES / NO PRINT ZONES ───────────────────────────────────────── */
+
+.blocked-zone-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.blocked-zone-row {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  padding: 10px;
+}
+
+.blocked-zone-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.blocked-zone-header strong {
+  font-size: 12px;
+  color: var(--text-2);
+}

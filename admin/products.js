@@ -271,6 +271,64 @@ function personalisationSlabRow(slab, index) {
   `;
 }
 
+function blockedZoneRow(zone = {}, index = 0) {
+  const id = zone.id || createBlockedZoneId();
+
+  return `
+    <div class="blocked-zone-row" data-zone-id="${escHtml(id)}">
+      <div class="blocked-zone-header">
+        <strong>Uitsparing ${index + 1}</strong>
+        <button class="icon-btn danger" type="button" onclick="this.closest('.blocked-zone-row').remove()" title="Verwijder">×</button>
+      </div>
+
+      <div class="form-row" style="margin-bottom:8px">
+        <div class="form-group">
+          <label>Label</label>
+          <input type="text" class="blocked-zone-label" value="${escHtml(zone.label || '')}" placeholder="Gat linksboven">
+        </div>
+
+        <div class="form-group">
+          <label>Vorm</label>
+          <select class="blocked-zone-type">
+            <option value="circle" ${zone.type === 'circle' || !zone.type ? 'selected' : ''}>Cirkel</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-row-3" style="margin-bottom:8px">
+        <div class="form-group">
+          <label>X middelpunt mm</label>
+          <input type="number" class="blocked-zone-x" value="${escHtml(zone.x_mm || '')}" placeholder="15" min="0" step="0.1">
+        </div>
+
+        <div class="form-group">
+          <label>Y middelpunt mm</label>
+          <input type="number" class="blocked-zone-y" value="${escHtml(zone.y_mm || '')}" placeholder="42" min="0" step="0.1">
+        </div>
+
+        <div class="form-group">
+          <label>Diameter mm</label>
+          <input type="number" class="blocked-zone-diameter" value="${escHtml(zone.diameter_mm || '')}" placeholder="8" min="0" step="0.1">
+        </div>
+      </div>
+
+      <div class="form-row-1">
+        <div class="form-group">
+          <label>Veilige marge rondom mm</label>
+          <input type="number" class="blocked-zone-margin" value="${escHtml(zone.margin_mm || '')}" placeholder="3" min="0" step="0.1">
+          <span class="form-hint">
+            Objecten mogen niet over de uitsparing of deze extra veiligheidsmarge vallen.
+          </span>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function getDefaultBlockedZones(type = {}) {
+  return Array.isArray(type.blockedZones) ? type.blockedZones : [];
+}
+
 function getDefaultPersonalisationPriceSlabs(type = {}) {
   if (Array.isArray(type.priceSlabs) && type.priceSlabs.length > 0) {
     return type.priceSlabs;
@@ -295,6 +353,7 @@ function persTypeRow(type, index, uploadKey) {
 
   const templatePdf = type.templatePdf || null;
   const priceSlabs = getDefaultPersonalisationPriceSlabs(type);
+  const blockedZones = getDefaultBlockedZones(type);
 
   return `
     <div class="pers-type-row"
@@ -351,6 +410,20 @@ function persTypeRow(type, index, uploadKey) {
           <input type="number" class="pers-m-mm" value="${escHtml(type.margin_mm || '')}" placeholder="5" min="0" step="0.5">
         </div>
       </div>
+
+            <div class="section-title" style="margin-top:10px">Uitsparingen / no-print zones</div>
+
+      <div class="blocked-zone-list">
+        ${blockedZones.map((zone, zoneIndex) => blockedZoneRow(zone, zoneIndex)).join('')}
+      </div>
+
+      <button class="btn btn-secondary btn-sm btn-add-blocked-zone" type="button" style="margin:8px 0 12px">
+        + Uitsparing toevoegen
+      </button>
+
+      <span class="form-hint" style="display:block;margin-bottom:12px">
+        Gebruik dit voor gaten, vensters of andere zones waar geen tekst of logo overheen mag vallen.
+      </span>
 
       <div class="section-title" style="margin-top:10px">Staffelprijzen voor deze personalisatie</div>
 
@@ -461,6 +534,23 @@ function bindPersRowUploads(row, uploadState) {
     }, list.children.length));
   });
 
+  row.querySelector('.btn-add-blocked-zone')?.addEventListener('click', () => {
+    const list = row.querySelector('.blocked-zone-list');
+
+    if (!list) {
+      return;
+    }
+
+    list.insertAdjacentHTML('beforeend', blockedZoneRow({
+      type: 'circle',
+      label: '',
+      x_mm: '',
+      y_mm: '',
+      diameter_mm: '',
+      margin_mm: '',
+    }, list.children.length));
+  });
+
   previewInput?.addEventListener('change', async event => {
     const file = event.target.files?.[0];
 
@@ -553,6 +643,7 @@ function bindProductModalActions(uploadState, product, isEdit) {
       margin_mm: '',
       clipShape: '',
       priceSlabs: [],
+      blockedZones: [],
     }, list.children.length, uploadKey));
 
     const newRow = list.lastElementChild;
@@ -646,10 +737,26 @@ function collectPersonalisationTypes(uploadState) {
       price: parseFloat(slabRow.querySelector('.pers-slab-price').value) || 0,
     })).filter(priceSlab => priceSlab.price > 0);
 
+    const blockedZones = [...row.querySelectorAll('.blocked-zone-row')].map((zoneRow, zoneIndex) => ({
+      id: zoneRow.dataset.zoneId || createBlockedZoneId(),
+      type: zoneRow.querySelector('.blocked-zone-type')?.value || 'circle',
+      label: zoneRow.querySelector('.blocked-zone-label')?.value.trim() || `Uitsparing ${zoneIndex + 1}`,
+      x_mm: parseFloat(zoneRow.querySelector('.blocked-zone-x')?.value) || 0,
+      y_mm: parseFloat(zoneRow.querySelector('.blocked-zone-y')?.value) || 0,
+      diameter_mm: parseFloat(zoneRow.querySelector('.blocked-zone-diameter')?.value) || 0,
+      margin_mm: parseFloat(zoneRow.querySelector('.blocked-zone-margin')?.value) || 0,
+    })).filter(zone =>
+      zone.type === 'circle' &&
+      zone.x_mm >= 0 &&
+      zone.y_mm >= 0 &&
+      zone.diameter_mm > 0
+    );
+
     return {
       id: stableId,
       label: label || 'Standaard',
       priceSlabs,
+      blockedZones,
       previewImageFile: fileState.previewImageFile || null,
       previewImage: fileState.previewImageFile?.dataURL || '',
       templatePdf: fileState.templatePdf || null,
@@ -704,6 +811,10 @@ function renderStoredFile(file, fallbackLabel = 'Bestand opgeslagen') {
 
 function createUploadKey() {
   return `upload-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function createBlockedZoneId() {
+  return `zone-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
 function slugify(value) {

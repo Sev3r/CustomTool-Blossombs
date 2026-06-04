@@ -398,10 +398,13 @@ function renderConfirmPage(order, product, pricing) {
     generateOffertePDF(order, product, pricing);
   });
 
+  clearStoredDesignData();
   Session.clear();
 }
 
 function startNieuweOrder() {
+  clearStoredDesignData();
+
   const progressWrap = document.querySelector('.progress-wrap');
 
   if (progressWrap) {
@@ -411,19 +414,19 @@ function startNieuweOrder() {
   navigateTo('select');
 }
 
-function formatEuro(value) {
-  if (value === null || value === undefined || Number.isNaN(Number(value))) {
-    return '—';
-  }
-
-  return `€ ${Number(value).toFixed(2).replace('.', ',')}`;
-}
-
 function escHtml(value) {
   return String(value || '')
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;');
+}
+
+function clearStoredDesignData() {
+  Object.keys(localStorage)
+    .filter(key => key.startsWith('cot_design_state'))
+    .forEach(key => localStorage.removeItem(key));
+
+  sessionStorage.removeItem('cot_session');
 }
 
 window.startNieuweOrder = startNieuweOrder;

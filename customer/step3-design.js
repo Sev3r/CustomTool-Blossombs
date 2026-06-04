@@ -420,11 +420,10 @@ function initFabricTool(product, activePers, savedState, stateKey) {
   applyCanvasClipPath(clipShape, canvasWidth, canvasHeight);
   renderColorSwatches();
   renderBackgroundColorSwatches(activePers, stateKey);
-  drawMarginRect(fabricCanvas, margin, canvasWidth, canvasHeight);
   loadBackgroundImage(fabricCanvas, activePers, product, canvasWidth, canvasHeight);
-  restoreCanvasStateOrDefault(fabricCanvas, savedState, canvasHeight, margin, canvasWidth, canvasHeight);
-  bindFabricEvents(fabricCanvas, margin, canvasWidth, canvasHeight, stateKey);
-  bindFabricButtons(fabricCanvas, margin, canvasWidth, canvasHeight, stateKey);
+  restoreCanvasStateOrDefault(fabricCanvas, savedState, canvasHeight, margin, canvasWidth, canvasHeight, activePers, product);
+  bindFabricEvents(fabricCanvas, margin, canvasWidth, canvasHeight, stateKey, activePers, product);
+  bindFabricButtons(fabricCanvas, margin, canvasWidth, canvasHeight, stateKey, activePers, product);
 
   window._currentDesignStateKey = stateKey;
 
@@ -646,6 +645,117 @@ function drawMarginRect(canvas, margin, canvasWidth, canvasHeight) {
   canvas.sendToBack(marginRect);
 }
 
+function drawBlockedZones(canvas, activePers, product, canvasWidth, canvasHeight) {
+  const zones = Array.isArray(activePers?.blockedZones) ? activePers.blockedZones : [];
+
+  canvas.getObjects()
+    .filter(object => object._isBlockedZone)
+    .forEach(object => canvas.remove(object));
+
+  if (!zones.length) {
+    canvas.renderAll();
+    return;
+  }
+
+  zones.forEach(zone => {
+    if (zone.type !== 'circle') {
+      return;
+    }
+
+    const circleData = getBlockedCircleCanvasData(zone, activePers, product, canvasWidth, canvasHeight);
+
+    if (!circleData) {
+      return;
+    }
+
+    const safeCircle = new fabric.Circle({
+      left: circleData.cx - circleData.safeRadius,
+      top: circleData.cy - circleData.safeRadius,
+      radius: circleData.safeRadius,
+      fill: 'rgba(232, 134, 10, 0.14)',
+      stroke: '#E8860A',
+      strokeWidth: 2,
+      strokeDashArray: [8, 5],
+      selectable: false,
+      evented: false,
+      objectCaching: false,
+      excludeFromExport: true,
+      _isMargin: true,
+      _isGuide: true,
+      _isBlockedZone: true,
+    });
+
+    const holeCircle = new fabric.Circle({
+      left: circleData.cx - circleData.holeRadius,
+      top: circleData.cy - circleData.holeRadius,
+      radius: circleData.holeRadius,
+      fill: 'rgba(192, 57, 43, 0.24)',
+      stroke: '#C0392B',
+      strokeWidth: 2,
+      strokeDashArray: [4, 3],
+      selectable: false,
+      evented: false,
+      objectCaching: false,
+      excludeFromExport: true,
+      _isMargin: true,
+      _isGuide: true,
+      _isBlockedZone: true,
+    });
+
+    canvas.add(safeCircle);
+    canvas.add(holeCircle);
+  });
+
+  bringGuidesToFront(canvas);
+  canvas.renderAll();
+}
+
+function bringGuidesToFront(canvas) {
+  canvas.getObjects()
+    .filter(object => object._isGuide || object._isBlockedZone || object._isMargin)
+    .forEach(object => {
+      canvas.bringToFront(object);
+    });
+}
+
+function removeGuideObjects(canvas) {
+  canvas.getObjects()
+    .filter(object => object._isGuide || object._isBlockedZone || object._isMargin)
+    .forEach(object => canvas.remove(object));
+}
+
+function getBlockedCircleCanvasData(zone, activePers, product, canvasWidth, canvasHeight) {
+  const widthMm = Number(activePers?.width_mm || product?.width_mm || 0);
+  const heightMm = Number(activePers?.height_mm || product?.height_mm || 0);
+
+  if (!widthMm || !heightMm) {
+    return null;
+  }
+
+  const xMm = Number(zone.x_mm || 0);
+  const yMm = Number(zone.y_mm || 0);
+  const diameterMm = Number(zone.diameter_mm || 0);
+  const marginMm = Number(zone.margin_mm || 0);
+
+  if (!diameterMm) {
+    return null;
+  }
+
+  const pxPerMmX = canvasWidth / widthMm;
+  const pxPerMmY = canvasHeight / heightMm;
+  const averagePxPerMm = (pxPerMmX + pxPerMmY) / 2;
+
+  const holeRadius = (diameterMm / 2) * averagePxPerMm;
+  const safeRadius = holeRadius + marginMm * averagePxPerMm;
+
+  return {
+    cx: xMm * pxPerMmX,
+    cy: yMm * pxPerMmY,
+    holeRadius,
+    safeRadius,
+  };
+}
+
 function loadBackgroundImage(canvas, activePers, product, canvasWidth, canvasHeight) {
   if (activePers?.allowBackgroundColor) {
     return;
@@ -678,6 +788,31 @@ function loadBackgroundImage(canvas, activePers, product, canvasWidth, canvasHei
   });
 }
 
+function restoreCanvasStateOrDefault(canvas, savedState, canvasHeight, margin, canvasWidth, canvasHeightValue, activePers, product) {
+  const redrawGuides = () => {
+    removeGuideObjects(canvas);
+    drawMarginRect(canvas, margin, canvasWidth, canvasHeightValue);
+    drawBlockedZones(canvas, activePers, product, canvasWidth, canvasHeightValue);
+    bringGuidesToFront(canvas);
+    canvas.renderAll();
+    updateLayerPanel();
+  };
+
+  if (savedState?.fabricJSON) {
+    try {
+      canvas.loadFromJSON(savedState.fabricJSON, () => {
+        redrawGuides();
+      });
+      return;
+    } catch (error) {
+      console.warn('Canvas state herstellen mislukt', error);
+    }
+  }
+
+  addDefaultText(canvas, canvasHeight);
+  redrawGuides();
+}
+
 function addDefaultText(canvas, canvasHeight) {
   const selectedFont = document.getElementById('font-select')?.value || 'Georgia';
 
@@ -697,7 +832,7 @@ function addDefaultText(canvas, canvasHeight) {
   updateLayerPanel();
 }
 
-function bindFabricEvents(canvas, margin, canvasWidth, canvasHeight, stateKey) {
+function bindFabricEvents(canvas, margin, canvasWidth, canvasHeight, stateKey, activePers, product) {
   const checkMargin = object => {
     if (!object) return;
 
@@ -707,13 +842,35 @@ function bindFabricEvents(canvas, margin, canvasWidth, canvasHeight, stateKey) {
       return;
     }
 
-    warning.style.display = isOutsideMargin(object, margin, canvasWidth, canvasHeight) ? 'flex' : 'none';
+    const outsideOuterMargin = isOutsideMargin(object, margin, canvasWidth, canvasHeight);
+    const overlapsBlockedZone = isObjectOverlappingBlockedZones(object, activePers, product, canvasWidth, canvasHeight);
+
+    warning.textContent = overlapsBlockedZone
+      ? 'Object valt over uitsparing'
+      : 'Object buiten marge';
+
+    warning.style.display = outsideOuterMargin || overlapsBlockedZone ? 'flex' : 'none';
   };
 
-  canvas.on('object:moving', event => checkMargin(event.target));
-  canvas.on('object:rotating', event => checkMargin(event.target));
-  canvas.on('object:scaling', event => checkMargin(event.target));
-  canvas.on('object:modified', event => checkMargin(event.target));
+  canvas.on('object:moving', event => {
+    checkMargin(event.target);
+    bringGuidesToFront(canvas);
+  });
+
+  canvas.on('object:rotating', event => {
+    checkMargin(event.target);
+    bringGuidesToFront(canvas);
+  });
+
+  canvas.on('object:scaling', event => {
+    checkMargin(event.target);
+    bringGuidesToFront(canvas);
+  });
+
+  canvas.on('object:modified', event => {
+    checkMargin(event.target);
+    bringGuidesToFront(canvas);
+  });
 
   canvas.on('text:changed', event => {
     checkMargin(event.target);
@@ -761,7 +918,7 @@ function bindFabricEvents(canvas, margin, canvasWidth, canvasHeight, stateKey) {
   canvas.on('object:scaling', updateLayerPanel);
 }
 
-function bindFabricButtons(canvas, margin, canvasWidth, canvasHeight, stateKey) {
+function bindFabricButtons(canvas, margin, canvasWidth, canvasHeight, stateKey, activePers, product) {
   document.getElementById('btn-logo')?.addEventListener('click', () => {
     document.getElementById('file-input')?.click();
   });
@@ -888,6 +1045,7 @@ function bindFabricButtons(canvas, margin, canvasWidth, canvasHeight, stateKey) 
     canvas.backgroundColor = '#b7bdb8';
 
     drawMarginRect(canvas, margin, canvasWidth, canvasHeight);
+    drawBlockedZones(canvas, activePers, product, canvasWidth, canvasHeight);
     canvas.renderAll();
 
     fabricSaveHistory();
@@ -905,6 +1063,48 @@ function isOutsideMargin(object, margin, canvasWidth, canvasHeight) {
     bounds.top < margin ||
     bounds.left + bounds.width > canvasWidth - margin ||
     bounds.top + bounds.height > canvasHeight - margin;
+}
+
+function isObjectOverlappingBlockedZones(object, activePers, product, canvasWidth, canvasHeight) {
+  if (!object || object._isGuide || object._isBlockedZone || object._isMargin) {
+    return false;
+  }
+
+  const zones = Array.isArray(activePers?.blockedZones) ? activePers.blockedZones : [];
+
+  if (!zones.length) {
+    return false;
+  }
+
+  const bounds = object.getBoundingRect(true, true);
+
+  return zones.some(zone => {
+    if (zone.type !== 'circle') {
+      return false;
+    }
+
+    const circleData = getBlockedCircleCanvasData(zone, activePers, product, canvasWidth, canvasHeight);
+
+    if (!circleData) {
+      return false;
+    }
+
+    return isRectOverlappingCircle(bounds, circleData.cx, circleData.cy, circleData.safeRadius);
+  });
+}
+
+function isRectOverlappingCircle(rect, circleX, circleY, radius) {
+  const closestX = clamp(circleX, rect.left, rect.left + rect.width);
+  const closestY = clamp(circleY, rect.top, rect.top + rect.height);
+
+  const distanceX = circleX - closestX;
+  const distanceY = circleY - closestY;
+
+  return (distanceX * distanceX + distanceY * distanceY) <= radius * radius;
+}
+
+function clamp(value, min, max) {
+  return Math.min(Math.max(value, min), max);
 }
 
 function updateFabricStatus() {
@@ -976,8 +1176,13 @@ function fabricSaveHistory() {
 }
 
 function snapshotCanvas(canvas, product, activePers) {
-  const marginObjects = canvas.getObjects('rect').filter(o => o._isMargin);
-  marginObjects.forEach(o => o.visible = false);
+  const marginObjects = canvas.getObjects().filter(object =>
+    object._isMargin || object._isGuide || object._isBlockedZone
+  );
+
+  marginObjects.forEach(object => {
+    object.visible = false;
+  });
   canvas.discardActiveObject();
   canvas.renderAll();
 
@@ -992,7 +1197,7 @@ function snapshotCanvas(canvas, product, activePers) {
     enableRetinaScaling: false,
   });
 
-  marginObjects.forEach(o => o.visible = true);
+  marginObjects.forEach(object => object.visible = true);
   canvas.renderAll();
 
   const json = JSON.stringify(canvas.toJSON(['_isMargin']));
