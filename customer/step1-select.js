@@ -30,14 +30,14 @@ function renderSelectPage() {
     ` : `
       <div class="product-grid" id="product-grid">
         ${products.map(p => {
-          const lowestPrice = getLowestPrice(p);
-          const isSelected  = selectedProduct?.id === p.id;
-          return `
+    const lowestPrice = getLowestPrice(p);
+    const isSelected = selectedProduct?.id === p.id;
+    return `
             <div class="product-card ${isSelected ? 'selected' : ''}" data-id="${p.id}">
               <div class="product-card-img">
-                ${p.imageProduct
-                  ? `<img src="${p.imageProduct}" alt="${escHtml(p.name)}" onerror="this.style.display='none'">`
-                  : '📦'}
+                ${getProductImageSrc(p)
+        ? `<img src="${getProductImageSrc(p)}" alt="${escHtml(p.name)}" onerror="this.style.display='none'">`
+        : '📦'}
               </div>
               <div class="product-card-body">
                 <div class="product-card-name">${escHtml(p.name)}</div>
@@ -45,7 +45,7 @@ function renderSelectPage() {
               </div>
             </div>
           `;
-        }).join('')}
+  }).join('')}
       </div>
     `}
 
@@ -60,7 +60,7 @@ function renderSelectPage() {
   // Klik op product
   el.querySelectorAll('.product-card').forEach(card => {
     card.addEventListener('click', () => {
-      const id      = card.dataset.id;
+      const id = card.dataset.id;
       const product = products.find(p => p.id === id);
       if (!product) return;
 
@@ -87,10 +87,14 @@ function getLowestPrice(product) {
 }
 
 function escHtml(str) {
-  return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
 function formatEuro(n) {
   if (n === null || n === undefined) return '—';
   return '€ ' + parseFloat(n).toFixed(2).replace('.', ',');
+}
+
+function getProductImageSrc(product) {
+  return product?.imageProductFile?.dataURL || product?.imageProduct || '';
 }

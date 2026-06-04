@@ -288,19 +288,20 @@ body {
 
 .product-card-img {
   width: 100%;
-  aspect-ratio: 4/3;
-  background: var(--cream-dark);
+  height: 220px;
+  background: #fff;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 48px;
   overflow: hidden;
+  padding: 14px;
 }
 
 .product-card-img img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  display: block;
 }
 
 .product-card-body {

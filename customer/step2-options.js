@@ -26,7 +26,7 @@ function renderOptionsPage() {
   const addons = Array.isArray(saved.addons) ? saved.addons : [];
   const quantity = saved.quantity || '';
 
-  const previewSrc = activePers?.previewImage || product.imageProduct || '';
+  const previewSrc = getPersonalisationImageSrc(activePers, product);
   const initialOptions = collectOptionsFromValues(product, activePers, quantity, designChoice, addons);
 
   el.innerHTML = `
@@ -37,9 +37,11 @@ function renderOptionsPage() {
       <div>
         <div class="product-preview-main" id="preview-main"
              style="${activePers?.clipShape ? 'overflow:hidden' : ''}">
-          ${previewSrc
+         ${previewSrc
       ? `<img id="preview-main-img" src="${escHtml(previewSrc)}" alt="Preview"
-                 style="${activePers?.clipShape ? `clip-path:${escHtml(activePers.clipShape)};width:100%;height:100%;object-fit:cover` : ''}">`
+             style="${activePers?.clipShape
+        ? `clip-path:${escHtml(activePers.clipShape)};width:100%;height:100%;object-fit:contain`
+        : 'width:100%;height:100%;object-fit:contain'}">`
       : `<span class="product-card-placeholder">Product</span>`}
         </div>
 
@@ -209,29 +211,31 @@ function bindPersonalisationTabs(el, product, persTypes) {
 function updatePreviewForPersonalisation(persType) {
   const mainImg = document.getElementById('preview-main-img');
   const mainDiv = document.getElementById('preview-main');
+  const product = Session.getProduct();
+  const imageSrc = getPersonalisationImageSrc(persType, product);
 
   if (mainDiv) {
-    mainDiv.style.overflow = persType.clipShape ? 'hidden' : '';
+    mainDiv.style.overflow = persType?.clipShape ? 'hidden' : '';
   }
 
   if (!mainImg) {
     return;
   }
 
-  if (persType.previewImage) {
-    mainImg.src = persType.previewImage;
+  if (imageSrc) {
+    mainImg.src = imageSrc;
   }
 
-  if (persType.clipShape) {
+  if (persType?.clipShape) {
     mainImg.style.clipPath = persType.clipShape;
     mainImg.style.width = '100%';
     mainImg.style.height = '100%';
-    mainImg.style.objectFit = 'cover';
+    mainImg.style.objectFit = 'contain';
   } else {
     mainImg.style.clipPath = '';
-    mainImg.style.width = '';
-    mainImg.style.height = '';
-    mainImg.style.objectFit = '';
+    mainImg.style.width = '100%';
+    mainImg.style.height = '100%';
+    mainImg.style.objectFit = 'contain';
   }
 }
 
@@ -553,6 +557,18 @@ function downloadDataFile(dataURL, fileName) {
   document.body.appendChild(link);
   link.click();
   link.remove();
+}
+
+function getPersonalisationImageSrc(persType, product) {
+  return persType?.previewImageFile?.dataURL ||
+    persType?.previewImage ||
+    product?.imageProductFile?.dataURL ||
+    product?.imageProduct ||
+    '';
+}
+
+function getProductImageSrc(product) {
+  return product?.imageProductFile?.dataURL || product?.imageProduct || '';
 }
 
 function formatEuro(value) {

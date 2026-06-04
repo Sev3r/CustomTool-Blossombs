@@ -177,9 +177,9 @@ function renderDesignPage() {
 
         <div>
           <div class="preview-box" id="preview-box">
-            ${uploadedDataURL
+           ${uploadedDataURL && uploadedDataURL.startsWith('data:image')
       ? `<img src="${uploadedDataURL}" alt="Preview">`
-      : `<div class="preview-placeholder">Preview</div>`}
+      : `<div class="preview-placeholder">${uploadedDataURL ? escHtml(uploadedFileName || 'Bestand') : 'Preview'}</div>`}
             <div class="preview-zoom" id="btn-zoom" ${!uploadedDataURL ? 'style="display:none"' : ''}>🔍</div>
           </div>
           <p style="font-size:12px;color:var(--text-3);margin-top:8px;text-align:center">Preview van uw bestand</p>
@@ -651,35 +651,31 @@ function loadBackgroundImage(canvas, activePers, product, canvasWidth, canvasHei
     return;
   }
 
-  const bgImg = activePers?.previewImage || product.imageProduct || null;
+  const bgImg = getPersonalisationImageSrc(activePers, product);
 
   if (!bgImg) {
     return;
   }
 
   fabric.Image.fromURL(bgImg, image => {
-    canvas.setBackgroundImage(image, canvas.renderAll.bind(canvas), {
-      scaleX: canvasWidth / image.width,
-      scaleY: canvasHeight / image.height,
+    const scale = Math.min(
+      canvasWidth / image.width,
+      canvasHeight / image.height
+    );
+
+    image.set({
+      originX: 'center',
+      originY: 'center',
+      left: canvasWidth / 2,
+      top: canvasHeight / 2,
+      scaleX: scale,
+      scaleY: scale,
     });
+
+    canvas.setBackgroundImage(image, canvas.renderAll.bind(canvas));
+  }, {
+    crossOrigin: 'anonymous',
   });
-}
-
-function restoreCanvasStateOrDefault(canvas, savedState, canvasHeight, margin, canvasWidth, canvasHeightValue) {
-  if (savedState?.fabricJSON) {
-    try {
-      canvas.loadFromJSON(savedState.fabricJSON, () => {
-        drawMarginRect(canvas, margin, canvasWidth, canvasHeightValue);
-        canvas.renderAll();
-        updateLayerPanel();
-      });
-      return;
-    } catch (error) {
-      console.warn('Canvas state herstellen mislukt', error);
-    }
-  }
-
-  addDefaultText(canvas, canvasHeight);
 }
 
 function addDefaultText(canvas, canvasHeight) {
@@ -1153,6 +1149,14 @@ function clearUpload() {
   });
 
   renderDesignPage();
+}
+
+function getPersonalisationImageSrc(persType, product) {
+  return persType?.previewImageFile?.dataURL ||
+    persType?.previewImage ||
+    product?.imageProductFile?.dataURL ||
+    product?.imageProduct ||
+    '';
 }
 
 function escHtml(value) {
