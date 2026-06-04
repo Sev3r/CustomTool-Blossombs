@@ -82,8 +82,25 @@ function renderSelectPage() {
 }
 
 function getLowestPrice(product) {
-  if (!product.priceSlabs || product.priceSlabs.length === 0) return null;
-  return Math.min(...product.priceSlabs.map(s => s.price));
+  const allPriceSlabs = [];
+
+  if (Array.isArray(product.personalisatieTypes)) {
+    product.personalisatieTypes.forEach(persType => {
+      if (Array.isArray(persType.priceSlabs)) {
+        allPriceSlabs.push(...persType.priceSlabs);
+      }
+    });
+  }
+
+  if (allPriceSlabs.length === 0 && Array.isArray(product.priceSlabs)) {
+    allPriceSlabs.push(...product.priceSlabs);
+  }
+
+  if (allPriceSlabs.length === 0) {
+    return null;
+  }
+
+  return Math.min(...allPriceSlabs.map(priceSlab => Number(priceSlab.price || 0)));
 }
 
 function escHtml(str) {

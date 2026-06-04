@@ -70,7 +70,7 @@ function renderOptionsPage() {
           </thead>
           <tbody>
             ${FIXED_QUANTITIES.map(qty => {
-        const price = getPriceForQty(product, qty);
+        const price = getPriceForQty(product, qty, activePers);
         const isActive = parseInt(quantity, 10) === qty;
 
         return `
@@ -203,6 +203,7 @@ function bindPersonalisationTabs(el, product, persTypes) {
 
       updatePreviewForPersonalisation(newPers);
       updateTemplateDownloadForPersonalisation(el, newPers);
+      updatePriceTableForPersonalisation(el, product, newPers);
       saveOptions(el, product, persTypes);
     });
   });
@@ -237,6 +238,36 @@ function updatePreviewForPersonalisation(persType) {
     mainImg.style.height = '100%';
     mainImg.style.objectFit = 'contain';
   }
+}
+
+function updatePriceTableForPersonalisation(el, product, persType) {
+  const selectedRow = el.querySelector('.staffel-table tbody tr.highlighted');
+  const customQty = document.getElementById('qty-custom')?.value || '';
+  const selectedQty = selectedRow
+    ? parseInt(selectedRow.dataset.qty, 10)
+    : customQty
+      ? parseInt(customQty, 10)
+      : null;
+
+  const tbody = el.querySelector('.staffel-table tbody');
+
+  if (!tbody) {
+    return;
+  }
+
+  tbody.innerHTML = FIXED_QUANTITIES.map(qty => {
+    const price = getPriceForQty(product, qty, persType);
+    const isActive = selectedQty === qty;
+
+    return `
+      <tr class="${isActive ? 'highlighted' : ''}" data-qty="${qty}">
+        <td>${qty}</td>
+        <td>${price !== null ? formatEuro(price) : '—'}</td>
+      </tr>
+    `;
+  }).join('');
+
+  bindQuantitySelection(el, product, getProductPersonalisationTypes(product));
 }
 
 function updateTemplateDownloadForPersonalisation(el, persType) {
@@ -530,20 +561,27 @@ function refreshOptionsCostSummary(el, product, persTypes) {
   bindOptionsPdfButton(el, product, persTypes);
 }
 
-function getPriceForQty(product, qty) {
+function getPriceForQty(product, qty, persType = null) {
   if (window.Pricing?.getPriceForQty) {
-    return Pricing.getPriceForQty(product, qty);
+    return Pricing.getPriceForQty(product, qty, persType);
   }
 
-  if (!product.priceSlabs) {
+  const priceSlabs = Array.isArray(persType?.priceSlabs) && persType.priceSlabs.length > 0
+    ? persType.priceSlabs
+    : Array.isArray(product.priceSlabs)
+      ? product.priceSlabs
+      : [];
+
+  if (!priceSlabs.length) {
     return null;
   }
 
-  const slab = product.priceSlabs.find(priceSlab =>
-    qty >= priceSlab.from && (priceSlab.to === null || qty <= priceSlab.to)
+  const slab = priceSlabs.find(priceSlab =>
+    qty >= Number(priceSlab.from || 0) &&
+    (priceSlab.to === null || qty <= Number(priceSlab.to))
   );
 
-  return slab ? slab.price : null;
+  return slab ? Number(slab.price || 0) : null;
 }
 
 function downloadDataFile(dataURL, fileName) {

@@ -51,9 +51,15 @@ function renderProductGrid() {
       </div>
     `).join('');
 
-    const personalisationHTML = (product.personalisatieTypes || []).map(type => `
-      <span class="spec-tag">${escHtml(type.label)}: ${type.width_mm || '—'}×${type.height_mm || '—'}mm</span>
-    `).join('');
+    const personalisationHTML = (product.personalisatieTypes || []).map(type => {
+      const priceCount = Array.isArray(type.priceSlabs) ? type.priceSlabs.length : 0;
+
+      return `
+        <span class="spec-tag">
+          ${escHtml(type.label)}: ${type.width_mm || '—'}×${type.height_mm || '—'}mm${priceCount ? `, ${priceCount} staffels` : ''}
+        </span>
+      `;
+    }).join('');
 
     return `
       <div class="product-card ${product.active === false ? 'inactive' : ''}">
@@ -83,7 +89,7 @@ function renderProductGrid() {
           ` : ''}
 
           <div class="price-slabs">
-            ${slabHTML || '<span style="font-size:12px;color:var(--text-3)">Geen prijzen</span>'}
+            ${slabHTML || '<span style="font-size:12px;color:var(--text-3)">Geen algemene fallback prijzen</span>'}
           </div>
 
           <div class="product-specs" style="margin-top:8px">
@@ -172,7 +178,7 @@ function openProductModal(id = null) {
       </div>
     </div>
 
-    <div class="section-title" style="margin-top:4px">Staffelprijzen</div>
+    <div class="section-title" style="margin-top:4px">Algemene fallback staffelprijzen</div>
 
     <div class="slab-list" id="slab-list">
       ${slabs.map((slab, index) => slabRow(slab, index)).join('')}
@@ -181,6 +187,10 @@ function openProductModal(id = null) {
     <button class="btn btn-secondary btn-sm" type="button" style="margin-top:8px" id="btn-add-slab">
       + Staffel toevoegen
     </button>
+
+    <span class="form-hint" style="display:block;margin-top:6px">
+      Deze algemene staffels worden alleen gebruikt als een personalisatietype geen eigen staffels heeft.
+    </span>
 
     <div class="section-title" style="margin-top:4px">Productafbeelding</div>
 
@@ -202,7 +212,7 @@ function openProductModal(id = null) {
     <div class="section-title" style="margin-top:4px">
       Personalisatietypes
       <span class="form-hint" style="text-transform:none;font-weight:400;letter-spacing:0">
-        Elk type heeft eigen afmetingen, afbeelding en template PDF
+        Elk type heeft eigen afmetingen, afbeelding, template PDF en staffelprijzen
       </span>
     </div>
 
@@ -247,6 +257,33 @@ function slabRow(slab, index) {
   `;
 }
 
+function personalisationSlabRow(slab, index) {
+  return `
+    <div class="slab-row pers-slab-row">
+      <input type="number" class="pers-slab-from" value="${escHtml(slab.from || '')}" placeholder="Van" min="1">
+      <span>–</span>
+      <input type="number" class="pers-slab-to" value="${escHtml(slab.to || '')}" placeholder="Tot leeg is oneindig">
+      <span>stuks</span>
+      <input type="number" class="pers-slab-price" value="${escHtml(slab.price || '')}" placeholder="Prijs" step="0.01">
+      <span>€</span>
+      <button class="icon-btn danger" type="button" onclick="this.closest('.pers-slab-row').remove()">×</button>
+    </div>
+  `;
+}
+
+function getDefaultPersonalisationPriceSlabs(type = {}) {
+  if (Array.isArray(type.priceSlabs) && type.priceSlabs.length > 0) {
+    return type.priceSlabs;
+  }
+
+  return [
+    { from: 50, to: 99, price: '' },
+    { from: 100, to: 249, price: '' },
+    { from: 250, to: 499, price: '' },
+    { from: 500, to: null, price: '' },
+  ];
+}
+
 function persTypeRow(type, index, uploadKey) {
   const key = uploadKey || createUploadKey();
   const previewFile = type.previewImageFile || (type.previewImage ? {
@@ -257,6 +294,7 @@ function persTypeRow(type, index, uploadKey) {
   } : null);
 
   const templatePdf = type.templatePdf || null;
+  const priceSlabs = getDefaultPersonalisationPriceSlabs(type);
 
   return `
     <div class="pers-type-row"
@@ -270,32 +308,32 @@ function persTypeRow(type, index, uploadKey) {
       </div>
 
       <div class="form-row" style="margin-bottom:8px">
-  <div class="form-group">
-    <label>Label</label>
-    <input type="text" class="pers-label" value="${escHtml(type.label || '')}" placeholder="Voorkant">
-  </div>
+        <div class="form-group">
+          <label>Label</label>
+          <input type="text" class="pers-label" value="${escHtml(type.label || '')}" placeholder="Voorkant">
+        </div>
 
-  <div class="form-group">
-    <label>Clip-vorm optioneel</label>
-    <input type="text" class="pers-clip" value="${escHtml(type.clipShape || '')}" placeholder="circle(50%) of leeg voor rechthoek">
-    <span class="form-hint">CSS clip-path voor niet-rechthoekige printzone</span>
-  </div>
-</div>
+        <div class="form-group">
+          <label>Clip-vorm optioneel</label>
+          <input type="text" class="pers-clip" value="${escHtml(type.clipShape || '')}" placeholder="circle(50%) of leeg voor rechthoek">
+          <span class="form-hint">CSS clip-path voor niet-rechthoekige printzone</span>
+        </div>
+      </div>
 
-<div class="form-row-1" style="margin-bottom:8px">
-  <div class="form-group">
-    <label class="toggle-wrap" style="flex-direction:row;align-items:center;gap:10px">
-      <span class="toggle">
-        <input type="checkbox" class="pers-bg-allowed" ${type.allowBackgroundColor ? 'checked' : ''}>
-        <span class="toggle-slider"></span>
-      </span>
-      <span>Achtergrondkleur canvas mag aangepast worden</span>
-    </label>
-    <span class="form-hint">
-      Zet dit alleen aan wanneer de achtergrondkleur ook echt bedrukt of zichtbaar mag worden.
-    </span>
-  </div>
-</div>
+      <div class="form-row-1" style="margin-bottom:8px">
+        <div class="form-group">
+          <label class="toggle-wrap" style="flex-direction:row;align-items:center;gap:10px">
+            <span class="toggle">
+              <input type="checkbox" class="pers-bg-allowed" ${type.allowBackgroundColor ? 'checked' : ''}>
+              <span class="toggle-slider"></span>
+            </span>
+            <span>Achtergrondkleur canvas mag aangepast worden</span>
+          </label>
+          <span class="form-hint">
+            Zet dit alleen aan wanneer de achtergrondkleur ook echt bedrukt of zichtbaar mag worden.
+          </span>
+        </div>
+      </div>
 
       <div class="form-row-3" style="margin-bottom:8px">
         <div class="form-group">
@@ -313,6 +351,16 @@ function persTypeRow(type, index, uploadKey) {
           <input type="number" class="pers-m-mm" value="${escHtml(type.margin_mm || '')}" placeholder="5" min="0" step="0.5">
         </div>
       </div>
+
+      <div class="section-title" style="margin-top:10px">Staffelprijzen voor deze personalisatie</div>
+
+      <div class="pers-slab-list">
+        ${priceSlabs.map((slab, slabIndex) => personalisationSlabRow(slab, slabIndex)).join('')}
+      </div>
+
+      <button class="btn btn-secondary btn-sm btn-add-pers-slab" type="button" style="margin:8px 0 12px">
+        + Staffel toevoegen
+      </button>
 
       <div class="form-row" style="margin-bottom:8px">
         <div class="form-group">
@@ -398,6 +446,20 @@ function bindPersRowUploads(row, uploadState) {
   const templateInput = row.querySelector('.pers-template-file');
   const templateRemove = row.querySelector('.pers-template-remove');
   const templateOutput = row.querySelector('.pers-template-output');
+
+  row.querySelector('.btn-add-pers-slab')?.addEventListener('click', () => {
+    const list = row.querySelector('.pers-slab-list');
+
+    if (!list) {
+      return;
+    }
+
+    list.insertAdjacentHTML('beforeend', personalisationSlabRow({
+      from: '',
+      to: '',
+      price: '',
+    }, list.children.length));
+  });
 
   previewInput?.addEventListener('change', async event => {
     const file = event.target.files?.[0];
@@ -490,6 +552,7 @@ function bindProductModalActions(uploadState, product, isEdit) {
       height_mm: '',
       margin_mm: '',
       clipShape: '',
+      priceSlabs: [],
     }, list.children.length, uploadKey));
 
     const newRow = list.lastElementChild;
@@ -526,7 +589,7 @@ function saveProductFromModal(uploadState, product, isEdit) {
     from: parseFloat(row.querySelector('.slab-from').value) || 1,
     to: parseFloat(row.querySelector('.slab-to').value) || null,
     price: parseFloat(row.querySelector('.slab-price').value) || 0,
-  }));
+  })).filter(priceSlab => priceSlab.price > 0);
 
   const customId = document.getElementById('pf-id').value.trim();
   const firstPers = personalisatieTypes[0];
@@ -577,9 +640,16 @@ function collectPersonalisationTypes(uploadState) {
     const displayWidth = widthPx ? Math.round(widthPx * scale) : null;
     const displayHeight = heightPx ? Math.round(heightPx * scale) : null;
 
+    const priceSlabs = [...row.querySelectorAll('.pers-slab-row')].map(slabRow => ({
+      from: parseFloat(slabRow.querySelector('.pers-slab-from').value) || 1,
+      to: parseFloat(slabRow.querySelector('.pers-slab-to').value) || null,
+      price: parseFloat(slabRow.querySelector('.pers-slab-price').value) || 0,
+    })).filter(priceSlab => priceSlab.price > 0);
+
     return {
       id: stableId,
       label: label || 'Standaard',
+      priceSlabs,
       previewImageFile: fileState.previewImageFile || null,
       previewImage: fileState.previewImageFile?.dataURL || '',
       templatePdf: fileState.templatePdf || null,
