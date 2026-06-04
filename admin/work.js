@@ -137,11 +137,23 @@ function renderWorkGrid() {
       ? `<span class="badge ${urgency.cls}">${urgency.label}</span>`
       : '';
 
+    const hasWensen = Boolean(
+      order.wensen ||
+      order.notes ||
+      order.designFile ||
+      order.designDataURL ||
+      order.designPdfDataURL
+    );
+
     const fileSection = isDesignWork
       ? `<span class="label">Wensen</span>
-         <span>${getWensenSummary(order)}</span>`
+     <span>${hasWensen
+        ? `<button class="link-button" type="button" onclick="viewWorkWensen('${order.id}')">Bekijk wensen</button>`
+        : '<span style="color:var(--text-3)">Geen wensen</span>'}</span>`
       : `<span class="label">Bestand</span>
-         <span>${getDownloadSection(order)}</span>`;
+     <span>${order.designFile || order.designDataURL || order.designPdfDataURL
+        ? `<button class="link-button" type="button" onclick="viewWorkFiles('${order.id}')">Bekijk bestand</button>`
+        : '<span style="color:var(--text-3)">Geen bestand</span>'}</span>`;
 
     return `
       <div class="work-card ${typeClass} ${isDone ? 'work-card-done' : ''}">
@@ -199,6 +211,62 @@ function renderWorkGrid() {
       </div>
     `;
   }).join('');
+}
+
+function viewWorkWensen(id) {
+  const order = DS.getOrderById(id);
+
+  if (!order) {
+    AdminUI.showToast('Order niet gevonden', 'error');
+    return;
+  }
+
+  const wensen = order.wensen || {};
+
+  const body = `
+    <div style="display:flex;flex-direction:column;gap:16px">
+      <div>
+        <div class="section-title">Order</div>
+        <div style="font-size:13px;margin-top:8px;display:flex;flex-direction:column;gap:4px">
+          <div><strong>Ordernummer:</strong> ${escHtml(order.orderNumber || '—')}</div>
+          <div><strong>Klant:</strong> ${escHtml(order.customerName || '—')}</div>
+          <div><strong>Product:</strong> ${escHtml(order.productName || '—')}</div>
+          <div><strong>Personalisatie:</strong> ${escHtml(order.persTypeLabel || '—')}</div>
+          <div><strong>Aantal:</strong> ${order.quantity || '—'}</div>
+        </div>
+      </div>
+
+      <div>
+        <div class="section-title">Wensen</div>
+        <div style="font-size:13px;margin-top:8px;display:flex;flex-direction:column;gap:8px">
+          ${wensen.tekst ? `<div><strong>Gewenste tekst:</strong><br>${escHtml(wensen.tekst)}</div>` : ''}
+          ${wensen.kleur ? `<div><strong>Kleurvoorkeur:</strong><br>${escHtml(wensen.kleur)}</div>` : ''}
+          ${wensen.stijl ? `<div><strong>Stijlvoorkeur:</strong><br>${escHtml(wensen.stijl)}</div>` : ''}
+          ${wensen.opmerkingen ? `<div><strong>Aanvullende opmerkingen:</strong><br>${escHtml(wensen.opmerkingen)}</div>` : ''}
+          ${order.notes ? `<div><strong>Ordernotities:</strong><br>${escHtml(order.notes)}</div>` : ''}
+          ${wensen.refFileName ? `<div><strong>Referentiebestand:</strong><br>${escHtml(wensen.refFileName)}</div>` : ''}
+          ${!wensen.tekst && !wensen.kleur && !wensen.stijl && !wensen.opmerkingen && !order.notes && !wensen.refFileName
+      ? '<div style="color:var(--text-3)">Geen wensen ingevuld.</div>'
+      : ''}
+        </div>
+      </div>
+    </div>
+  `;
+
+  AdminUI.openModal({
+    title: `Wensen — ${order.orderNumber}`,
+    body,
+    footer: `<button class="btn btn-secondary" type="button" onclick="AdminUI.closeModal()">Sluiten</button>`,
+  });
+}
+
+function viewWorkFiles(id) {
+  if (typeof viewOrderFiles === 'function') {
+    viewOrderFiles(id);
+    return;
+  }
+
+  AdminUI.showToast('Bestandenvenster niet beschikbaar', 'error');
 }
 
 function getWensenSummary(order) {
@@ -357,3 +425,5 @@ function escHtml(value) {
 }
 
 window.downloadWorkDesign = downloadWorkDesign;
+window.viewWorkWensen = viewWorkWensen;
+window.viewWorkFiles = viewWorkFiles;
