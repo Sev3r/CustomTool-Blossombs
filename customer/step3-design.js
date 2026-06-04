@@ -72,10 +72,6 @@ function renderDesignPage() {
             <button class="tool-btn" type="button" id="btn-logo">+ Logo uploaden</button>
             <input type="file" id="file-input" accept="image/*" style="display:none">
 
-            <div class="text-input-row" style="margin-bottom:6px">
-              <input type="text" id="text-input" placeholder="Jouw tekst..." value="Jouw tekst...">
-            </div>
-
             <button class="tool-btn" type="button" id="btn-text">+ Tekst toevoegen</button>
           </div>
 
@@ -952,9 +948,7 @@ function bindFabricButtons(canvas, margin, canvasWidth, canvasHeight, stateKey, 
   });
 
   document.getElementById('btn-text')?.addEventListener('click', () => {
-    const value = document.getElementById('text-input')?.value || 'Mijn tekst';
-
-    const text = new fabric.IText(value, {
+    const text = new fabric.IText('Dubbelklik om tekst te bewerken', {
       left: 100,
       top: 160,
       fontSize: 20,
