@@ -19,8 +19,8 @@ function renderReviewPage() {
     return;
   }
 
-  const hasFileCheck = options.addons?.includes('bestandscontrole');
   const isLatOntwerpen = options.designChoice === 'laat-ontwerpen';
+  const hasFileCheck = !isLatOntwerpen && options.addons?.includes('bestandscontrole');
   const persType = options.persType || null;
   const clipShape = persType?.clipShape || null;
 
@@ -94,21 +94,23 @@ function renderReviewPage() {
       </div>
 
       <div>
-        <div class="review-section">
-          <div class="review-section-title">Extra opties</div>
-          <div class="review-section-body">
-            <div class="option-toggle-row">
-              <div class="toggle-text">
-                <strong>Bestandscontrole + € 15,00</strong>
-                <span>Onze medewerkers controleren uw bestand op resolutie, formaat en afloop vóór de druk.</span>
-              </div>
-              <label class="toggle-switch">
-                <input type="checkbox" id="r-bestandscontrole" ${hasFileCheck ? 'checked' : ''}>
-                <span class="toggle-track"></span>
-              </label>
-            </div>
+  ${!isLatOntwerpen ? `
+    <div class="review-section">
+      <div class="review-section-title">Extra opties</div>
+      <div class="review-section-body">
+        <div class="option-toggle-row">
+          <div class="toggle-text">
+            <strong>Bestandscontrole + € 15,00</strong>
+            <span>Onze medewerkers controleren uw bestand op resolutie, formaat en afloop vóór de druk.</span>
           </div>
+          <label class="toggle-switch">
+            <input type="checkbox" id="r-bestandscontrole" ${hasFileCheck ? 'checked' : ''}>
+            <span class="toggle-track"></span>
+          </label>
         </div>
+      </div>
+    </div>
+  ` : ''}
 
         ${persType ? `
           <div class="review-section" style="margin-top:16px">
@@ -265,6 +267,15 @@ function collectKlant() {
 }
 
 function getCurrentOptions(options) {
+  const isLatOntwerpen = options.designChoice === 'laat-ontwerpen';
+
+  if (isLatOntwerpen) {
+    return {
+      ...options,
+      addons: (options.addons || []).filter(addon => addon !== 'bestandscontrole'),
+    };
+  }
+
   const hasFileCheck = document.getElementById('r-bestandscontrole')?.checked;
 
   return {

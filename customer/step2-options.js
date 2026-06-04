@@ -131,17 +131,19 @@ function renderOptionsPage() {
           `).join('')}
         </div>
 
-        <div class="toggle-option addon ${addons.includes('bestandscontrole') ? 'active' : ''}"
-             data-addon="bestandscontrole">
-          <div class="toggle-option-left">
-            <span class="toggle-option-label">Bestandscontrole</span>
-            <span class="toggle-option-price">+ ${formatEuro(15)} combineerbaar met eigen ontwerp</span>
-          </div>
-          <label class="toggle-switch" onclick="event.stopPropagation()">
-            <input type="checkbox" ${addons.includes('bestandscontrole') ? 'checked' : ''}>
-            <span class="toggle-track"></span>
-          </label>
-        </div>
+        ${designChoice === 'eigen-ontwerp' ? `
+  <div class="toggle-option addon ${addons.includes('bestandscontrole') ? 'active' : ''}"
+       data-addon="bestandscontrole">
+    <div class="toggle-option-left">
+      <span class="toggle-option-label">Bestandscontrole</span>
+      <span class="toggle-option-price">+ ${formatEuro(15)}</span>
+    </div>
+    <label class="toggle-switch" onclick="event.stopPropagation()">
+      <input type="checkbox" ${addons.includes('bestandscontrole') ? 'checked' : ''}>
+      <span class="toggle-track"></span>
+    </label>
+  </div>
+` : ''}
 
         ${renderOptionsCostSummary(product, initialOptions)}
 
@@ -350,6 +352,7 @@ function bindDesignChoiceSelection(el, product, persTypes) {
       }
 
       saveOptions(el, product, persTypes);
+      renderOptionsPage();
     });
   });
 }
@@ -472,9 +475,12 @@ function collectOptions(el, product, persTypes) {
   const designChoice = el.querySelector('input[name="design-choice"]:checked')?.value || 'laat-ontwerpen';
 
   const addons = [];
-  el.querySelectorAll('.toggle-option[data-addon].active').forEach(option => {
-    addons.push(option.dataset.addon);
-  });
+
+  if (designChoice === 'eigen-ontwerp') {
+    el.querySelectorAll('.toggle-option[data-addon].active').forEach(option => {
+      addons.push(option.dataset.addon);
+    });
+  }
 
   const activeTab = el.querySelector('.pers-tab.active');
   const persTypeId = activeTab ? activeTab.dataset.pers : (persTypes[0]?.id || 'standaard');
