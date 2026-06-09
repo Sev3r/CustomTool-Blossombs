@@ -3,7 +3,6 @@
  * Stap 5: Review & bestellen.
  * Gebruikt centrale Pricing helper.
  * Gebruikt gedeelde generateOffertePDF functie uit shared/js/offertePdf.js.
- * Slaat drukklare ontwerp PDF op als designPdfDataURL.
  */
 
 function renderReviewPage() {
@@ -24,7 +23,7 @@ function renderReviewPage() {
   const persType = options.persType || null;
   const clipShape = persType?.clipShape || null;
 
-  const designPreviewHTML = design?.dataURL && design.dataURL.startsWith('data:image') ? `
+  const designPreviewHTML = design?.dataURL ? `
     <div style="margin-bottom:16px">
       <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
                   color:var(--text-3);margin-bottom:8px">Uw ontwerp</div>
@@ -38,17 +37,6 @@ function renderReviewPage() {
     </div>
   ` : '';
 
-  const uploadedPdfHTML = design?.dataURL && design.dataURL.startsWith('data:application/pdf') ? `
-    <div style="margin-bottom:16px">
-      <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
-                  color:var(--text-3);margin-bottom:8px">Uw bestand</div>
-      <div style="font-size:13px;color:var(--text-2);padding:12px;border:1px solid var(--cream-border);
-                  border-radius:var(--radius-sm);background:var(--cream-dark)">
-        ${escHtml(design.fileName || 'PDF bestand geüpload')}
-      </div>
-    </div>
-  ` : '';
-
   el.innerHTML = `
     <h1 class="page-title">Plaats uw bestelling</h1>
     <p class="page-subtitle">Controleer uw gegevens en bevestig uw bestelling</p>
@@ -57,6 +45,11 @@ function renderReviewPage() {
       <div class="review-section">
         <div class="review-section-title">Uw gegevens</div>
         <div class="review-section-body">
+          <div class="review-field">
+            <label>Bedrijfsnaam</label>
+            <input type="text" id="r-company" value="${escHtml(savedKlant.companyName || '')}" placeholder="Bedrijfsnaam B.V.">
+          </div>
+
           <div class="review-field">
             <label><span class="required-star">*</span> Voornaam</label>
             <input type="text" id="r-naam" value="${escHtml(savedKlant.naam || '')}" placeholder="Emma">
@@ -78,13 +71,38 @@ function renderReviewPage() {
           </div>
 
           <div class="review-field">
-            <label><span class="required-star">*</span> Leveradres</label>
-            <input type="text" id="r-adres" value="${escHtml(savedKlant.adres || '')}" placeholder="Straat 1, 1234 AB Stad">
+            <label><span class="required-star">*</span> Straat</label>
+            <input type="text" id="r-straat" value="${escHtml(savedKlant.straat || '')}" placeholder="Hoofdstraat">
+          </div>
+
+          <div class="review-field">
+            <label><span class="required-star">*</span> Huisnummer</label>
+            <input type="text" id="r-huisnummer" value="${escHtml(savedKlant.huisnummer || '')}" placeholder="12A">
+          </div>
+
+          <div class="review-field">
+            <label><span class="required-star">*</span> Postcode</label>
+            <input type="text" id="r-postcode" value="${escHtml(savedKlant.postcode || '')}" placeholder="1234 AB">
+          </div>
+
+          <div class="review-field">
+            <label><span class="required-star">*</span> Plaats</label>
+            <input type="text" id="r-plaats" value="${escHtml(savedKlant.plaats || '')}" placeholder="Amsterdam">
+          </div>
+
+          <div class="review-field">
+            <label>Land</label>
+            <input type="text" id="r-land" value="${escHtml(savedKlant.land || 'Nederland')}" placeholder="Nederland">
           </div>
 
           <div class="review-field">
             <label>KvK-nummer</label>
             <input type="text" id="r-kvk" value="${escHtml(savedKlant.kvk || '')}" placeholder="12345678">
+          </div>
+
+          <div class="review-field">
+            <label>BTW-nummer</label>
+            <input type="text" id="r-btw" value="${escHtml(savedKlant.btw || '')}" placeholder="NL123456789B01">
           </div>
 
           <div id="review-error" style="color:var(--danger);font-size:13px;display:none">
@@ -94,23 +112,23 @@ function renderReviewPage() {
       </div>
 
       <div>
-  ${!isLatOntwerpen ? `
-    <div class="review-section">
-      <div class="review-section-title">Extra opties</div>
-      <div class="review-section-body">
-        <div class="option-toggle-row">
-          <div class="toggle-text">
-            <strong>Bestandscontrole + € 15,00</strong>
-            <span>Onze medewerkers controleren uw bestand op resolutie, formaat en afloop vóór de druk.</span>
+        ${!isLatOntwerpen ? `
+          <div class="review-section">
+            <div class="review-section-title">Extra opties</div>
+            <div class="review-section-body">
+              <div class="option-toggle-row">
+                <div class="toggle-text">
+                  <strong>Bestandscontrole + € 15,00</strong>
+                  <span>Onze medewerkers controleren uw bestand op resolutie, formaat en afloop vóór de druk.</span>
+                </div>
+                <label class="toggle-switch">
+                  <input type="checkbox" id="r-bestandscontrole" ${hasFileCheck ? 'checked' : ''}>
+                  <span class="toggle-track"></span>
+                </label>
+              </div>
+            </div>
           </div>
-          <label class="toggle-switch">
-            <input type="checkbox" id="r-bestandscontrole" ${hasFileCheck ? 'checked' : ''}>
-            <span class="toggle-track"></span>
-          </label>
-        </div>
-      </div>
-    </div>
-  ` : ''}
+        ` : ''}
 
         ${persType ? `
           <div class="review-section" style="margin-top:16px">
@@ -140,7 +158,6 @@ function renderReviewPage() {
         <div class="review-section-title">Uw bestelling</div>
         <div class="review-section-body">
           ${designPreviewHTML}
-          ${uploadedPdfHTML}
 
           ${!design?.dataURL ? `
             <div class="order-summary-product">
@@ -203,7 +220,7 @@ function renderReviewPage() {
       <button class="btn btn-outline"
         type="button"
         onclick="navigateTo('${isLatOntwerpen ? 'wensen' : 'design'}')">← Terug</button>
-      <button class="btn btn-green" type="button" id="btn-bestellen">Bestellen →</button>
+      <button class="btn btn-green" type="button" id="btn-bestellen">Aanvraag versturen →</button>
     </div>
   `;
 
@@ -219,7 +236,7 @@ function renderReviewPage() {
     }
   });
 
-  ['r-naam', 'r-achternaam', 'r-email', 'r-tel', 'r-adres', 'r-kvk'].forEach(id => {
+  ['r-company', 'r-naam', 'r-achternaam', 'r-email', 'r-tel', 'r-straat', 'r-huisnummer', 'r-postcode', 'r-plaats', 'r-land', 'r-kvk', 'r-btw'].forEach(id => {
     document.getElementById(id)?.addEventListener('input', () => {
       Session.setKlant(collectKlant());
     });
@@ -236,10 +253,10 @@ function renderReviewPage() {
   document.getElementById('btn-bestellen')?.addEventListener('click', () => {
     const klant = collectKlant();
 
-    if (!klant.naam || !klant.email || !klant.adres) {
+    if (!klant.naam || !klant.email || !klant.straat || !klant.huisnummer || !klant.postcode || !klant.plaats) {
       document.getElementById('review-error').style.display = 'block';
 
-      ['r-naam', 'r-email', 'r-adres'].forEach(id => {
+      ['r-naam', 'r-email', 'r-straat', 'r-huisnummer', 'r-postcode', 'r-plaats'].forEach(id => {
         const field = document.getElementById(id);
 
         if (field) {
@@ -256,13 +273,31 @@ function renderReviewPage() {
 }
 
 function collectKlant() {
+  const straat = document.getElementById('r-straat')?.value.trim() || '';
+  const huisnummer = document.getElementById('r-huisnummer')?.value.trim() || '';
+  const postcode = document.getElementById('r-postcode')?.value.trim() || '';
+  const plaats = document.getElementById('r-plaats')?.value.trim() || '';
+  const land = document.getElementById('r-land')?.value.trim() || '';
+  const adres = [
+    [straat, huisnummer].filter(Boolean).join(' '),
+    [postcode, plaats].filter(Boolean).join(' '),
+    land,
+  ].filter(Boolean).join(', ');
+
   return {
+    companyName: document.getElementById('r-company')?.value.trim() || '',
     naam: document.getElementById('r-naam')?.value.trim() || '',
     achternaam: document.getElementById('r-achternaam')?.value.trim() || '',
     email: document.getElementById('r-email')?.value.trim() || '',
     telefoon: document.getElementById('r-tel')?.value.trim() || '',
-    adres: document.getElementById('r-adres')?.value.trim() || '',
+    straat,
+    huisnummer,
+    postcode,
+    plaats,
+    land,
+    adres,
     kvk: document.getElementById('r-kvk')?.value.trim() || '',
+    btw: document.getElementById('r-btw')?.value.trim() || '',
   };
 }
 
@@ -325,17 +360,21 @@ function buildOrder(product, options, design, wensen, klant, orderNumber, forced
   const hasFileCheck = finalOptions.addons?.includes('bestandscontrole');
   const persType = finalOptions.persType || null;
 
-  const uploadedDesignIsPdf = design?.dataURL?.startsWith('data:application/pdf');
-  const designPdfDataURL = design?.pdfDataURL || (uploadedDesignIsPdf ? design.dataURL : '');
-
   return {
     orderNumber,
     createdAt: new Date().toISOString(),
+    companyName: klant.companyName || '',
     customerName: `${klant.naam || ''} ${klant.achternaam || ''}`.trim(),
     customerEmail: klant.email || '',
     deliveryAddress: klant.adres || '',
+    addressStreet: klant.straat || '',
+    addressHouseNumber: klant.huisnummer || '',
+    addressPostalCode: klant.postcode || '',
+    addressCity: klant.plaats || '',
+    addressCountry: klant.land || '',
     telefoon: klant.telefoon || '',
     kvk: klant.kvk || '',
+    vatNumber: klant.btw || '',
     productId: product.id,
     productName: product.name,
     persTypeId: persType?.id || null,
@@ -344,14 +383,16 @@ function buildOrder(product, options, design, wensen, klant, orderNumber, forced
     quantity: pricing.quantity,
     unitPrice: pricing.unitPrice,
     designFile: design?.fileName || '',
-    designDataURL: uploadedDesignIsPdf ? '' : (design?.dataURL || ''),
-    designPdfDataURL,
+    designDataURL: design?.dataURL || '',
+    designPdfDataURL: design?.pdfDataURL || (design?.dataURL?.startsWith('data:application/pdf') ? design.dataURL : ''),
     wensen: wensen || null,
     quoteAmount: pricing.totalIncl,
     workType: isLatOntwerpen ? 'ontwerp' : (hasFileCheck ? 'bestandscheck' : null),
-    status: forcedStatus || (isLatOntwerpen ? 'wacht-op-ontwerp' : (hasFileCheck ? 'wacht-op-bestandscheck' : 'wacht-op-goedkeuring')),
+    status: forcedStatus || 'offerte-aanvraag',
     confirmationSent: false,
     deliveryDate: '',
+    shippingDate: '',
+    officialOrderNumber: '',
     notes: wensen?.opmerkingen || '',
     addons: finalOptions.addons || [],
   };
@@ -378,11 +419,11 @@ function renderConfirmPage(order, product, pricing) {
         </svg>
       </div>
 
-      <div class="confirm-number">Uw ordernummer</div>
+      <div class="confirm-number">Uw aanvraagnummer</div>
       <div class="confirm-num-value">${escHtml(order.orderNumber)}</div>
 
       <p class="confirm-text">
-        Bedankt voor uw bestelling. We hebben uw aanvraag ontvangen.<br><br>
+        Bedankt. We hebben uw offerteaanvraag ontvangen.<br><br>
         Een van onze medewerkers neemt zo snel mogelijk contact op via
         <strong>${escHtml(order.customerEmail)}</strong> om uw bestelling te bevestigen.<br><br>
         <em style="color:var(--text-3)">Geschatte offerte: ${formatEuro(pricing.totalIncl)} incl. BTW</em>
@@ -413,6 +454,14 @@ function renderConfirmPage(order, product, pricing) {
   Session.clear();
 }
 
+function clearStoredDesignData() {
+  Object.keys(localStorage)
+    .filter(key => key.startsWith('cot_design_state'))
+    .forEach(key => localStorage.removeItem(key));
+
+  sessionStorage.removeItem('cot_session');
+}
+
 function startNieuweOrder() {
   clearStoredDesignData();
 
@@ -425,19 +474,19 @@ function startNieuweOrder() {
   navigateTo('select');
 }
 
+function formatEuro(value) {
+  if (value === null || value === undefined || Number.isNaN(Number(value))) {
+    return '—';
+  }
+
+  return `€ ${Number(value).toFixed(2).replace('.', ',')}`;
+}
+
 function escHtml(value) {
   return String(value || '')
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;');
-}
-
-function clearStoredDesignData() {
-  Object.keys(localStorage)
-    .filter(key => key.startsWith('cot_design_state'))
-    .forEach(key => localStorage.removeItem(key));
-
-  sessionStorage.removeItem('cot_session');
 }
 
 window.startNieuweOrder = startNieuweOrder;

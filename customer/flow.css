@@ -1483,3 +1483,92 @@ body {
   min-height: 28px;
   transition: font-family 0.2s;
 }
+
+.font-select {
+  width: 100%;
+  height: 38px;
+  border: 1px solid var(--cream-border);
+  border-radius: var(--radius-sm);
+  background: #fff;
+  color: var(--text);
+  font-size: 13px;
+  padding: 0 10px;
+}
+
+.font-preview {
+  margin-top: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--cream-border);
+  border-radius: var(--radius-sm);
+  background: var(--cream);
+  font-size: 15px;
+  color: var(--text);
+}
+
+.prop-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.prop-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12px;
+  color: var(--text-2);
+}
+
+.prop-top label {
+  font-weight: 600;
+}
+
+.prop-top span {
+  color: var(--text-3);
+  font-size: 12px;
+}
+
+.prop-row input[type="range"] {
+  width: 100%;
+  accent-color: var(--green);
+}
+
+#font-size {
+  cursor: pointer;
+}
+
+#margin-warning {
+  z-index: 20;
+}
+
+.layer-item {
+  cursor: grab;
+  user-select: none;
+}
+
+.layer-item:active,
+.layer-item.dragging {
+  cursor: grabbing;
+}
+
+.layer-item.dragging {
+  opacity: .55;
+}
+
+.layer-item[draggable="true"] {
+  position: relative;
+}
+
+.layer-item[draggable="true"]::after {
+  content: "↕";
+  margin-left: auto;
+  color: var(--text-3);
+  font-size: 12px;
+}
+
+.product-preview-main img {
+  object-fit: contain;
+  background: #fff;
+}

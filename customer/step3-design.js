@@ -88,6 +88,15 @@ function renderDesignPage() {
           </div>
 
           <div class="side-section">
+  <div class="side-label">Lettergrootte</div>
+  <select id="font-size" class="font-select">
+    ${[8, 10, 12, 14, 16, 18, 20, 24, 28, 32, 36, 42, 48, 56, 64, 72, 84, 96].map(size => `
+      <option value="${size}" ${size === 20 ? 'selected' : ''}>${size} px</option>
+    `).join('')}
+  </select>
+</div>
+
+          <div class="side-section">
             <div class="side-label">Elementkleur</div>
             <div class="color-row" id="color-swatches"></div>
 
@@ -97,14 +106,6 @@ function renderDesignPage() {
                      id="custom-element-color"
                      class="custom-color-input"
                      value="${fabricActiveColor}">
-            </div>
-
-            <div class="prop-row">
-              <div class="prop-top">
-                <label for="opacity">Transparantie</label>
-                <span id="opacity-out">100%</span>
-              </div>
-              <input type="range" id="opacity" min="10" max="100" value="100" step="1">
             </div>
           </div>
 
@@ -346,10 +347,10 @@ function bindFontSelector(canvas, stateKey) {
     }
   });
 
-  canvas.on('selection:created', syncFontSelector);
-  canvas.on('selection:updated', syncFontSelector);
+  canvas.on('selection:created', syncFontControls);
+  canvas.on('selection:updated', syncFontControls);
 
-  function syncFontSelector() {
+  function syncFontControls() {
     const object = canvas.getActiveObject();
 
     if (object && object.type === 'i-text') {
@@ -363,8 +364,50 @@ function bindFontSelector(canvas, stateKey) {
       if (preview) {
         preview.style.fontFamily = currentFont;
       }
+
+      syncFontSizeControls(object);
     }
   }
+}
+
+function bindFontSizeControl(canvas, stateKey) {
+  const select = document.getElementById('font-size');
+
+  if (!select) {
+    return;
+  }
+
+  select.addEventListener('change', event => {
+    const value = parseInt(event.target.value, 10);
+    const object = canvas.getActiveObject();
+
+    if (object && object.type === 'i-text' && !isGuideObject(object)) {
+      object.set('fontSize', value);
+      canvas.renderAll();
+      fabricSaveHistory();
+      updateLayerPanel();
+      autoSaveCanvasState(stateKey);
+    }
+  });
+
+  canvas.on('selection:created', event => syncFontSizeControls(event.selected?.[0]));
+  canvas.on('selection:updated', event => syncFontSizeControls(event.selected?.[0]));
+}
+
+function syncFontSizeControls(object) {
+  const select = document.getElementById('font-size');
+
+  if (!select || !object || object.type !== 'i-text') {
+    return;
+  }
+
+  const fontSize = Math.round(object.fontSize || 20);
+  const availableSizes = [...select.options].map(option => Number(option.value));
+  const closestSize = availableSizes.reduce((closest, size) => {
+    return Math.abs(size - fontSize) < Math.abs(closest - fontSize) ? size : closest;
+  }, availableSizes[0]);
+
+  select.value = String(closestSize);
 }
 
 function getResponsiveCanvasSize(activePers, product) {
@@ -732,6 +775,7 @@ function setCanvasBackgroundColor(color, stateKey) {
     fabricCanvas.renderAll();
   }
 
+  redrawGuidesFromCurrentState();
   autoSaveCanvasState(stateKey);
 
   persistDesignState(stateKey, {
@@ -739,10 +783,14 @@ function setCanvasBackgroundColor(color, stateKey) {
   });
 }
 
-function drawMarginRect(canvas, margin, canvasWidth, canvasHeight) {
+function drawMarginRect(canvas, margin, canvasWidth, canvasHeight, isWarning = false) {
   canvas.getObjects()
     .filter(object => object._isMargin && !object._isBlockedZone)
     .forEach(object => canvas.remove(object));
+
+  const marginColor = isWarning
+    ? '#C0392B'
+    : getContrastingGuideColor(fabricBackgroundColor);
 
   const marginRect = new fabric.Rect({
     left: margin,
@@ -750,14 +798,19 @@ function drawMarginRect(canvas, margin, canvasWidth, canvasHeight) {
     width: Math.max(1, canvasWidth - margin * 2),
     height: Math.max(1, canvasHeight - margin * 2),
     fill: 'transparent',
-    stroke: 'rgba(255,255,255,0.75)',
-    strokeWidth: 1.5,
+    stroke: marginColor,
+    strokeWidth: isWarning ? 2.5 : 1.75,
     strokeDashArray: [6, 4],
     selectable: false,
     evented: false,
     excludeFromExport: true,
     _isMargin: true,
     _isGuide: true,
+    _guideMeta: {
+      margin,
+      canvasWidth,
+      canvasHeight,
+    },
   });
 
   canvas.add(marginRect);
@@ -828,16 +881,42 @@ function drawBlockedZones(canvas, activePers, product, canvasWidth, canvasHeight
   canvas.renderAll();
 }
 
-function redrawGuides(canvas, activePers, product, margin, canvasWidth, canvasHeight) {
+function redrawGuides(canvas, activePers, product, margin, canvasWidth, canvasHeight, isWarning = false) {
   if (!canvas) {
     return;
   }
 
   removeGuideObjects(canvas);
-  drawMarginRect(canvas, margin, canvasWidth, canvasHeight);
+  drawMarginRect(canvas, margin, canvasWidth, canvasHeight, isWarning);
   drawBlockedZones(canvas, activePers, product, canvasWidth, canvasHeight);
   bringGuidesToFront(canvas);
   canvas.renderAll();
+
+  window._currentDesignGuideState = {
+    activePers,
+    product,
+    margin,
+    canvasWidth,
+    canvasHeight,
+  };
+}
+
+function redrawGuidesFromCurrentState(isWarning = false) {
+  const state = window._currentDesignGuideState;
+
+  if (!fabricCanvas || !state) {
+    return;
+  }
+
+  redrawGuides(
+    fabricCanvas,
+    state.activePers,
+    state.product,
+    state.margin,
+    state.canvasWidth,
+    state.canvasHeight,
+    isWarning
+  );
 }
 
 function bringGuidesToFront(canvas) {
@@ -859,6 +938,37 @@ function removeGuideObjects(canvas) {
 
 function isGuideObject(object) {
   return Boolean(object?._isGuide || object?._isBlockedZone || object?._isMargin);
+}
+
+function getContrastingGuideColor(backgroundColor) {
+  const hex = normalizeHexColor(backgroundColor);
+
+  if (!hex) {
+    return '#2A2A22';
+  }
+
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  const brightness = (r * 299 + g * 587 + b * 114) / 1000;
+
+  return brightness > 170 ? '#2A2A22' : '#FFFFFF';
+}
+
+function normalizeHexColor(value) {
+  if (!value || typeof value !== 'string') {
+    return '';
+  }
+
+  if (/^#[0-9A-Fa-f]{6}$/.test(value)) {
+    return value;
+  }
+
+  if (/^#[0-9A-Fa-f]{3}$/.test(value)) {
+    return `#${value[1]}${value[1]}${value[2]}${value[2]}${value[3]}${value[3]}`;
+  }
+
+  return '';
 }
 
 function getBlockedCircleCanvasData(zone, activePers, product, canvasWidth, canvasHeight) {
@@ -982,12 +1092,14 @@ function bindFabricEvents(canvas, margin, canvasWidth, canvasHeight, stateKey, a
 
     const outsideOuterMargin = isOutsideMargin(object, margin, canvasWidth, canvasHeight);
     const overlapsBlockedZone = isObjectOverlappingBlockedZones(object, activePers, product, canvasWidth, canvasHeight);
+    const hasWarning = outsideOuterMargin || overlapsBlockedZone;
 
     warning.textContent = overlapsBlockedZone
       ? 'Object valt over uitsparing'
       : 'Object buiten marge';
 
-    warning.style.display = outsideOuterMargin || overlapsBlockedZone ? 'flex' : 'none';
+    warning.style.display = hasWarning ? 'flex' : 'none';
+    redrawGuides(canvas, activePers, product, margin, canvasWidth, canvasHeight, hasWarning);
   };
 
   canvas.on('object:moving', event => {
@@ -1024,11 +1136,13 @@ function bindFabricEvents(canvas, margin, canvasWidth, canvasHeight, stateKey, a
       warning.style.display = 'none';
     }
 
+    redrawGuides(canvas, activePers, product, margin, canvasWidth, canvasHeight);
     fabricSaveHistory();
     autoSaveCanvasState(stateKey);
   });
 
   canvas.on('object:modified', () => {
+    redrawGuides(canvas, activePers, product, margin, canvasWidth, canvasHeight);
     fabricSaveHistory();
     autoSaveCanvasState(stateKey);
   });
@@ -1103,26 +1217,7 @@ function bindFabricButtons(canvas, margin, canvasWidth, canvasHeight, stateKey, 
     canvas.setActiveObject(text);
     canvas.renderAll();
 
-    fabricSaveHistory();
-    updateLayerPanel();
-    autoSaveCanvasState(stateKey);
-  });
-
-  document.getElementById('opacity')?.addEventListener('input', event => {
-    const value = parseInt(event.target.value, 10);
-    const output = document.getElementById('opacity-out');
-
-    if (output) {
-      output.textContent = `${value}%`;
-    }
-
-    const object = canvas.getActiveObject();
-
-    if (object && !isGuideObject(object)) {
-      object.set('opacity', value / 100);
-      canvas.renderAll();
-    }
-
+    syncFontSizeControls(text);
     fabricSaveHistory();
     updateLayerPanel();
     autoSaveCanvasState(stateKey);
@@ -1190,6 +1285,8 @@ function bindFabricButtons(canvas, margin, canvasWidth, canvasHeight, stateKey, 
   });
 
   bindFontSelector(canvas, stateKey);
+  bindFontSizeControl(canvas, stateKey);
+  bindLayerDragAndDrop(canvas, stateKey);
 }
 
 function isOutsideMargin(object, margin, canvasWidth, canvasHeight) {
@@ -1269,6 +1366,8 @@ function updateLayerPanel() {
     .forEach((object, index) => {
       const item = document.createElement('div');
       item.className = 'layer-item';
+      item.draggable = true;
+      item.dataset.objectId = getFabricObjectId(object);
       item.textContent = object.type === 'i-text'
         ? `${index + 1}. Tekst: "${object.text}"`
         : `${index + 1}. Afbeelding`;
@@ -1284,6 +1383,93 @@ function updateLayerPanel() {
 
       panel.appendChild(item);
     });
+}
+
+function bindLayerDragAndDrop(canvas, stateKey) {
+  const panel = document.getElementById('layer-list');
+
+  if (!panel) {
+    return;
+  }
+
+  panel.addEventListener('dragstart', event => {
+    const item = event.target.closest('.layer-item');
+
+    if (!item) {
+      return;
+    }
+
+    event.dataTransfer.setData('text/plain', item.dataset.objectId);
+    item.classList.add('dragging');
+  });
+
+  panel.addEventListener('dragend', event => {
+    event.target.closest('.layer-item')?.classList.remove('dragging');
+  });
+
+  panel.addEventListener('dragover', event => {
+    event.preventDefault();
+  });
+
+  panel.addEventListener('drop', event => {
+    event.preventDefault();
+
+    const draggedId = event.dataTransfer.getData('text/plain');
+    const targetItem = event.target.closest('.layer-item');
+
+    if (!draggedId || !targetItem) {
+      return;
+    }
+
+    const targetId = targetItem.dataset.objectId;
+
+    if (draggedId === targetId) {
+      return;
+    }
+
+    reorderCanvasObjectsFromLayerDrop(canvas, draggedId, targetId);
+    fabricSaveHistory();
+    autoSaveCanvasState(stateKey);
+    updateLayerPanel();
+  });
+}
+
+function reorderCanvasObjectsFromLayerDrop(canvas, draggedId, targetId) {
+  const designObjects = canvas.getObjects().filter(object => !isGuideObject(object));
+  const draggedObject = designObjects.find(object => getFabricObjectId(object) === draggedId);
+  const targetObject = designObjects.find(object => getFabricObjectId(object) === targetId);
+
+  if (!draggedObject || !targetObject) {
+    return;
+  }
+
+  const currentObjects = canvas.getObjects();
+  const guides = currentObjects.filter(object => isGuideObject(object));
+  const editableObjects = currentObjects.filter(object => !isGuideObject(object));
+
+  const fromIndex = editableObjects.indexOf(draggedObject);
+  const toIndex = editableObjects.indexOf(targetObject);
+
+  if (fromIndex === -1 || toIndex === -1) {
+    return;
+  }
+
+  editableObjects.splice(fromIndex, 1);
+  editableObjects.splice(toIndex, 0, draggedObject);
+
+  canvas.clear();
+  editableObjects.forEach(object => canvas.add(object));
+  guides.forEach(object => canvas.add(object));
+  bringGuidesToFront(canvas);
+  canvas.renderAll();
+}
+
+function getFabricObjectId(object) {
+  if (!object._layerId) {
+    object._layerId = `layer-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+  }
+
+  return object._layerId;
 }
 
 function applyToSelected(property, value) {
@@ -1309,7 +1495,7 @@ function fabricSaveHistory() {
     object.visible = false;
   });
 
-  const json = JSON.stringify(fabricCanvas.toJSON());
+  const json = JSON.stringify(fabricCanvas.toJSON(['_layerId']));
 
   guideObjects.forEach(object => {
     object.visible = true;
@@ -1350,7 +1536,7 @@ function snapshotCanvas(canvas, product, activePers) {
 
   canvas.renderAll();
 
-  const json = JSON.stringify(canvas.toJSON());
+  const json = JSON.stringify(canvas.toJSON(['_layerId']));
   const backgroundColor = canvas.backgroundColor || fabricBackgroundColor;
 
   const pdfDataURL = generatePrintPDF(
@@ -1425,7 +1611,7 @@ function autoSaveCanvasState(stateKey) {
     object.visible = false;
   });
 
-  const json = JSON.stringify(fabricCanvas.toJSON());
+  const json = JSON.stringify(fabricCanvas.toJSON(['_layerId']));
 
   guideObjects.forEach(object => {
     object.visible = true;

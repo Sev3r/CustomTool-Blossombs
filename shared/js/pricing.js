@@ -12,28 +12,6 @@ function getPriceSlabsForPersonalisation(product, persTypeOrOptions = null) {
         return persType.priceSlabs;
     }
 
-    if (
-        persType?.id &&
-        Array.isArray(product?.personalisatieTypes)
-    ) {
-        const matchedPersType = product.personalisatieTypes.find(item => item.id === persType.id);
-
-        if (Array.isArray(matchedPersType?.priceSlabs) && matchedPersType.priceSlabs.length > 0) {
-            return matchedPersType.priceSlabs;
-        }
-    }
-
-    if (
-        persTypeOrOptions?.persTypeId &&
-        Array.isArray(product?.personalisatieTypes)
-    ) {
-        const matchedPersType = product.personalisatieTypes.find(item => item.id === persTypeOrOptions.persTypeId);
-
-        if (Array.isArray(matchedPersType?.priceSlabs) && matchedPersType.priceSlabs.length > 0) {
-            return matchedPersType.priceSlabs;
-        }
-    }
-
     return Array.isArray(product?.priceSlabs) ? product.priceSlabs : [];
 }
 
@@ -52,10 +30,19 @@ function getPriceForQty(product, quantity, persTypeOrOptions = null) {
 
     const slab = priceSlabs.find(priceSlab =>
         qty >= Number(priceSlab.from || 0) &&
-        (priceSlab.to === null || qty <= Number(priceSlab.to))
+        (
+            priceSlab.to === null ||
+            priceSlab.to === undefined ||
+            priceSlab.to === '' ||
+            qty <= Number(priceSlab.to)
+        )
     );
 
-    return slab ? Number(slab.price || 0) : null;
+    return slab ? Number(priceSlabPrice(slab)) : null;
+}
+
+function priceSlabPrice(slab) {
+    return slab.price ?? slab.unitPrice ?? 0;
 }
 
 function calculateOrderPricing(product, options = {}) {

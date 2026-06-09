@@ -5,6 +5,9 @@
  * Template-download komt automatisch overeen met gekozen personalisatie.
  * Kostenoverzicht gebruikt centrale Pricing helper.
  * Conceptofferte PDF gebruikt gedeelde generateOffertePDF functie.
+ *
+ * Image fix:
+ * Ondersteunt zowel oude image paden als admin uploads via *.File.dataURL.
  */
 
 const FIXED_QUANTITIES = [50, 100, 250, 500, 1000];
@@ -33,15 +36,12 @@ function renderOptionsPage() {
     <h1 class="page-title">${escHtml(product.name)}</h1>
 
     <div class="options-layout">
-
       <div>
         <div class="product-preview-main" id="preview-main"
              style="${activePers?.clipShape ? 'overflow:hidden' : ''}">
-         ${previewSrc
+          ${previewSrc
       ? `<img id="preview-main-img" src="${escHtml(previewSrc)}" alt="Preview"
-             style="${activePers?.clipShape
-        ? `clip-path:${escHtml(activePers.clipShape)};width:100%;height:100%;object-fit:contain`
-        : 'width:100%;height:100%;object-fit:contain'}">`
+                 style="width:100%;height:100%;object-fit:contain;background:#fff;${activePers?.clipShape ? `clip-path:${escHtml(activePers.clipShape)}` : ''}">`
       : `<span class="product-card-placeholder">Product</span>`}
         </div>
 
@@ -132,18 +132,18 @@ function renderOptionsPage() {
         </div>
 
         ${designChoice === 'eigen-ontwerp' ? `
-  <div class="toggle-option addon ${addons.includes('bestandscontrole') ? 'active' : ''}"
-       data-addon="bestandscontrole">
-    <div class="toggle-option-left">
-      <span class="toggle-option-label">Bestandscontrole</span>
-      <span class="toggle-option-price">+ ${formatEuro(15)}</span>
-    </div>
-    <label class="toggle-switch" onclick="event.stopPropagation()">
-      <input type="checkbox" ${addons.includes('bestandscontrole') ? 'checked' : ''}>
-      <span class="toggle-track"></span>
-    </label>
-  </div>
-` : ''}
+          <div class="toggle-option addon ${addons.includes('bestandscontrole') ? 'active' : ''}"
+               data-addon="bestandscontrole">
+            <div class="toggle-option-left">
+              <span class="toggle-option-label">Bestandscontrole</span>
+              <span class="toggle-option-price">+ ${formatEuro(15)}</span>
+            </div>
+            <label class="toggle-switch" onclick="event.stopPropagation()">
+              <input type="checkbox" ${addons.includes('bestandscontrole') ? 'checked' : ''}>
+              <span class="toggle-track"></span>
+            </label>
+          </div>
+        ` : ''}
 
         ${renderOptionsCostSummary(product, initialOptions)}
 
@@ -176,7 +176,7 @@ function getProductPersonalisationTypes(product) {
   return [{
     id: 'standaard',
     label: 'Standaard',
-    previewImage: product.imagePersonalize1 || product.imageProduct || '',
+    previewImage: product.imagePersonalize1 || getProductImageSrc(product),
     width_mm: product.width_mm || null,
     height_mm: product.height_mm || null,
     margin_mm: product.margin_mm || null,
@@ -205,20 +205,25 @@ function bindPersonalisationTabs(el, product, persTypes) {
 
       updatePreviewForPersonalisation(newPers);
       updateTemplateDownloadForPersonalisation(el, newPers);
-      updatePriceTableForPersonalisation(el, product, newPers);
       saveOptions(el, product, persTypes);
+      renderOptionsPage();
     });
   });
 }
 
 function updatePreviewForPersonalisation(persType) {
-  const mainImg = document.getElementById('preview-main-img');
   const mainDiv = document.getElementById('preview-main');
+  let mainImg = document.getElementById('preview-main-img');
   const product = Session.getProduct();
   const imageSrc = getPersonalisationImageSrc(persType, product);
 
   if (mainDiv) {
     mainDiv.style.overflow = persType?.clipShape ? 'hidden' : '';
+  }
+
+  if (!mainImg && mainDiv && imageSrc) {
+    mainDiv.innerHTML = `<img id="preview-main-img" src="${escHtml(imageSrc)}" alt="Preview">`;
+    mainImg = document.getElementById('preview-main-img');
   }
 
   if (!mainImg) {
@@ -229,47 +234,11 @@ function updatePreviewForPersonalisation(persType) {
     mainImg.src = imageSrc;
   }
 
-  if (persType?.clipShape) {
-    mainImg.style.clipPath = persType.clipShape;
-    mainImg.style.width = '100%';
-    mainImg.style.height = '100%';
-    mainImg.style.objectFit = 'contain';
-  } else {
-    mainImg.style.clipPath = '';
-    mainImg.style.width = '100%';
-    mainImg.style.height = '100%';
-    mainImg.style.objectFit = 'contain';
-  }
-}
-
-function updatePriceTableForPersonalisation(el, product, persType) {
-  const selectedRow = el.querySelector('.staffel-table tbody tr.highlighted');
-  const customQty = document.getElementById('qty-custom')?.value || '';
-  const selectedQty = selectedRow
-    ? parseInt(selectedRow.dataset.qty, 10)
-    : customQty
-      ? parseInt(customQty, 10)
-      : null;
-
-  const tbody = el.querySelector('.staffel-table tbody');
-
-  if (!tbody) {
-    return;
-  }
-
-  tbody.innerHTML = FIXED_QUANTITIES.map(qty => {
-    const price = getPriceForQty(product, qty, persType);
-    const isActive = selectedQty === qty;
-
-    return `
-      <tr class="${isActive ? 'highlighted' : ''}" data-qty="${qty}">
-        <td>${qty}</td>
-        <td>${price !== null ? formatEuro(price) : '—'}</td>
-      </tr>
-    `;
-  }).join('');
-
-  bindQuantitySelection(el, product, getProductPersonalisationTypes(product));
+  mainImg.style.width = '100%';
+  mainImg.style.height = '100%';
+  mainImg.style.objectFit = 'contain';
+  mainImg.style.background = '#fff';
+  mainImg.style.clipPath = persType?.clipShape || '';
 }
 
 function updateTemplateDownloadForPersonalisation(el, persType) {
@@ -428,6 +397,7 @@ function bindOptionsPdfButton(el, product, persTypes) {
       status: 'concept',
       confirmationSent: false,
       deliveryDate: '',
+      shippingDate: '',
       notes: '',
       addons: options.addons || [],
     };
@@ -475,7 +445,6 @@ function collectOptions(el, product, persTypes) {
   const designChoice = el.querySelector('input[name="design-choice"]:checked')?.value || 'laat-ontwerpen';
 
   const addons = [];
-
   if (designChoice === 'eigen-ontwerp') {
     el.querySelectorAll('.toggle-option[data-addon].active').forEach(option => {
       addons.push(option.dataset.addon);
@@ -567,16 +536,24 @@ function refreshOptionsCostSummary(el, product, persTypes) {
   bindOptionsPdfButton(el, product, persTypes);
 }
 
+function getPersonalisationImageSrc(persType, product) {
+  return persType?.previewImageFile?.dataURL ||
+    persType?.previewImage ||
+    getProductImageSrc(product);
+}
+
+function getProductImageSrc(product) {
+  return product?.imageProductFile?.dataURL || product?.imageProduct || '';
+}
+
 function getPriceForQty(product, qty, persType = null) {
   if (window.Pricing?.getPriceForQty) {
     return Pricing.getPriceForQty(product, qty, persType);
   }
 
-  const priceSlabs = Array.isArray(persType?.priceSlabs) && persType.priceSlabs.length > 0
+  const priceSlabs = Array.isArray(persType?.priceSlabs) && persType.priceSlabs.length
     ? persType.priceSlabs
-    : Array.isArray(product.priceSlabs)
-      ? product.priceSlabs
-      : [];
+    : product.priceSlabs || [];
 
   if (!priceSlabs.length) {
     return null;
@@ -584,10 +561,10 @@ function getPriceForQty(product, qty, persType = null) {
 
   const slab = priceSlabs.find(priceSlab =>
     qty >= Number(priceSlab.from || 0) &&
-    (priceSlab.to === null || qty <= Number(priceSlab.to))
+    (priceSlab.to === null || priceSlab.to === undefined || qty <= Number(priceSlab.to))
   );
 
-  return slab ? Number(slab.price || 0) : null;
+  return slab ? Number(slab.price) : null;
 }
 
 function downloadDataFile(dataURL, fileName) {
@@ -601,18 +578,6 @@ function downloadDataFile(dataURL, fileName) {
   document.body.appendChild(link);
   link.click();
   link.remove();
-}
-
-function getPersonalisationImageSrc(persType, product) {
-  return persType?.previewImageFile?.dataURL ||
-    persType?.previewImage ||
-    product?.imageProductFile?.dataURL ||
-    product?.imageProduct ||
-    '';
-}
-
-function getProductImageSrc(product) {
-  return product?.imageProductFile?.dataURL || product?.imageProduct || '';
 }
 
 function formatEuro(value) {
