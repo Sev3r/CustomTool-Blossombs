@@ -1,7 +1,8 @@
 /**
  * orders.js
  * Orders overzicht en orderdetails.
- * Ondersteunt offertefase, verzenddatum, zakelijke klantgegevens en handmatige bestandsupload.
+ * Klik op een orderregel opent eerst een alleen lezen orderoverzicht.
+ * Bewerken is pas mogelijk via de knop in de overzichtsmodal of via het potlood.
  */
 
 let orderSort = { field: 'createdAt', dir: 'desc' };
@@ -189,7 +190,7 @@ function renderOrdersTable() {
       : order.customerEmail || '';
 
     const fileButtons = hasFiles
-      ? `<button class="icon-btn" type="button" onclick="viewOrderFiles('${order.id}')" title="Bestanden bekijken">${iconImage()}</button>`
+      ? `<button class="icon-btn js-order-files" type="button" data-order-id="${escHtml(order.id)}" title="Bestanden bekijken">${iconImage()}</button>`
       : '—';
 
     const toggleHTML = order.confirmationSent
@@ -198,12 +199,12 @@ function renderOrdersTable() {
            <span class="toggle-slider"></span>
          </label>`
       : `<label class="toggle" title="Markeer als verstuurd">
-           <input type="checkbox" onchange="toggleOrderConfirmation('${order.id}', this.checked)">
+           <input class="js-order-confirmation" type="checkbox" data-order-id="${escHtml(order.id)}">
            <span class="toggle-slider"></span>
          </label>`;
 
     return `
-      <tr>
+      <tr class="order-row" data-order-id="${escHtml(order.id)}">
         <td class="mono">${escHtml(order.orderNumber)}</td>
         <td>${formatDate(order.createdAt)}</td>
         <td>
@@ -221,14 +222,60 @@ function renderOrdersTable() {
         <td>${toggleHTML}</td>
         <td>${fileButtons}</td>
         <td class="td-actions">
-          <button class="icon-btn" type="button" onclick="openOrderModal('${order.id}')" title="Bewerken">${iconPen()}</button>
-          <button class="icon-btn danger" type="button" onclick="deleteOrderById('${order.id}')" title="Verwijderen">${iconTrash()}</button>
+          <button class="icon-btn js-order-edit" type="button" data-order-id="${escHtml(order.id)}" title="Bewerken">${iconPen()}</button>
+          <button class="icon-btn danger js-order-delete" type="button" data-order-id="${escHtml(order.id)}" title="Verwijderen">${iconTrash()}</button>
         </td>
       </tr>
     `;
   }).join('');
 
   wrap.innerHTML = `<table><thead><tr>${headerHTML}</tr></thead><tbody>${rowsHTML}</tbody></table>`;
+
+  wrap.querySelectorAll('.order-row').forEach(row => {
+    row.addEventListener('click', event => {
+      if (event.target.closest('button, input, label, a, select')) {
+        return;
+      }
+
+      const orderId = row.dataset.orderId;
+
+      if (orderId) {
+        openOrderOverview(orderId);
+      }
+    });
+  });
+
+  wrap.querySelectorAll('.js-order-edit').forEach(button => {
+    button.addEventListener('click', event => {
+      event.stopPropagation();
+      openOrderModal(button.dataset.orderId);
+    });
+  });
+
+  wrap.querySelectorAll('.js-order-delete').forEach(button => {
+    button.addEventListener('click', event => {
+      event.stopPropagation();
+      deleteOrderById(button.dataset.orderId);
+    });
+  });
+
+  wrap.querySelectorAll('.js-order-files').forEach(button => {
+    button.addEventListener('click', event => {
+      event.stopPropagation();
+      viewOrderFiles(button.dataset.orderId);
+    });
+  });
+
+  wrap.querySelectorAll('.js-order-confirmation').forEach(input => {
+    input.addEventListener('click', event => {
+      event.stopPropagation();
+    });
+
+    input.addEventListener('change', event => {
+      event.stopPropagation();
+      toggleOrderConfirmation(input.dataset.orderId, input.checked);
+    });
+  });
 
   wrap.querySelectorAll('th[data-sort]').forEach(header => {
     header.addEventListener('click', () => {
@@ -241,6 +288,240 @@ function renderOrdersTable() {
       renderOrdersTable();
     });
   });
+}
+
+function openOrderOverview(id) {
+  const order = DS.getOrderById(id);
+
+  if (!order) {
+    AdminUI.showToast('Order niet gevonden', 'error');
+    return;
+  }
+
+  const shipDate = getOrderShipDate(order);
+  const address = formatOrderAddress(order);
+  const pdfAvailable = Boolean(getOrderPdfDataURL(order));
+  const hasImagePreview = Boolean(order.designDataURL && order.designDataURL.startsWith('data:image'));
+
+  const body = `
+    <div class="order-overview">
+      <div class="section-title">Aanvraag</div>
+
+      <div class="overview-grid">
+        <div class="overview-item">
+          <span class="overview-label">Aanvraagnummer</span>
+          <span class="overview-value mono">${escHtml(order.orderNumber || '—')}</span>
+        </div>
+
+        <div class="overview-item">
+          <span class="overview-label">Officieel ordernummer</span>
+          <span class="overview-value mono">${escHtml(order.officialOrderNumber || 'Nog niet ingevuld')}</span>
+        </div>
+
+        <div class="overview-item">
+          <span class="overview-label">Aanvraagdatum</span>
+          <span class="overview-value">${formatDate(order.createdAt)}</span>
+        </div>
+
+        <div class="overview-item">
+          <span class="overview-label">Verzenddatum</span>
+          <span class="overview-value">${formatDate(shipDate)}</span>
+        </div>
+
+        <div class="overview-item">
+          <span class="overview-label">Status</span>
+          <span class="overview-value">${orderStatusBadge(order.status)}</span>
+        </div>
+
+        <div class="overview-item">
+          <span class="overview-label">Orderbevestiging</span>
+          <span class="overview-value">${order.confirmationSent ? 'Verstuurd' : 'Nog niet verstuurd'}</span>
+        </div>
+      </div>
+
+      <div class="section-title" style="margin-top:18px">Klantgegevens</div>
+
+      <div class="overview-grid">
+        <div class="overview-item">
+          <span class="overview-label">Bedrijfsnaam</span>
+          <span class="overview-value">${escHtml(order.companyName || '—')}</span>
+        </div>
+
+        <div class="overview-item">
+          <span class="overview-label">Contactpersoon</span>
+          <span class="overview-value">${escHtml(order.customerName || '—')}</span>
+        </div>
+
+        <div class="overview-item">
+          <span class="overview-label">E-mail</span>
+          <span class="overview-value">${escHtml(order.customerEmail || '—')}</span>
+        </div>
+
+        <div class="overview-item">
+          <span class="overview-label">Telefoon</span>
+          <span class="overview-value">${escHtml(order.telefoon || order.phone || '—')}</span>
+        </div>
+
+        <div class="overview-item">
+          <span class="overview-label">BTW-nummer</span>
+          <span class="overview-value">${escHtml(order.vatNumber || order.btwNumber || '—')}</span>
+        </div>
+
+        <div class="overview-item">
+          <span class="overview-label">KVK-nummer</span>
+          <span class="overview-value">${escHtml(order.kvk || '—')}</span>
+        </div>
+
+        <div class="overview-item overview-wide">
+          <span class="overview-label">Adres</span>
+          <span class="overview-value">${escHtml(address || '—')}</span>
+        </div>
+      </div>
+
+      <div class="section-title" style="margin-top:18px">Product en prijs</div>
+
+      <div class="overview-grid">
+        <div class="overview-item">
+          <span class="overview-label">Product</span>
+          <span class="overview-value">${escHtml(order.productName || '—')}</span>
+        </div>
+
+        <div class="overview-item">
+          <span class="overview-label">Aantal</span>
+          <span class="overview-value">${order.quantity || '—'}</span>
+        </div>
+
+        <div class="overview-item">
+          <span class="overview-label">Personalisatie</span>
+          <span class="overview-value">${escHtml(order.persTypeLabel || '—')}</span>
+        </div>
+
+        <div class="overview-item">
+          <span class="overview-label">Afmetingen</span>
+          <span class="overview-value">${escHtml(order.persTypeDims || '—')}</span>
+        </div>
+
+        <div class="overview-item">
+          <span class="overview-label">Stukprijs</span>
+          <span class="overview-value">${formatEuro(order.unitPrice)}</span>
+        </div>
+
+        <div class="overview-item">
+          <span class="overview-label">Offertebedrag</span>
+          <span class="overview-value">${formatEuro(order.quoteAmount)}</span>
+        </div>
+
+        <div class="overview-item">
+          <span class="overview-label">Werktype</span>
+          <span class="overview-value">${formatWorkType(order.workType)}</span>
+        </div>
+
+        <div class="overview-item">
+          <span class="overview-label">Extra opties</span>
+          <span class="overview-value">${formatAddons(order.addons)}</span>
+        </div>
+      </div>
+
+      ${renderOrderWensenOverview(order)}
+
+      <div class="section-title" style="margin-top:18px">Bestanden</div>
+
+      <div class="overview-grid">
+        <div class="overview-item">
+          <span class="overview-label">Bestandsnaam</span>
+          <span class="overview-value">${escHtml(order.designFile || '—')}</span>
+        </div>
+
+        <div class="overview-item">
+          <span class="overview-label">Drukbestand PDF</span>
+          <span class="overview-value">${pdfAvailable ? 'Beschikbaar' : 'Niet beschikbaar'}</span>
+        </div>
+
+        ${hasImagePreview ? `
+          <div class="overview-item overview-wide">
+            <span class="overview-label">Ontwerp preview</span>
+            <span class="overview-value">
+              <span class="overview-file-preview">
+                <img src="${order.designDataURL}" alt="Ontwerp preview">
+              </span>
+            </span>
+          </div>
+        ` : ''}
+      </div>
+
+      <div class="section-title" style="margin-top:18px">Interne notities</div>
+
+      <div class="overview-grid">
+        <div class="overview-item overview-wide">
+          <span class="overview-label">Notities</span>
+          <span class="overview-value">${escHtml(order.notes || '—')}</span>
+        </div>
+      </div>
+    </div>
+  `;
+
+  const footer = `
+  <button class="btn btn-secondary" type="button" onclick="AdminUI.closeModal()">Sluiten</button>
+  <button class="btn btn-secondary" type="button" onclick="generateOrderPDF('${order.id}')">Download offerte PDF</button>
+  ${hasOrderFiles(order) ? `<button class="btn btn-secondary" type="button" onclick="viewOrderFiles('${order.id}')">Bestanden bekijken</button>` : ''}
+  ${pdfAvailable ? `<button class="btn btn-secondary" type="button" onclick="downloadPrintPDF('${order.id}')">Download drukbestand PDF</button>` : ''}
+  <button class="btn btn-primary" type="button" onclick="openOrderModal('${order.id}')">Aanpassen</button>
+`;
+
+  AdminUI.openModal({
+    title: `Orderoverzicht — ${order.orderNumber || 'aanvraag'}`,
+    body,
+    footer,
+  });
+}
+
+function renderOrderWensenOverview(order) {
+  const wensen = order.wensen || {};
+
+  if (!order.wensen && !order.notes) {
+    return '';
+  }
+
+  return `
+    <div class="section-title" style="margin-top:18px">Wensen</div>
+
+    <div class="overview-grid">
+      ${wensen.tekst ? `
+        <div class="overview-item overview-wide">
+          <span class="overview-label">Gewenste tekst</span>
+          <span class="overview-value">${escHtml(wensen.tekst)}</span>
+        </div>
+      ` : ''}
+
+      ${wensen.kleur ? `
+        <div class="overview-item">
+          <span class="overview-label">Kleurvoorkeur</span>
+          <span class="overview-value">${escHtml(wensen.kleur)}</span>
+        </div>
+      ` : ''}
+
+      ${wensen.stijl ? `
+        <div class="overview-item">
+          <span class="overview-label">Stijlvoorkeur</span>
+          <span class="overview-value">${escHtml(wensen.stijl)}</span>
+        </div>
+      ` : ''}
+
+      ${wensen.opmerkingen ? `
+        <div class="overview-item overview-wide">
+          <span class="overview-label">Aanvullende opmerkingen</span>
+          <span class="overview-value">${escHtml(wensen.opmerkingen)}</span>
+        </div>
+      ` : ''}
+
+      ${wensen.refFileName ? `
+        <div class="overview-item">
+          <span class="overview-label">Referentiebestand</span>
+          <span class="overview-value">${escHtml(wensen.refFileName)}</span>
+        </div>
+      ` : ''}
+    </div>
+  `;
 }
 
 function hasOrderFiles(order) {
@@ -403,8 +684,7 @@ function downloadPrintPDF(id) {
     return;
   }
 
-  const pdfDataURL = order.designPdfDataURL ||
-    (order.designDataURL && order.designDataURL.startsWith('data:application/pdf') ? order.designDataURL : '');
+  const pdfDataURL = getOrderPdfDataURL(order);
 
   if (!pdfDataURL) {
     AdminUI.showToast('Geen drukbestand PDF beschikbaar', 'error');
@@ -517,31 +797,31 @@ function openOrderModal(id = null) {
     <div class="form-row">
       <div class="form-group">
         <label>Straat</label>
-        <input type="text" id="of-street" value="${escHtml(order.street || '')}" placeholder="Straatnaam">
+        <input type="text" id="of-street" value="${escHtml(order.street || order.addressStreet || '')}" placeholder="Straatnaam">
       </div>
 
       <div class="form-group">
         <label>Huisnummer</label>
-        <input type="text" id="of-house-number" value="${escHtml(order.houseNumber || '')}" placeholder="12A">
+        <input type="text" id="of-house-number" value="${escHtml(order.houseNumber || order.addressHouseNumber || '')}" placeholder="12A">
       </div>
     </div>
 
     <div class="form-row">
       <div class="form-group">
         <label>Postcode</label>
-        <input type="text" id="of-postal-code" value="${escHtml(order.postalCode || '')}" placeholder="1234 AB">
+        <input type="text" id="of-postal-code" value="${escHtml(order.postalCode || order.addressPostalCode || '')}" placeholder="1234 AB">
       </div>
 
       <div class="form-group">
         <label>Plaats</label>
-        <input type="text" id="of-city" value="${escHtml(order.city || '')}" placeholder="Breda">
+        <input type="text" id="of-city" value="${escHtml(order.city || order.addressCity || '')}" placeholder="Breda">
       </div>
     </div>
 
     <div class="form-row-1">
       <div class="form-group">
         <label>Land</label>
-        <input type="text" id="of-country" value="${escHtml(order.country || '')}" placeholder="Nederland">
+        <input type="text" id="of-country" value="${escHtml(order.country || order.addressCountry || '')}" placeholder="Nederland">
       </div>
     </div>
 
@@ -631,14 +911,15 @@ function openOrderModal(id = null) {
   `;
 
   const footer = `
-    ${isEdit ? `<button class="btn btn-secondary" type="button" onclick="generateOrderPDF('${order.id}')">Download offerte PDF</button>` : ''}
-    ${isEdit && getOrderPdfDataURL(order) ? `<button class="btn btn-secondary" type="button" onclick="downloadPrintPDF('${order.id}')">Download drukbestand PDF</button>` : ''}
-    <button class="btn btn-secondary" type="button" onclick="AdminUI.closeModal()">Annuleren</button>
-    <button class="btn btn-primary" type="button" id="btn-order-save">Opslaan</button>
-  `;
+  <button class="btn btn-secondary" type="button" onclick="AdminUI.closeModal()">Sluiten</button>
+  <button class="btn btn-secondary" type="button" onclick="generateOrderPDF('${order.id}')">Download offerte PDF</button>
+  ${hasOrderFiles(order) ? `<button class="btn btn-secondary" type="button" onclick="viewOrderFiles('${order.id}')">Bestanden bekijken</button>` : ''}
+  ${pdfAvailable ? `<button class="btn btn-secondary" type="button" onclick="downloadPrintPDF('${order.id}')">Download drukbestand PDF</button>` : ''}
+  <button class="btn btn-primary" type="button" onclick="openOrderModal('${order.id}')">Aanpassen</button>
+`;
 
   AdminUI.openModal({
-    title: isEdit ? 'Order bewerken' : 'Nieuwe order',
+    title: isEdit ? 'Order aanpassen' : 'Nieuwe order',
     body,
     footer,
   });
@@ -689,6 +970,11 @@ function openOrderModal(id = null) {
       postalCode,
       city,
       country,
+      addressStreet: street,
+      addressHouseNumber: houseNumber,
+      addressPostalCode: postalCode,
+      addressCity: city,
+      addressCountry: country,
       deliveryAddress,
       productId,
       productName,
@@ -780,6 +1066,37 @@ function formatStructuredAddress({ street, houseNumber, postalCode, city, countr
     [postalCode, city].filter(Boolean).join(' '),
     country,
   ].filter(Boolean).join(', ');
+}
+
+function formatOrderAddress(order) {
+  const street = order.street || order.addressStreet || '';
+  const houseNumber = order.houseNumber || order.addressHouseNumber || '';
+  const postalCode = order.postalCode || order.addressPostalCode || '';
+  const city = order.city || order.addressCity || '';
+  const country = order.country || order.addressCountry || '';
+
+  return formatStructuredAddress({ street, houseNumber, postalCode, city, country }) || order.deliveryAddress || '';
+}
+
+function formatAddons(addons) {
+  if (!Array.isArray(addons) || !addons.length) {
+    return '—';
+  }
+
+  const labels = {
+    bestandscontrole: 'Bestandscontrole',
+  };
+
+  return addons.map(addon => labels[addon] || addon).join(', ');
+}
+
+function formatWorkType(workType) {
+  const labels = {
+    ontwerp: 'Ontwerp nodig',
+    bestandscheck: 'Bestandscheck',
+  };
+
+  return labels[workType] || 'Geen intern werk';
 }
 
 function formatDateInput(value) {
@@ -883,3 +1200,4 @@ window.downloadPrintPDF = downloadPrintPDF;
 window.generateOrderPDF = generateOrderPDF;
 window.toggleOrderConfirmation = toggleOrderConfirmation;
 window.openOrderModal = openOrderModal;
+window.openOrderOverview = openOrderOverview;

@@ -84,8 +84,6 @@ function renderDesignPage() {
                 <option value="${font.value}" style="font-family:${font.value}">${font.label}</option>
               `).join('')}
             </select>
-            <div id="font-preview" class="font-preview">Voorbeeld tekst</div>
-          </div>
 
           <div class="side-section">
   <div class="side-label">Lettergrootte</div>
@@ -121,10 +119,6 @@ function renderDesignPage() {
                        class="custom-color-input"
                        value="${fabricBackgroundColor}">
               </div>
-
-              <span class="form-hint">
-                Deze kleur wordt meegenomen in het drukbestand.
-              </span>
             </div>
           ` : ''}
         </aside>
