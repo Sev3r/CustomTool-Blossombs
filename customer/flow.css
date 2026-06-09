@@ -1572,3 +1572,19 @@ body {
   object-fit: contain;
   background: #fff;
 }
+
+.progress-step.disabled {
+  opacity: .35;
+  cursor: not-allowed;
+}
+
+.progress-step.disabled .step-circle {
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.step-circle {
+  appearance: none;
+  border: none;
+  font: inherit;
+}
