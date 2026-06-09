@@ -1,7 +1,8 @@
 /**
  * flow.js
  * SPA router + klikbare progress bar
- * Punt 1: progressbar + sessie volledig gereset na afronding bestelling
+ * Progressbar + sessie volledig gereset na afronding bestelling.
+ * Stap 3 Ontwerp wordt geblokkeerd wanneer gekozen is voor Laat ons ontwerpen.
  */
 
 const STEPS = [
@@ -15,71 +16,159 @@ const STEPS = [
 let currentStep = 0;
 let highestStep = 0;
 
+function canNavigateToStep(hash) {
+  const options = Session.getOptions();
+
+  if (hash === 'design' && options?.designChoice === 'laat-ontwerpen') {
+    return false;
+  }
+
+  return true;
+}
+
+function getFallbackStep(hash) {
+  const options = Session.getOptions();
+
+  if (hash === 'design' && options?.designChoice === 'laat-ontwerpen') {
+    return 'wensen';
+  }
+
+  return 'select';
+}
+
 function navigate(hash) {
-  const idx = STEPS.findIndex(s => s.hash === hash);
-  if (idx === -1) return navigate('select');
-  if (idx > highestStep) return;
+  const idx = STEPS.findIndex(step => step.hash === hash);
+
+  if (idx === -1) {
+    navigate('select');
+    return;
+  }
+
+  if (!canNavigateToStep(hash)) {
+    const fallbackHash = getFallbackStep(hash);
+    const fallbackIdx = STEPS.findIndex(step => step.hash === fallbackHash);
+
+    if (fallbackIdx !== -1 && fallbackIdx <= highestStep) {
+      navigate(fallbackHash);
+      return;
+    }
+
+    navigate('options');
+    return;
+  }
+
+  if (idx > highestStep) {
+    return;
+  }
 
   currentStep = idx;
 
-  document.querySelectorAll('.flow-page').forEach(el => el.classList.remove('active'));
-  const pageEl = document.getElementById('page-' + hash);
-  if (pageEl) pageEl.classList.add('active');
+  document.querySelectorAll('.flow-page').forEach(el => {
+    el.classList.remove('active');
+  });
+
+  const pageEl = document.getElementById(`page-${hash}`);
+
+  if (pageEl) {
+    pageEl.classList.add('active');
+  }
 
   STEPS[idx].render();
   renderProgressBar(idx);
+
   window.scrollTo({ top: 0, behavior: 'smooth' });
-  history.replaceState(null, '', '#' + hash);
+  history.replaceState(null, '', `#${hash}`);
 }
 
 function navigateTo(hash) {
-  const idx = STEPS.findIndex(s => s.hash === hash);
-  if (idx !== -1 && idx > highestStep) highestStep = idx;
+  const idx = STEPS.findIndex(step => step.hash === hash);
+
+  if (idx === -1) {
+    return;
+  }
+
+  if (!canNavigateToStep(hash)) {
+    const fallbackHash = getFallbackStep(hash);
+    const fallbackIdx = STEPS.findIndex(step => step.hash === fallbackHash);
+
+    if (fallbackIdx !== -1 && fallbackIdx > highestStep) {
+      highestStep = fallbackIdx;
+    }
+
+    navigate(fallbackHash);
+    return;
+  }
+
+  if (idx > highestStep) {
+    highestStep = idx;
+  }
+
   navigate(hash);
 }
 
-// Punt 1: volledig reset — progressbar, sessie, highestStep, fabricCanvas
 function resetFlow() {
-  // Reset state
   currentStep = 0;
   highestStep = 0;
 
-  // Reset sessie
-  if (typeof Session !== 'undefined') Session.clear();
-
-  // Reset Fabric canvas als die bestaat
-  if (typeof fabricCanvas !== 'undefined' && fabricCanvas) {
-    try { fabricCanvas.dispose(); } catch (e) { }
+  if (typeof Session !== 'undefined') {
+    Session.clear();
   }
+
+  if (typeof fabricCanvas !== 'undefined' && fabricCanvas) {
+    try {
+      fabricCanvas.dispose();
+    } catch {
+      // Fabric opruimen mag stil falen bij reset.
+    }
+  }
+
   window.fabricCanvas = null;
 
-  // Verberg bevestigingspagina, toon progress bar terug
   const progressWrap = document.querySelector('.progress-wrap');
-  if (progressWrap) progressWrap.style.display = '';
 
-  // Verberg confirm pagina
-  document.querySelectorAll('.flow-page').forEach(el => el.classList.remove('active'));
+  if (progressWrap) {
+    progressWrap.style.display = '';
+  }
 
-  // Navigeer naar stap 1
+  document.querySelectorAll('.flow-page').forEach(el => {
+    el.classList.remove('active');
+  });
+
   navigateTo('select');
 }
 
 function renderProgressBar(activeIdx) {
   const bar = document.getElementById('progress-bar');
-  if (!bar) return;
+
+  if (!bar) {
+    return;
+  }
 
   const options = Session.getOptions();
   const showWensen = options?.designChoice === 'laat-ontwerpen';
 
-  const visibleSteps = STEPS.filter(s => s.hash !== 'wensen' || showWensen);
+  const visibleSteps = STEPS.filter(step => {
+    if (step.hash === 'wensen') {
+      return showWensen;
+    }
+
+    return true;
+  });
 
   bar.innerHTML = visibleSteps.map((step, i) => {
-    const globalIdx = STEPS.findIndex(s => s.hash === step.hash);
+    const globalIdx = STEPS.findIndex(item => item.hash === step.hash);
     const isDone = globalIdx < activeIdx;
     const isActive = globalIdx === activeIdx;
     const isVisited = globalIdx < highestStep || isDone;
-    const cls = isDone ? 'done' : isActive ? 'active' : '';
-    const clickable = isVisited && !isActive;
+    const isBlocked = !canNavigateToStep(step.hash);
+    const cls = [
+      isDone ? 'done' : '',
+      isActive ? 'active' : '',
+      isBlocked ? 'disabled' : '',
+    ].filter(Boolean).join(' ');
+
+    const clickable = isVisited && !isActive && !isBlocked;
+
     const line = i < visibleSteps.length - 1
       ? `<div class="step-line ${isDone ? 'done' : ''}"></div>`
       : '';
@@ -87,31 +176,58 @@ function renderProgressBar(activeIdx) {
     return `
       <div class="progress-step ${cls}">
         <div class="step-wrap">
-          <div class="step-circle ${clickable ? 'step-clickable' : ''}"
-               ${clickable ? `onclick="navigate('${step.hash}')" title="Naar ${step.label}"` : ''}>
+          <button class="step-circle ${clickable ? 'step-clickable' : ''}"
+                  type="button"
+                  data-step="${escHtml(step.hash)}"
+                  ${clickable ? `title="Naar ${escHtml(step.label)}"` : ''}
+                  ${isBlocked ? 'aria-disabled="true"' : ''}>
             ${isDone ? checkIcon() : i + 1}
-          </div>
-          <div class="step-label">${step.label}</div>
+          </button>
+          <div class="step-label">${escHtml(step.label)}</div>
         </div>
       </div>${line}
     `;
   }).join('');
+
+  bar.querySelectorAll('.step-circle[data-step]').forEach(button => {
+    button.addEventListener('click', () => {
+      const step = button.dataset.step;
+
+      if (!step || button.getAttribute('aria-disabled') === 'true') {
+        return;
+      }
+
+      navigate(step);
+    });
+  });
 }
 
-// Punt 2: SVG icoon in plaats van emoji
 function checkIcon() {
   return `<svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
     <path d="M2 7L5.5 10.5L12 3.5" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
   </svg>`;
 }
 
+function escHtml(value) {
+  return String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
 document.addEventListener('DOMContentLoaded', () => {
-  if (typeof DS !== 'undefined') DS.seedDemoData();
+  if (typeof DS !== 'undefined') {
+    DS.seedDemoData();
+  }
+
   const hash = location.hash.replace('#', '') || 'select';
   navigate(hash);
 });
 
-window.addEventListener('hashchange', () => navigate(location.hash.replace('#', '')));
+window.addEventListener('hashchange', () => {
+  navigate(location.hash.replace('#', ''));
+});
+
 window.navigate = navigate;
 window.navigateTo = navigateTo;
 window.resetFlow = resetFlow;
