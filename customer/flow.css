@@ -893,13 +893,57 @@ body {
   position: relative;
   width: 100%;
   min-height: 0;
-  overflow: hidden;
+  overflow: auto;
+}
+
+#canvas-wrap canvas {
+  border-radius: 4px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, .25);
 }
 
 #canvas-wrap .canvas-container {
   flex-shrink: 0;
   max-width: 100%;
   max-height: 100%;
+}
+
+.canvas-zoom-controls {
+  position: absolute;
+  right: 18px;
+  bottom: 18px;
+  z-index: 30;
+  display: flex;
+  gap: 8px;
+  padding: 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .92);
+  border: 1px solid var(--cream-border);
+  box-shadow: 0 4px 18px rgba(0, 0, 0, .18);
+}
+
+.canvas-zoom-btn {
+  appearance: none;
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--cream-border);
+  border-radius: 50%;
+  background: white;
+  color: var(--green-dark);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background .15s, color .15s, border-color .15s, transform .1s;
+}
+
+.canvas-zoom-btn:hover {
+  background: var(--green-light);
+  border-color: var(--green);
+  color: var(--green);
+}
+
+.canvas-zoom-btn:active {
+  transform: scale(.96);
 }
 
 #margin-warning {

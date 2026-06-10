@@ -17,6 +17,10 @@ let uploadedFileName = null;
 let activeDesignTab = 'tool';
 let fabricInitToken = 0;
 let fabricInitTimer = null;
+let canvasZoom = 1;
+const CANVAS_ZOOM_MIN = 0.5;
+const CANVAS_ZOOM_MAX = 3;
+const CANVAS_ZOOM_STEP = 0.1;
 
 const AVAILABLE_FONTS = [
   { label: 'Georgia', value: 'Georgia' },
@@ -143,6 +147,24 @@ function renderDesignPage() {
           <div id="canvas-wrap">
             <div id="margin-warning">Object buiten marge</div>
             <canvas id="c"></canvas>
+            <div class="canvas-zoom-controls" aria-label="Canvas zoom controls">
+    <button class="canvas-zoom-btn" type="button" id="btn-canvas-zoom-out" aria-label="Uitzoomen">
+      <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <circle cx="7.5" cy="7.5" r="5.25" stroke="currentColor" stroke-width="1.8"/>
+        <path d="M11.5 11.5L15 15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+        <path d="M5.25 7.5H9.75" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+      </svg>
+    </button>
+
+    <button class="canvas-zoom-btn" type="button" id="btn-canvas-zoom-in" aria-label="Inzoomen">
+      <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <circle cx="7.5" cy="7.5" r="5.25" stroke="currentColor" stroke-width="1.8"/>
+        <path d="M11.5 11.5L15 15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+        <path d="M5.25 7.5H9.75" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+        <path d="M7.5 5.25V9.75" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+      </svg>
+    </button>
+  </div>
           </div>
 
           <div id="status">Selecteer een element om te bewerken. Klik en sleep om te verplaatsen.</div>
@@ -459,6 +481,32 @@ function getResponsiveCanvasSize(activePers, product) {
   };
 }
 
+function applyCanvasZoom() {
+  const container = document.querySelector('#canvas-wrap .canvas-container');
+
+  if (!container) {
+    return;
+  }
+
+  container.style.transform = `scale(${canvasZoom})`;
+  container.style.transformOrigin = 'center center';
+}
+
+function setCanvasZoom(nextZoom) {
+  canvasZoom = Math.min(CANVAS_ZOOM_MAX, Math.max(CANVAS_ZOOM_MIN, nextZoom));
+  applyCanvasZoom();
+}
+
+function bindCanvasZoomControls() {
+  document.getElementById('btn-canvas-zoom-in')?.addEventListener('click', () => {
+    setCanvasZoom(canvasZoom + CANVAS_ZOOM_STEP);
+  });
+
+  document.getElementById('btn-canvas-zoom-out')?.addEventListener('click', () => {
+    setCanvasZoom(canvasZoom - CANVAS_ZOOM_STEP);
+  });
+}
+
 function scheduleFabricInit(product, activePers, savedState, stateKey) {
   fabricInitToken += 1;
   const token = fabricInitToken;
@@ -550,6 +598,7 @@ function initFabricTool(product, activePers, savedState, stateKey, token = fabri
   }
 
   fabricHistory = [];
+  canvasZoom = 1;
   fabricActiveColor = '#1D9E75';
   fabricBackgroundColor = savedState?.backgroundColor || activePers?.backgroundColor || '#b7bdb8';
 
@@ -594,9 +643,13 @@ function initFabricTool(product, activePers, savedState, stateKey, token = fabri
   fabricSaveHistory();
   updateLayerPanel();
 
+  bindCanvasZoomControls();
+  applyCanvasZoom();
+
   setTimeout(() => {
     if (fabricCanvas && token === fabricInitToken) {
       redrawGuides(fabricCanvas, activePers, product, margin, canvasWidth, canvasHeight);
+      applyCanvasZoom();
     }
   }, 120);
 }
