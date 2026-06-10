@@ -923,11 +923,11 @@ function openOrderModal(id = null) {
   `;
 
   const footer = `
-  <button class="btn btn-secondary" type="button" onclick="AdminUI.closeModal()">Sluiten</button>
-  <button class="btn btn-secondary" type="button" onclick="generateOrderPDF('${order.id}')">Download offerte PDF</button>
-  ${hasOrderFiles(order) ? `<button class="btn btn-secondary" type="button" onclick="viewOrderFiles('${order.id}')">Bestanden bekijken</button>` : ''}
-  ${pdfAvailable ? `<button class="btn btn-secondary" type="button" onclick="downloadPrintPDF('${order.id}')">Download drukbestand PDF</button>` : ''}
-  <button class="btn btn-primary" type="button" onclick="openOrderModal('${order.id}')">Aanpassen</button>
+  <button class="btn btn-secondary" type="button" onclick="AdminUI.closeModal()">Annuleren</button>
+  ${isEdit ? `<button class="btn btn-secondary" type="button" onclick="generateOrderPDF('${order.id}')">Download offerte PDF</button>` : ''}
+  ${isEdit && hasOrderFiles(order) ? `<button class="btn btn-secondary" type="button" onclick="viewOrderFiles('${order.id}')">Bestanden bekijken</button>` : ''}
+  ${isEdit && getOrderPdfDataURL(order) ? `<button class="btn btn-secondary" type="button" onclick="downloadPrintPDF('${order.id}')">Download drukbestand PDF</button>` : ''}
+  <button class="btn btn-primary" type="button" id="btn-order-save">Opslaan</button>
 `;
 
   AdminUI.openModal({

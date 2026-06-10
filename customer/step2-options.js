@@ -23,8 +23,15 @@ function renderOptionsPage() {
   }
 
   const persTypes = getProductPersonalisationTypes(product);
-  const activePersId = saved.persTypeId || persTypes[0]?.id || 'standaard';
-  const activePers = persTypes.find(persType => persType.id === activePersId) || persTypes[0];
+  const savedPersTypeExists = saved.persTypeId
+    ? persTypes.some(persType => persType.id === saved.persTypeId)
+    : false;
+
+  const activePers = savedPersTypeExists
+    ? persTypes.find(persType => persType.id === saved.persTypeId)
+    : persTypes[0];
+
+  const activePersId = activePers?.id || 'standaard';
   const designChoice = saved.designChoice || 'laat-ontwerpen';
   const addons = Array.isArray(saved.addons) ? saved.addons : [];
   const quantity = saved.quantity || '';

@@ -84,14 +84,15 @@ function renderDesignPage() {
           </div>
 
           <div class="side-section">
-            <div class="side-label">Lettertype</div>
-            <select id="font-select" class="font-select">
-              ${AVAILABLE_FONTS.map(font => `
-                <option value="${font.value}" style="font-family:${font.value}">${font.label}</option>
-              `).join('')}
-            </select>
+  <div class="side-label">Lettertype</div>
+  <select id="font-select" class="font-select">
+    ${AVAILABLE_FONTS.map(font => `
+      <option value="${font.value}" style="font-family:${font.value}">${font.label}</option>
+    `).join('')}
+  </select>
+</div>
 
-          <div class="side-section">
+<div class="side-section">
   <div class="side-label">Lettergrootte</div>
   <select id="font-size" class="font-select">
     ${[8, 10, 12, 14, 16, 18, 20, 24, 28, 32, 36, 42, 48, 56, 64, 72, 84, 96].map(size => `
@@ -280,9 +281,14 @@ function bindUploadZone(stateKey) {
 
 function bindDesignNextButton(product, activePers, stateKey) {
   document.getElementById('btn-design-next')?.addEventListener('click', () => {
+    const error = document.getElementById('design-error');
+
     if (activeDesignTab === 'upload') {
       if (!uploadedDataURL) {
-        document.getElementById('design-error').style.display = 'block';
+        if (error) {
+          error.style.display = 'block';
+        }
+
         return;
       }
 
@@ -296,7 +302,16 @@ function bindDesignNextButton(product, activePers, stateKey) {
 
       Session.setDesign(designData);
       persistDesignState(stateKey, designData);
-    } else if (fabricCanvas) {
+    } else {
+      if (!fabricCanvas) {
+        if (error) {
+          error.textContent = 'De ontwerptool is nog niet geladen. Probeer het opnieuw.';
+          error.style.display = 'block';
+        }
+
+        return;
+      }
+
       const snapshot = snapshotCanvas(fabricCanvas, product, activePers);
 
       Session.setDesign({
@@ -317,7 +332,10 @@ function bindDesignNextButton(product, activePers, stateKey) {
       });
     }
 
-    document.getElementById('design-error').style.display = 'none';
+    if (error) {
+      error.style.display = 'none';
+    }
+
     navigateTo('review');
   });
 }
