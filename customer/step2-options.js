@@ -170,12 +170,17 @@ function renderOptionsPage() {
 
 function getProductPersonalisationTypes(product) {
   if (Array.isArray(product.personalisatieTypes) && product.personalisatieTypes.length > 0) {
-    return product.personalisatieTypes;
+    const activeTypes = product.personalisatieTypes.filter(persType => persType.active !== false);
+
+    if (activeTypes.length > 0) {
+      return activeTypes;
+    }
   }
 
   return [{
     id: 'standaard',
     label: 'Standaard',
+    active: true,
     previewImage: product.imagePersonalize1 || getProductImageSrc(product),
     width_mm: product.width_mm || null,
     height_mm: product.height_mm || null,

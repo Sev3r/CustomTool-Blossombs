@@ -96,6 +96,11 @@ function renderReviewPage() {
           </div>
 
           <div class="review-field">
+  <label><span class="required-star">*</span> Factuuradres</label>
+  <textarea id="r-factuuradres" placeholder="Volledig factuuradres">${escHtml(savedKlant.factuuradres || '')}</textarea>
+</div>
+
+          <div class="review-field">
             <label>KvK-nummer</label>
             <input type="text" id="r-kvk" value="${escHtml(savedKlant.kvk || '')}" placeholder="12345678">
           </div>
@@ -236,7 +241,7 @@ function renderReviewPage() {
     }
   });
 
-  ['r-company', 'r-naam', 'r-achternaam', 'r-email', 'r-tel', 'r-straat', 'r-huisnummer', 'r-postcode', 'r-plaats', 'r-land', 'r-kvk', 'r-btw'].forEach(id => {
+  ['r-company', 'r-naam', 'r-achternaam', 'r-email', 'r-tel', 'r-straat', 'r-huisnummer', 'r-postcode', 'r-plaats', 'r-land', 'r-kvk', 'r-btw', 'r-factuuradres'].forEach(id => {
     document.getElementById(id)?.addEventListener('input', () => {
       Session.setKlant(collectKlant());
     });
@@ -253,10 +258,10 @@ function renderReviewPage() {
   document.getElementById('btn-bestellen')?.addEventListener('click', () => {
     const klant = collectKlant();
 
-    if (!klant.naam || !klant.email || !klant.straat || !klant.huisnummer || !klant.postcode || !klant.plaats) {
+    if (!klant.naam || !klant.email || !klant.straat || !klant.huisnummer || !klant.postcode || !klant.plaats || !klant.factuuradres) {
       document.getElementById('review-error').style.display = 'block';
 
-      ['r-naam', 'r-email', 'r-straat', 'r-huisnummer', 'r-postcode', 'r-plaats'].forEach(id => {
+      ['r-naam', 'r-email', 'r-straat', 'r-huisnummer', 'r-postcode', 'r-plaats', 'r-factuuradres'].forEach(id => {
         const field = document.getElementById(id);
 
         if (field) {
@@ -296,6 +301,7 @@ function collectKlant() {
     plaats,
     land,
     adres,
+    factuuradres: document.getElementById('r-factuuradres')?.value.trim() || '',
     kvk: document.getElementById('r-kvk')?.value.trim() || '',
     btw: document.getElementById('r-btw')?.value.trim() || '',
   };
@@ -367,6 +373,8 @@ function buildOrder(product, options, design, wensen, klant, orderNumber, forced
     customerName: `${klant.naam || ''} ${klant.achternaam || ''}`.trim(),
     customerEmail: klant.email || '',
     deliveryAddress: klant.adres || '',
+    billingAddress: klant.factuuradres || '',
+    invoiceAddress: klant.factuuradres || '',
     addressStreet: klant.straat || '',
     addressHouseNumber: klant.huisnummer || '',
     addressPostalCode: klant.postcode || '',

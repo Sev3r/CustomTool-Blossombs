@@ -378,6 +378,11 @@ function openOrderOverview(id) {
         </div>
       </div>
 
+      <div class="overview-item overview-wide">
+  <span class="overview-label">Factuuradres</span>
+  <span class="overview-value">${escHtml(order.billingAddress || order.invoiceAddress || '—')}</span>
+</div>
+
       <div class="section-title" style="margin-top:18px">Product en prijs</div>
 
       <div class="overview-grid">
@@ -825,6 +830,13 @@ function openOrderModal(id = null) {
       </div>
     </div>
 
+    <div class="form-row-1">
+  <div class="form-group">
+    <label>Factuuradres</label>
+    <textarea id="of-billing-address" placeholder="Volledig factuuradres">${escHtml(order.billingAddress || order.invoiceAddress || '')}</textarea>
+  </div>
+</div>
+
     <div class="section-title" style="margin-top:4px">Order details</div>
 
     <div class="form-row">
@@ -976,6 +988,8 @@ function openOrderModal(id = null) {
       addressCity: city,
       addressCountry: country,
       deliveryAddress,
+      billingAddress: document.getElementById('of-billing-address').value.trim(),
+      invoiceAddress: document.getElementById('of-billing-address').value.trim(),
       productId,
       productName,
       quantity: parseInt(document.getElementById('of-qty').value, 10) || null,

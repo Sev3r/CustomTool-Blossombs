@@ -2,6 +2,7 @@
  * products.js
  * Pagina: Producten beheer
  * Productafbeeldingen, personalisatieafbeeldingen en template PDF's worden via admin geüpload.
+ * Personalisatietypes kunnen actief en non-actief worden gezet.
  */
 
 function renderProductsPage() {
@@ -53,10 +54,11 @@ function renderProductGrid() {
 
     const personalisationHTML = (product.personalisatieTypes || []).map(type => {
       const priceCount = Array.isArray(type.priceSlabs) ? type.priceSlabs.length : 0;
+      const isActive = type.active !== false;
 
       return `
-        <span class="spec-tag">
-          ${escHtml(type.label)}: ${type.width_mm || '—'}×${type.height_mm || '—'}mm${priceCount ? `, ${priceCount} staffels` : ''}
+        <span class="spec-tag ${isActive ? '' : 'inactive'}">
+          ${escHtml(type.label)}: ${type.width_mm || '—'}×${type.height_mm || '—'}mm${priceCount ? `, ${priceCount} staffels` : ''}${isActive ? '' : ' · inactief'}
         </span>
       `;
     }).join('');
@@ -212,7 +214,7 @@ function openProductModal(id = null) {
     <div class="section-title" style="margin-top:4px">
       Personalisatietypes
       <span class="form-hint" style="text-transform:none;font-weight:400;letter-spacing:0">
-        Elk type heeft eigen afmetingen, afbeelding, template PDF en staffelprijzen
+        Elk type heeft eigen status, afmetingen, afbeelding, template PDF en staffelprijzen
       </span>
     </div>
 
@@ -354,6 +356,7 @@ function persTypeRow(type, index, uploadKey) {
   const templatePdf = type.templatePdf || null;
   const priceSlabs = getDefaultPersonalisationPriceSlabs(type);
   const blockedZones = getDefaultBlockedZones(type);
+  const isActive = type.active !== false;
 
   return `
     <div class="pers-type-row"
@@ -364,6 +367,23 @@ function persTypeRow(type, index, uploadKey) {
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
         <strong style="font-size:13px">Personalisatietype ${index + 1}</strong>
         <button class="icon-btn danger" type="button" onclick="this.closest('.pers-type-row').remove()" title="Verwijder">×</button>
+      </div>
+
+      <div class="form-row-1" style="margin-bottom:8px">
+        <div class="form-group">
+          <label class="toggle-wrap" style="flex-direction:row;align-items:center;justify-content:space-between;gap:14px">
+            <span>
+              <strong style="display:block;font-size:13px">Actief</strong>
+              <span class="form-hint" style="margin:2px 0 0">
+                Zichtbaar in de klantflow
+              </span>
+            </span>
+            <span class="toggle">
+              <input type="checkbox" class="pers-active" ${isActive ? 'checked' : ''}>
+              <span class="toggle-slider"></span>
+            </span>
+          </label>
+        </div>
       </div>
 
       <div class="form-row" style="margin-bottom:8px">
@@ -411,7 +431,7 @@ function persTypeRow(type, index, uploadKey) {
         </div>
       </div>
 
-            <div class="section-title" style="margin-top:10px">Uitsparingen / no-print zones</div>
+      <div class="section-title" style="margin-top:10px">Uitsparingen / no-print zones</div>
 
       <div class="blocked-zone-list">
         ${blockedZones.map((zone, zoneIndex) => blockedZoneRow(zone, zoneIndex)).join('')}
@@ -638,6 +658,7 @@ function bindProductModalActions(uploadState, product, isEdit) {
 
     list.insertAdjacentHTML('beforeend', persTypeRow({
       label: '',
+      active: true,
       width_mm: '',
       height_mm: '',
       margin_mm: '',
@@ -674,6 +695,14 @@ function saveProductFromModal(uploadState, product, isEdit) {
     return;
   }
 
+  const activePersonalisationTypes = personalisatieTypes.filter(type => type.active !== false);
+
+  if (activePersonalisationTypes.length === 0) {
+    error.textContent = 'Zet minimaal één personalisatietype op actief.';
+    error.classList.add('visible');
+    return;
+  }
+
   error.classList.remove('visible');
 
   const priceSlabs = [...document.querySelectorAll('#slab-list .slab-row')].map(row => ({
@@ -683,7 +712,7 @@ function saveProductFromModal(uploadState, product, isEdit) {
   })).filter(priceSlab => priceSlab.price > 0);
 
   const customId = document.getElementById('pf-id').value.trim();
-  const firstPers = personalisatieTypes[0];
+  const firstPers = activePersonalisationTypes[0] || personalisatieTypes[0];
 
   const updated = {
     ...product,
@@ -755,6 +784,7 @@ function collectPersonalisationTypes(uploadState) {
     return {
       id: stableId,
       label: label || 'Standaard',
+      active: row.querySelector('.pers-active')?.checked !== false,
       priceSlabs,
       blockedZones,
       previewImageFile: fileState.previewImageFile || null,

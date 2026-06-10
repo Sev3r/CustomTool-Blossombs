@@ -45,8 +45,14 @@ function renderDesignPage() {
     return;
   }
 
-  const persTypes = product.personalisatieTypes || [];
-  const activePers = options?.persType || persTypes[0] || null;
+  const persTypes = Array.isArray(product.personalisatieTypes)
+    ? product.personalisatieTypes.filter(persType => persType.active !== false)
+    : [];
+
+  const activePers = persTypes.find(persType => persType.id === options?.persTypeId) ||
+    options?.persType ||
+    persTypes[0] ||
+    null;
   const stateKey = `${DESIGN_STATE_KEY}_${product.id}_${activePers?.id || 'standaard'}`;
   const savedState = loadDesignState(stateKey);
 
