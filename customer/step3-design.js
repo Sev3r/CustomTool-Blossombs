@@ -847,52 +847,95 @@ function drawBlockedZones(canvas, activePers, product, canvasWidth, canvasHeight
   }
 
   zones.forEach(zone => {
-    if (zone.type !== 'circle') {
+    if (zone.type === 'circle') {
+      const circleData = getBlockedCircleCanvasData(zone, activePers, product, canvasWidth, canvasHeight);
+
+      if (!circleData) {
+        return;
+      }
+
+      const safeCircle = new fabric.Circle({
+        left: circleData.cx - circleData.safeRadius,
+        top: circleData.cy - circleData.safeRadius,
+        radius: circleData.safeRadius,
+        fill: 'rgba(232, 134, 10, 0.14)',
+        stroke: '#E8860A',
+        strokeWidth: 2,
+        strokeDashArray: [8, 5],
+        selectable: false,
+        evented: false,
+        objectCaching: false,
+        excludeFromExport: true,
+        _isMargin: true,
+        _isGuide: true,
+        _isBlockedZone: true,
+      });
+
+      const holeCircle = new fabric.Circle({
+        left: circleData.cx - circleData.holeRadius,
+        top: circleData.cy - circleData.holeRadius,
+        radius: circleData.holeRadius,
+        fill: 'rgba(192, 57, 43, 0.24)',
+        stroke: '#C0392B',
+        strokeWidth: 2,
+        strokeDashArray: [4, 3],
+        selectable: false,
+        evented: false,
+        objectCaching: false,
+        excludeFromExport: true,
+        _isMargin: true,
+        _isGuide: true,
+        _isBlockedZone: true,
+      });
+
+      canvas.add(safeCircle);
+      canvas.add(holeCircle);
       return;
     }
 
-    const circleData = getBlockedCircleCanvasData(zone, activePers, product, canvasWidth, canvasHeight);
+    if (zone.type === 'line') {
+      const lineData = getBlockedLineCanvasData(zone, activePers, product, canvasWidth, canvasHeight);
 
-    if (!circleData) {
-      return;
+      if (!lineData) {
+        return;
+      }
+
+      const safeLine = new fabric.Line(
+        [lineData.x1, lineData.y1, lineData.x2, lineData.y2],
+        {
+          stroke: '#E8860A',
+          strokeWidth: lineData.safeWidth,
+          strokeDashArray: [8, 5],
+          selectable: false,
+          evented: false,
+          objectCaching: false,
+          excludeFromExport: true,
+          opacity: 0.35,
+          _isMargin: true,
+          _isGuide: true,
+          _isBlockedZone: true,
+        }
+      );
+
+      const foldLine = new fabric.Line(
+        [lineData.x1, lineData.y1, lineData.x2, lineData.y2],
+        {
+          stroke: '#C0392B',
+          strokeWidth: Math.max(1.5, lineData.lineWidth),
+          strokeDashArray: [4, 3],
+          selectable: false,
+          evented: false,
+          objectCaching: false,
+          excludeFromExport: true,
+          _isMargin: true,
+          _isGuide: true,
+          _isBlockedZone: true,
+        }
+      );
+
+      canvas.add(safeLine);
+      canvas.add(foldLine);
     }
-
-    const safeCircle = new fabric.Circle({
-      left: circleData.cx - circleData.safeRadius,
-      top: circleData.cy - circleData.safeRadius,
-      radius: circleData.safeRadius,
-      fill: 'rgba(232, 134, 10, 0.14)',
-      stroke: '#E8860A',
-      strokeWidth: 2,
-      strokeDashArray: [8, 5],
-      selectable: false,
-      evented: false,
-      objectCaching: false,
-      excludeFromExport: true,
-      _isMargin: true,
-      _isGuide: true,
-      _isBlockedZone: true,
-    });
-
-    const holeCircle = new fabric.Circle({
-      left: circleData.cx - circleData.holeRadius,
-      top: circleData.cy - circleData.holeRadius,
-      radius: circleData.holeRadius,
-      fill: 'rgba(192, 57, 43, 0.24)',
-      stroke: '#C0392B',
-      strokeWidth: 2,
-      strokeDashArray: [4, 3],
-      selectable: false,
-      evented: false,
-      objectCaching: false,
-      excludeFromExport: true,
-      _isMargin: true,
-      _isGuide: true,
-      _isBlockedZone: true,
-    });
-
-    canvas.add(safeCircle);
-    canvas.add(holeCircle);
   });
 
   bringGuidesToFront(canvas);
@@ -1018,6 +1061,40 @@ function getBlockedCircleCanvasData(zone, activePers, product, canvasWidth, canv
     cy: yMm * pxPerMmY,
     holeRadius,
     safeRadius,
+  };
+}
+
+function getBlockedLineCanvasData(zone, activePers, product, canvasWidth, canvasHeight) {
+  const widthMm = Number(activePers?.width_mm || product?.width_mm || 0);
+  const heightMm = Number(activePers?.height_mm || product?.height_mm || 0);
+
+  if (!widthMm || !heightMm) {
+    return null;
+  }
+
+  const x1Mm = Number(zone.x1_mm || 0);
+  const y1Mm = Number(zone.y1_mm || 0);
+  const x2Mm = Number(zone.x2_mm || 0);
+  const y2Mm = Number(zone.y2_mm || 0);
+  const lineWidthMm = Number(zone.line_width_mm || 0.3);
+  const marginMm = Number(zone.margin_mm || 0);
+
+  if (x1Mm === x2Mm && y1Mm === y2Mm) {
+    return null;
+  }
+
+  const pxPerMmX = canvasWidth / widthMm;
+  const pxPerMmY = canvasHeight / heightMm;
+  const averagePxPerMm = (pxPerMmX + pxPerMmY) / 2;
+
+  return {
+    x1: x1Mm * pxPerMmX,
+    y1: y1Mm * pxPerMmY,
+    x2: x2Mm * pxPerMmX,
+    y2: y2Mm * pxPerMmY,
+    lineWidth: Math.max(1, lineWidthMm * averagePxPerMm),
+    safeWidth: Math.max(3, (lineWidthMm + marginMm * 2) * averagePxPerMm),
+    safeRadius: Math.max(1.5, ((lineWidthMm / 2) + marginMm) * averagePxPerMm),
   };
 }
 
@@ -1330,17 +1407,27 @@ function isObjectOverlappingBlockedZones(object, activePers, product, canvasWidt
   const bounds = object.getBoundingRect(true, true);
 
   return zones.some(zone => {
-    if (zone.type !== 'circle') {
-      return false;
+    if (zone.type === 'circle') {
+      const circleData = getBlockedCircleCanvasData(zone, activePers, product, canvasWidth, canvasHeight);
+
+      if (!circleData) {
+        return false;
+      }
+
+      return isRectOverlappingCircle(bounds, circleData.cx, circleData.cy, circleData.safeRadius);
     }
 
-    const circleData = getBlockedCircleCanvasData(zone, activePers, product, canvasWidth, canvasHeight);
+    if (zone.type === 'line') {
+      const lineData = getBlockedLineCanvasData(zone, activePers, product, canvasWidth, canvasHeight);
 
-    if (!circleData) {
-      return false;
+      if (!lineData) {
+        return false;
+      }
+
+      return isRectNearLine(bounds, lineData.x1, lineData.y1, lineData.x2, lineData.y2, lineData.safeRadius);
     }
 
-    return isRectOverlappingCircle(bounds, circleData.cx, circleData.cy, circleData.safeRadius);
+    return false;
   });
 }
 
@@ -1352,6 +1439,47 @@ function isRectOverlappingCircle(rect, circleX, circleY, radius) {
   const distanceY = circleY - closestY;
 
   return (distanceX * distanceX + distanceY * distanceY) <= radius * radius;
+}
+
+function isRectNearLine(rect, x1, y1, x2, y2, radius) {
+  const expandedRect = {
+    left: rect.left - radius,
+    top: rect.top - radius,
+    right: rect.left + rect.width + radius,
+    bottom: rect.top + rect.height + radius,
+  };
+
+  if (
+    (x1 >= expandedRect.left && x1 <= expandedRect.right && y1 >= expandedRect.top && y1 <= expandedRect.bottom) ||
+    (x2 >= expandedRect.left && x2 <= expandedRect.right && y2 >= expandedRect.top && y2 <= expandedRect.bottom)
+  ) {
+    return true;
+  }
+
+  const rectLines = [
+    [expandedRect.left, expandedRect.top, expandedRect.right, expandedRect.top],
+    [expandedRect.right, expandedRect.top, expandedRect.right, expandedRect.bottom],
+    [expandedRect.right, expandedRect.bottom, expandedRect.left, expandedRect.bottom],
+    [expandedRect.left, expandedRect.bottom, expandedRect.left, expandedRect.top],
+  ];
+
+  return rectLines.some(([rx1, ry1, rx2, ry2]) =>
+    doLineSegmentsIntersect(x1, y1, x2, y2, rx1, ry1, rx2, ry2)
+  );
+}
+
+function doLineSegmentsIntersect(x1, y1, x2, y2, x3, y3, x4, y4) {
+  const direction = (ax, ay, bx, by, cx, cy) => {
+    return (cx - ax) * (by - ay) - (cy - ay) * (bx - ax);
+  };
+
+  const d1 = direction(x3, y3, x4, y4, x1, y1);
+  const d2 = direction(x3, y3, x4, y4, x2, y2);
+  const d3 = direction(x1, y1, x2, y2, x3, y3);
+  const d4 = direction(x1, y1, x2, y2, x4, y4);
+
+  return ((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) &&
+    ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0));
 }
 
 function clamp(value, min, max) {

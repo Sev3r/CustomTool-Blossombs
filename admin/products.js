@@ -275,42 +275,79 @@ function personalisationSlabRow(slab, index) {
 
 function blockedZoneRow(zone = {}, index = 0) {
   const id = zone.id || createBlockedZoneId();
+  const type = zone.type || 'circle';
 
   return `
     <div class="blocked-zone-row" data-zone-id="${escHtml(id)}">
       <div class="blocked-zone-header">
-        <strong>Uitsparing ${index + 1}</strong>
+        <strong>Uitsparing of rillijn ${index + 1}</strong>
         <button class="icon-btn danger" type="button" onclick="this.closest('.blocked-zone-row').remove()" title="Verwijder">×</button>
       </div>
 
       <div class="form-row" style="margin-bottom:8px">
         <div class="form-group">
           <label>Label</label>
-          <input type="text" class="blocked-zone-label" value="${escHtml(zone.label || '')}" placeholder="Gat linksboven">
+          <input type="text" class="blocked-zone-label" value="${escHtml(zone.label || '')}" placeholder="Bijv. rillijn links of gat boven">
         </div>
 
         <div class="form-group">
-          <label>Vorm</label>
+          <label>Type</label>
           <select class="blocked-zone-type">
-            <option value="circle" ${zone.type === 'circle' || !zone.type ? 'selected' : ''}>Cirkel</option>
+            <option value="circle" ${type === 'circle' ? 'selected' : ''}>Cirkel / gat</option>
+            <option value="line" ${type === 'line' ? 'selected' : ''}>Lijn / rillijn</option>
           </select>
         </div>
       </div>
 
-      <div class="form-row-3" style="margin-bottom:8px">
-        <div class="form-group">
-          <label>X middelpunt mm</label>
-          <input type="number" class="blocked-zone-x" value="${escHtml(zone.x_mm || '')}" placeholder="15" min="0" step="0.1">
+      <div class="blocked-zone-circle-fields" style="${type === 'circle' ? '' : 'display:none'}">
+        <div class="form-row-3" style="margin-bottom:8px">
+          <div class="form-group">
+            <label>X middelpunt mm</label>
+            <input type="number" class="blocked-zone-x" value="${escHtml(zone.x_mm || '')}" placeholder="15" min="0" step="0.1">
+          </div>
+
+          <div class="form-group">
+            <label>Y middelpunt mm</label>
+            <input type="number" class="blocked-zone-y" value="${escHtml(zone.y_mm || '')}" placeholder="42" min="0" step="0.1">
+          </div>
+
+          <div class="form-group">
+            <label>Diameter mm</label>
+            <input type="number" class="blocked-zone-diameter" value="${escHtml(zone.diameter_mm || '')}" placeholder="8" min="0" step="0.1">
+          </div>
+        </div>
+      </div>
+
+      <div class="blocked-zone-line-fields" style="${type === 'line' ? '' : 'display:none'}">
+        <div class="form-row" style="margin-bottom:8px">
+          <div class="form-group">
+            <label>X start mm</label>
+            <input type="number" class="blocked-zone-x1" value="${escHtml(zone.x1_mm || '')}" placeholder="0" min="0" step="0.1">
+          </div>
+
+          <div class="form-group">
+            <label>Y start mm</label>
+            <input type="number" class="blocked-zone-y1" value="${escHtml(zone.y1_mm || '')}" placeholder="35" min="0" step="0.1">
+          </div>
         </div>
 
-        <div class="form-group">
-          <label>Y middelpunt mm</label>
-          <input type="number" class="blocked-zone-y" value="${escHtml(zone.y_mm || '')}" placeholder="42" min="0" step="0.1">
+        <div class="form-row" style="margin-bottom:8px">
+          <div class="form-group">
+            <label>X eind mm</label>
+            <input type="number" class="blocked-zone-x2" value="${escHtml(zone.x2_mm || '')}" placeholder="100" min="0" step="0.1">
+          </div>
+
+          <div class="form-group">
+            <label>Y eind mm</label>
+            <input type="number" class="blocked-zone-y2" value="${escHtml(zone.y2_mm || '')}" placeholder="35" min="0" step="0.1">
+          </div>
         </div>
 
-        <div class="form-group">
-          <label>Diameter mm</label>
-          <input type="number" class="blocked-zone-diameter" value="${escHtml(zone.diameter_mm || '')}" placeholder="8" min="0" step="0.1">
+        <div class="form-row-1" style="margin-bottom:8px">
+          <div class="form-group">
+            <label>Lijndikte indicatie mm</label>
+            <input type="number" class="blocked-zone-line-width" value="${escHtml(zone.line_width_mm || 0.3)}" placeholder="0.3" min="0.1" step="0.1">
+          </div>
         </div>
       </div>
 
@@ -319,7 +356,7 @@ function blockedZoneRow(zone = {}, index = 0) {
           <label>Veilige marge rondom mm</label>
           <input type="number" class="blocked-zone-margin" value="${escHtml(zone.margin_mm || '')}" placeholder="3" min="0" step="0.1">
           <span class="form-hint">
-            Objecten mogen niet over de uitsparing of deze extra veiligheidsmarge vallen.
+            Objecten mogen niet over deze zone of de extra veiligheidsmarge vallen.
           </span>
         </div>
       </div>
@@ -567,8 +604,19 @@ function bindPersRowUploads(row, uploadState) {
       x_mm: '',
       y_mm: '',
       diameter_mm: '',
+      x1_mm: '',
+      y1_mm: '',
+      x2_mm: '',
+      y2_mm: '',
+      line_width_mm: 0.3,
       margin_mm: '',
     }, list.children.length));
+
+    const newZone = list.lastElementChild;
+
+    if (newZone) {
+      bindBlockedZoneTypeSwitch(newZone);
+    }
   });
 
   previewInput?.addEventListener('change', async event => {
@@ -581,6 +629,27 @@ function bindPersRowUploads(row, uploadState) {
     uploadState.persFiles[uploadKey].previewImageFile = await fileToDataURL(file);
     previewOutput.innerHTML = renderStoredFile(uploadState.persFiles[uploadKey].previewImageFile);
     event.target.value = '';
+  });
+
+  row.querySelectorAll('.blocked-zone-type').forEach(select => {
+    select.addEventListener('change', () => {
+      const zoneRow = select.closest('.blocked-zone-row');
+
+      if (!zoneRow) {
+        return;
+      }
+
+      const circleFields = zoneRow.querySelector('.blocked-zone-circle-fields');
+      const lineFields = zoneRow.querySelector('.blocked-zone-line-fields');
+
+      if (circleFields) {
+        circleFields.style.display = select.value === 'circle' ? '' : 'none';
+      }
+
+      if (lineFields) {
+        lineFields.style.display = select.value === 'line' ? '' : 'none';
+      }
+    });
   });
 
   previewRemove?.addEventListener('click', () => {
@@ -610,6 +679,35 @@ function bindPersRowUploads(row, uploadState) {
     uploadState.persFiles[uploadKey].templatePdf = null;
     templateOutput.innerHTML = renderStoredFile(null);
   });
+
+  row.querySelectorAll('.blocked-zone-row').forEach(zoneRow => {
+    bindBlockedZoneTypeSwitch(zoneRow);
+  });
+
+}
+
+function bindBlockedZoneTypeSwitch(zoneRow) {
+  const select = zoneRow.querySelector('.blocked-zone-type');
+
+  if (!select) {
+    return;
+  }
+
+  const updateFields = () => {
+    const circleFields = zoneRow.querySelector('.blocked-zone-circle-fields');
+    const lineFields = zoneRow.querySelector('.blocked-zone-line-fields');
+
+    if (circleFields) {
+      circleFields.style.display = select.value === 'circle' ? '' : 'none';
+    }
+
+    if (lineFields) {
+      lineFields.style.display = select.value === 'line' ? '' : 'none';
+    }
+  };
+
+  select.addEventListener('change', updateFields);
+  updateFields();
 }
 
 function bindPersPreview(row) {
@@ -745,7 +843,7 @@ function collectPersonalisationTypes(uploadState) {
     const label = row.querySelector('.pers-label').value.trim();
     const uploadKey = row.dataset.uploadKey;
     const persistedId = row.dataset.persistedId;
-    const stableId = persistedId || slugify(label) || uploadKey;
+    const stableId = persistedId || uploadKey;
     const fileState = uploadState.persFiles[uploadKey] || {};
 
     const widthMm = parseFloat(row.querySelector('.pers-w-mm').value) || null;
@@ -766,20 +864,47 @@ function collectPersonalisationTypes(uploadState) {
       price: parseFloat(slabRow.querySelector('.pers-slab-price').value) || 0,
     })).filter(priceSlab => priceSlab.price > 0);
 
-    const blockedZones = [...row.querySelectorAll('.blocked-zone-row')].map((zoneRow, zoneIndex) => ({
-      id: zoneRow.dataset.zoneId || createBlockedZoneId(),
-      type: zoneRow.querySelector('.blocked-zone-type')?.value || 'circle',
-      label: zoneRow.querySelector('.blocked-zone-label')?.value.trim() || `Uitsparing ${zoneIndex + 1}`,
-      x_mm: parseFloat(zoneRow.querySelector('.blocked-zone-x')?.value) || 0,
-      y_mm: parseFloat(zoneRow.querySelector('.blocked-zone-y')?.value) || 0,
-      diameter_mm: parseFloat(zoneRow.querySelector('.blocked-zone-diameter')?.value) || 0,
-      margin_mm: parseFloat(zoneRow.querySelector('.blocked-zone-margin')?.value) || 0,
-    })).filter(zone =>
-      zone.type === 'circle' &&
-      zone.x_mm >= 0 &&
-      zone.y_mm >= 0 &&
-      zone.diameter_mm > 0
-    );
+    const blockedZones = [...row.querySelectorAll('.blocked-zone-row')].map((zoneRow, zoneIndex) => {
+      const type = zoneRow.querySelector('.blocked-zone-type')?.value || 'circle';
+      const label = zoneRow.querySelector('.blocked-zone-label')?.value.trim() || `Zone ${zoneIndex + 1}`;
+
+      if (type === 'line') {
+        return {
+          id: zoneRow.dataset.zoneId || createBlockedZoneId(),
+          type: 'line',
+          label,
+          x1_mm: parseFloat(zoneRow.querySelector('.blocked-zone-x1')?.value) || 0,
+          y1_mm: parseFloat(zoneRow.querySelector('.blocked-zone-y1')?.value) || 0,
+          x2_mm: parseFloat(zoneRow.querySelector('.blocked-zone-x2')?.value) || 0,
+          y2_mm: parseFloat(zoneRow.querySelector('.blocked-zone-y2')?.value) || 0,
+          line_width_mm: parseFloat(zoneRow.querySelector('.blocked-zone-line-width')?.value) || 0.3,
+          margin_mm: parseFloat(zoneRow.querySelector('.blocked-zone-margin')?.value) || 0,
+        };
+      }
+
+      return {
+        id: zoneRow.dataset.zoneId || createBlockedZoneId(),
+        type: 'circle',
+        label,
+        x_mm: parseFloat(zoneRow.querySelector('.blocked-zone-x')?.value) || 0,
+        y_mm: parseFloat(zoneRow.querySelector('.blocked-zone-y')?.value) || 0,
+        diameter_mm: parseFloat(zoneRow.querySelector('.blocked-zone-diameter')?.value) || 0,
+        margin_mm: parseFloat(zoneRow.querySelector('.blocked-zone-margin')?.value) || 0,
+      };
+    }).filter(zone => {
+      if (zone.type === 'line') {
+        return zone.x1_mm >= 0 &&
+          zone.y1_mm >= 0 &&
+          zone.x2_mm >= 0 &&
+          zone.y2_mm >= 0 &&
+          (zone.x1_mm !== zone.x2_mm || zone.y1_mm !== zone.y2_mm);
+      }
+
+      return zone.type === 'circle' &&
+        zone.x_mm >= 0 &&
+        zone.y_mm >= 0 &&
+        zone.diameter_mm > 0;
+    });
 
     return {
       id: stableId,
