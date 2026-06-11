@@ -100,7 +100,7 @@ body {
   border-bottom: 1px solid var(--border);
 }
 
-.brand-icon {
+/* .brand-icon {
   width: 36px;
   height: 36px;
   display: inline-flex;
@@ -110,7 +110,7 @@ body {
   background: var(--accent-light);
   color: var(--accent-dark);
   font-size: 19px;
-}
+} */
 
 .brand-name {
   color: var(--accent-dark);
@@ -1458,7 +1458,6 @@ input[type="file"]::file-selector-button:hover {
 }
 
 #brand-logo {
-  margin-left: 140px;
   width: 160px;
   height: 75px;
 }
