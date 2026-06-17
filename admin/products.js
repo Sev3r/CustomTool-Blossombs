@@ -3,6 +3,8 @@
  * Pagina: Producten beheer
  * Productafbeeldingen, personalisatieafbeeldingen en template PDF's worden via admin geüpload.
  * Personalisatietypes kunnen actief en non-actief worden gezet.
+ * Uitgebreid met drukwerkspecificaties: eindformaat, afloop, exportformaat, veilige marge,
+ * rillijnen en rechthoekige nietzones.
  */
 
 function renderProductsPage() {
@@ -55,10 +57,17 @@ function renderProductGrid() {
     const personalisationHTML = (product.personalisatieTypes || []).map(type => {
       const priceCount = Array.isArray(type.priceSlabs) ? type.priceSlabs.length : 0;
       const isActive = type.active !== false;
+      const spec = normalizeAdminPrintSpec(type, product);
+      const zoneCount = Array.isArray(type.blockedZones) ? type.blockedZones.length : 0;
 
       return `
         <span class="spec-tag ${isActive ? '' : 'inactive'}">
-          ${escHtml(type.label)}: ${type.width_mm || '—'}×${type.height_mm || '—'}mm${priceCount ? `, ${priceCount} staffels` : ''}${isActive ? '' : ' · inactief'}
+          ${escHtml(type.label)}:
+          ${spec.finishWidthMm || '—'}×${spec.finishHeightMm || '—'}mm
+          · export ${spec.exportWidthMm || '—'}×${spec.exportHeightMm || '—'}mm
+          ${priceCount ? `, ${priceCount} staffels` : ''}
+          ${zoneCount ? `, ${zoneCount} zones` : ''}
+          ${isActive ? '' : ' · inactief'}
         </span>
       `;
     }).join('');
@@ -214,7 +223,7 @@ function openProductModal(id = null) {
     <div class="section-title" style="margin-top:4px">
       Personalisatietypes
       <span class="form-hint" style="text-transform:none;font-weight:400;letter-spacing:0">
-        Elk type heeft eigen status, afmetingen, afbeelding, template PDF en staffelprijzen
+        Elk type heeft eigen status, eindformaat, afloop, afbeelding, template PDF, drukzones en staffelprijzen
       </span>
     </div>
 
@@ -280,14 +289,14 @@ function blockedZoneRow(zone = {}, index = 0) {
   return `
     <div class="blocked-zone-row" data-zone-id="${escHtml(id)}">
       <div class="blocked-zone-header">
-        <strong>Uitsparing of rillijn ${index + 1}</strong>
+        <strong>Drukzone ${index + 1}</strong>
         <button class="icon-btn danger" type="button" onclick="this.closest('.blocked-zone-row').remove()" title="Verwijder">×</button>
       </div>
 
       <div class="form-row" style="margin-bottom:8px">
         <div class="form-group">
           <label>Label</label>
-          <input type="text" class="blocked-zone-label" value="${escHtml(zone.label || '')}" placeholder="Bijv. rillijn links of gat boven">
+          <input type="text" class="blocked-zone-label" value="${escHtml(zone.label || '')}" placeholder="Bijv. rillijn, nietzone of gat">
         </div>
 
         <div class="form-group">
@@ -295,11 +304,12 @@ function blockedZoneRow(zone = {}, index = 0) {
           <select class="blocked-zone-type">
             <option value="circle" ${type === 'circle' ? 'selected' : ''}>Cirkel / gat</option>
             <option value="line" ${type === 'line' ? 'selected' : ''}>Lijn / rillijn</option>
+            <option value="rect" ${type === 'rect' ? 'selected' : ''}>Rechthoekige nietzone</option>
           </select>
         </div>
       </div>
 
-      <div class="blocked-zone-circle-fields" style="${type === 'circle' ? '' : 'display:none'}">
+      <div class="blocked-zone-fields blocked-zone-fields-circle" style="${type === 'circle' ? '' : 'display:none'}">
         <div class="form-row-3" style="margin-bottom:8px">
           <div class="form-group">
             <label>X middelpunt mm</label>
@@ -318,7 +328,7 @@ function blockedZoneRow(zone = {}, index = 0) {
         </div>
       </div>
 
-      <div class="blocked-zone-line-fields" style="${type === 'line' ? '' : 'display:none'}">
+      <div class="blocked-zone-fields blocked-zone-fields-line" style="${type === 'line' ? '' : 'display:none'}">
         <div class="form-row" style="margin-bottom:8px">
           <div class="form-group">
             <label>X start mm</label>
@@ -347,6 +357,32 @@ function blockedZoneRow(zone = {}, index = 0) {
           <div class="form-group">
             <label>Lijndikte indicatie mm</label>
             <input type="number" class="blocked-zone-line-width" value="${escHtml(zone.line_width_mm || 0.3)}" placeholder="0.3" min="0.1" step="0.1">
+          </div>
+        </div>
+      </div>
+
+      <div class="blocked-zone-fields blocked-zone-fields-rect" style="${type === 'rect' ? '' : 'display:none'}">
+        <div class="form-row" style="margin-bottom:8px">
+          <div class="form-group">
+            <label>X linksboven mm</label>
+            <input type="number" class="blocked-zone-rect-x" value="${escHtml(zone.x_mm || '')}" placeholder="0" min="0" step="0.1">
+          </div>
+
+          <div class="form-group">
+            <label>Y linksboven mm</label>
+            <input type="number" class="blocked-zone-rect-y" value="${escHtml(zone.y_mm || '')}" placeholder="0" min="0" step="0.1">
+          </div>
+        </div>
+
+        <div class="form-row" style="margin-bottom:8px">
+          <div class="form-group">
+            <label>Breedte mm</label>
+            <input type="number" class="blocked-zone-width" value="${escHtml(zone.width_mm || '')}" placeholder="20" min="0" step="0.1">
+          </div>
+
+          <div class="form-group">
+            <label>Hoogte mm</label>
+            <input type="number" class="blocked-zone-height" value="${escHtml(zone.height_mm || '')}" placeholder="10" min="0" step="0.1">
           </div>
         </div>
       </div>
@@ -383,6 +419,8 @@ function getDefaultPersonalisationPriceSlabs(type = {}) {
 
 function persTypeRow(type, index, uploadKey) {
   const key = uploadKey || createUploadKey();
+  const spec = normalizeAdminPrintSpec(type);
+
   const previewFile = type.previewImageFile || (type.previewImage ? {
     name: 'Personalisatieafbeelding',
     type: 'image/png',
@@ -451,35 +489,44 @@ function persTypeRow(type, index, uploadKey) {
         </div>
       </div>
 
-      <div class="form-row-3" style="margin-bottom:8px">
+      <div class="form-row" style="margin-bottom:8px">
         <div class="form-group">
-          <label>Breedte mm</label>
-          <input type="number" class="pers-w-mm" value="${escHtml(type.width_mm || '')}" placeholder="100" min="10" step="0.5">
+          <label>Eindformaat breedte mm</label>
+          <input type="number" class="pers-finish-w-mm pers-w-mm" value="${escHtml(spec.finishWidthMm || '')}" placeholder="100" min="1" step="0.1">
         </div>
 
         <div class="form-group">
-          <label>Hoogte mm</label>
-          <input type="number" class="pers-h-mm" value="${escHtml(type.height_mm || '')}" placeholder="70" min="10" step="0.5">
-        </div>
-
-        <div class="form-group">
-          <label>Marge mm</label>
-          <input type="number" class="pers-m-mm" value="${escHtml(type.margin_mm || '')}" placeholder="5" min="0" step="0.5">
+          <label>Eindformaat hoogte mm</label>
+          <input type="number" class="pers-finish-h-mm pers-h-mm" value="${escHtml(spec.finishHeightMm || '')}" placeholder="70" min="1" step="0.1">
         </div>
       </div>
 
-      <div class="section-title" style="margin-top:10px">Uitsparingen / no-print zones</div>
+      <div class="form-row" style="margin-bottom:8px">
+        <div class="form-group">
+          <label>Afloop rondom mm</label>
+          <input type="number" class="pers-bleed-mm" value="${escHtml(spec.bleedMm || 3)}" placeholder="3" min="0" step="0.1">
+        </div>
+
+        <div class="form-group">
+          <label>Veilige marge mm</label>
+          <input type="number" class="pers-m-mm" value="${escHtml(spec.safeMarginMm || 3)}" placeholder="3" min="0" step="0.1">
+        </div>
+      </div>
+
+      <div class="pers-px-preview form-hint" style="color:var(--text-2);margin:4px 0 12px"></div>
+
+      <div class="section-title" style="margin-top:10px">Uitsparingen, rillijnen en no-print zones</div>
 
       <div class="blocked-zone-list">
         ${blockedZones.map((zone, zoneIndex) => blockedZoneRow(zone, zoneIndex)).join('')}
       </div>
 
       <button class="btn btn-secondary btn-sm btn-add-blocked-zone" type="button" style="margin:8px 0 12px">
-        + Uitsparing toevoegen
+        + Drukzone toevoegen
       </button>
 
       <span class="form-hint" style="display:block;margin-bottom:12px">
-        Gebruik dit voor gaten, vensters of andere zones waar geen tekst of logo overheen mag vallen.
+        Gebruik dit voor gaten, rillijnen, vouwlijnen, nietzones of andere zones waar geen tekst of logo overheen mag vallen.
       </span>
 
       <div class="section-title" style="margin-top:10px">Staffelprijzen voor deze personalisatie</div>
@@ -519,8 +566,6 @@ function persTypeRow(type, index, uploadKey) {
           </div>
         </div>
       </div>
-
-      <div class="pers-px-preview form-hint" style="color:var(--text-2);margin-top:4px"></div>
     </div>
   `;
 }
@@ -608,6 +653,8 @@ function bindPersRowUploads(row, uploadState) {
       y1_mm: '',
       x2_mm: '',
       y2_mm: '',
+      width_mm: '',
+      height_mm: '',
       line_width_mm: 0.3,
       margin_mm: '',
     }, list.children.length));
@@ -617,6 +664,10 @@ function bindPersRowUploads(row, uploadState) {
     if (newZone) {
       bindBlockedZoneTypeSwitch(newZone);
     }
+  });
+
+  row.querySelectorAll('.blocked-zone-row').forEach(zoneRow => {
+    bindBlockedZoneTypeSwitch(zoneRow);
   });
 
   previewInput?.addEventListener('change', async event => {
@@ -629,27 +680,6 @@ function bindPersRowUploads(row, uploadState) {
     uploadState.persFiles[uploadKey].previewImageFile = await fileToDataURL(file);
     previewOutput.innerHTML = renderStoredFile(uploadState.persFiles[uploadKey].previewImageFile);
     event.target.value = '';
-  });
-
-  row.querySelectorAll('.blocked-zone-type').forEach(select => {
-    select.addEventListener('change', () => {
-      const zoneRow = select.closest('.blocked-zone-row');
-
-      if (!zoneRow) {
-        return;
-      }
-
-      const circleFields = zoneRow.querySelector('.blocked-zone-circle-fields');
-      const lineFields = zoneRow.querySelector('.blocked-zone-line-fields');
-
-      if (circleFields) {
-        circleFields.style.display = select.value === 'circle' ? '' : 'none';
-      }
-
-      if (lineFields) {
-        lineFields.style.display = select.value === 'line' ? '' : 'none';
-      }
-    });
   });
 
   previewRemove?.addEventListener('click', () => {
@@ -679,11 +709,6 @@ function bindPersRowUploads(row, uploadState) {
     uploadState.persFiles[uploadKey].templatePdf = null;
     templateOutput.innerHTML = renderStoredFile(null);
   });
-
-  row.querySelectorAll('.blocked-zone-row').forEach(zoneRow => {
-    bindBlockedZoneTypeSwitch(zoneRow);
-  });
-
 }
 
 function bindBlockedZoneTypeSwitch(zoneRow) {
@@ -693,49 +718,61 @@ function bindBlockedZoneTypeSwitch(zoneRow) {
     return;
   }
 
-  const updateFields = () => {
-    const circleFields = zoneRow.querySelector('.blocked-zone-circle-fields');
-    const lineFields = zoneRow.querySelector('.blocked-zone-line-fields');
+  const update = () => {
+    zoneRow.querySelectorAll('.blocked-zone-fields').forEach(fields => {
+      fields.style.display = 'none';
+    });
 
-    if (circleFields) {
-      circleFields.style.display = select.value === 'circle' ? '' : 'none';
-    }
+    const activeFields = zoneRow.querySelector(`.blocked-zone-fields-${select.value}`);
 
-    if (lineFields) {
-      lineFields.style.display = select.value === 'line' ? '' : 'none';
+    if (activeFields) {
+      activeFields.style.display = '';
     }
   };
 
-  select.addEventListener('change', updateFields);
-  updateFields();
+  select.addEventListener('change', update);
+  update();
 }
 
 function bindPersPreview(row) {
-  const widthInput = row.querySelector('.pers-w-mm');
-  const heightInput = row.querySelector('.pers-h-mm');
+  const widthInput = row.querySelector('.pers-finish-w-mm') || row.querySelector('.pers-w-mm');
+  const heightInput = row.querySelector('.pers-finish-h-mm') || row.querySelector('.pers-h-mm');
+  const bleedInput = row.querySelector('.pers-bleed-mm');
   const marginInput = row.querySelector('.pers-m-mm');
   const preview = row.querySelector('.pers-px-preview');
 
   const update = () => {
-    const widthMm = parseFloat(widthInput?.value);
-    const heightMm = parseFloat(heightInput?.value);
-    const marginMm = parseFloat(marginInput?.value);
-
-    if (widthMm && heightMm) {
-      const widthPx = Math.round(widthMm / 25.4 * 300);
-      const heightPx = Math.round(heightMm / 25.4 * 300);
-      const marginPx = marginMm ? Math.round(marginMm / 25.4 * 300) : null;
-      const scale = Math.min(1, 600 / widthPx);
-      const displayWidth = Math.round(widthPx * scale);
-      const displayHeight = Math.round(heightPx * scale);
-
-      preview.textContent = `Export: ${widthPx}×${heightPx}px 300 DPI | Canvas: ${displayWidth}×${displayHeight}px${marginPx ? ` | Marge: ${marginPx}px` : ''}`;
-    } else {
-      preview.textContent = '';
+    if (!preview) {
+      return;
     }
+
+    const tempPersType = {
+      width_mm: parseFloat(widthInput?.value) || null,
+      height_mm: parseFloat(heightInput?.value) || null,
+      finish_width_mm: parseFloat(widthInput?.value) || null,
+      finish_height_mm: parseFloat(heightInput?.value) || null,
+      bleed_mm: parseFloat(bleedInput?.value) || 3,
+      safe_margin_mm: parseFloat(marginInput?.value) || 3,
+      margin_mm: parseFloat(marginInput?.value) || 3,
+      includesBleed: false,
+    };
+
+    const spec = normalizeAdminPrintSpec(tempPersType);
+
+    preview.textContent = [
+      `Eindformaat: ${formatMm(spec.finishWidthMm)}×${formatMm(spec.finishHeightMm)} mm`,
+      `Afloop: ${formatMm(spec.bleedMm)} mm`,
+      `Export: ${formatMm(spec.exportWidthMm)}×${formatMm(spec.exportHeightMm)} mm`,
+      `${spec.exportWidthPx}×${spec.exportHeightPx}px op 300 DPI`,
+      `Canvas: ${spec.displayWidthPx}×${spec.displayHeightPx}px`,
+    ].join(' | ');
   };
 
-  [widthInput, heightInput, marginInput].forEach(input => input?.addEventListener('input', update));
+  [widthInput, heightInput, bleedInput, marginInput].forEach(input => {
+    input?.addEventListener('input', update);
+    input?.addEventListener('change', update);
+  });
+
   update();
 }
 
@@ -757,9 +794,14 @@ function bindProductModalActions(uploadState, product, isEdit) {
     list.insertAdjacentHTML('beforeend', persTypeRow({
       label: '',
       active: true,
+      finish_width_mm: '',
+      finish_height_mm: '',
       width_mm: '',
       height_mm: '',
-      margin_mm: '',
+      bleed_mm: 3,
+      safe_margin_mm: 3,
+      margin_mm: 3,
+      includesBleed: false,
       clipShape: '',
       priceSlabs: [],
       blockedZones: [],
@@ -824,7 +866,15 @@ function saveProductFromModal(uploadState, product, isEdit) {
 
     width_mm: firstPers.width_mm,
     height_mm: firstPers.height_mm,
+    finish_width_mm: firstPers.finish_width_mm,
+    finish_height_mm: firstPers.finish_height_mm,
+    bleed_mm: firstPers.bleed_mm,
+    safe_margin_mm: firstPers.safe_margin_mm,
     margin_mm: firstPers.margin_mm,
+    includesBleed: false,
+    export_width_mm: firstPers.export_width_mm,
+    export_height_mm: firstPers.export_height_mm,
+
     width_px: firstPers.width_px,
     height_px: firstPers.height_px,
     margin_px: firstPers.margin_px,
@@ -846,17 +896,23 @@ function collectPersonalisationTypes(uploadState) {
     const stableId = persistedId || uploadKey;
     const fileState = uploadState.persFiles[uploadKey] || {};
 
-    const widthMm = parseFloat(row.querySelector('.pers-w-mm').value) || null;
-    const heightMm = parseFloat(row.querySelector('.pers-h-mm').value) || null;
-    const marginMm = parseFloat(row.querySelector('.pers-m-mm').value) || null;
+    const finishWidthMm = parseFloat(row.querySelector('.pers-finish-w-mm')?.value || row.querySelector('.pers-w-mm')?.value) || null;
+    const finishHeightMm = parseFloat(row.querySelector('.pers-finish-h-mm')?.value || row.querySelector('.pers-h-mm')?.value) || null;
+    const bleedMm = parseFloat(row.querySelector('.pers-bleed-mm')?.value) || 3;
+    const safeMarginMm = parseFloat(row.querySelector('.pers-m-mm')?.value) || 3;
 
-    const widthPx = widthMm ? Math.round(widthMm / 25.4 * 300) : null;
-    const heightPx = heightMm ? Math.round(heightMm / 25.4 * 300) : null;
-    const marginPx = marginMm ? Math.round(marginMm / 25.4 * 300) : null;
+    const tempPersType = {
+      width_mm: finishWidthMm,
+      height_mm: finishHeightMm,
+      finish_width_mm: finishWidthMm,
+      finish_height_mm: finishHeightMm,
+      bleed_mm: bleedMm,
+      safe_margin_mm: safeMarginMm,
+      margin_mm: safeMarginMm,
+      includesBleed: false,
+    };
 
-    const scale = widthPx ? Math.min(1, 600 / widthPx) : 1;
-    const displayWidth = widthPx ? Math.round(widthPx * scale) : null;
-    const displayHeight = heightPx ? Math.round(heightPx * scale) : null;
+    const spec = normalizeAdminPrintSpec(tempPersType);
 
     const priceSlabs = [...row.querySelectorAll('.pers-slab-row')].map(slabRow => ({
       from: parseFloat(slabRow.querySelector('.pers-slab-from').value) || 1,
@@ -864,47 +920,7 @@ function collectPersonalisationTypes(uploadState) {
       price: parseFloat(slabRow.querySelector('.pers-slab-price').value) || 0,
     })).filter(priceSlab => priceSlab.price > 0);
 
-    const blockedZones = [...row.querySelectorAll('.blocked-zone-row')].map((zoneRow, zoneIndex) => {
-      const type = zoneRow.querySelector('.blocked-zone-type')?.value || 'circle';
-      const label = zoneRow.querySelector('.blocked-zone-label')?.value.trim() || `Zone ${zoneIndex + 1}`;
-
-      if (type === 'line') {
-        return {
-          id: zoneRow.dataset.zoneId || createBlockedZoneId(),
-          type: 'line',
-          label,
-          x1_mm: parseFloat(zoneRow.querySelector('.blocked-zone-x1')?.value) || 0,
-          y1_mm: parseFloat(zoneRow.querySelector('.blocked-zone-y1')?.value) || 0,
-          x2_mm: parseFloat(zoneRow.querySelector('.blocked-zone-x2')?.value) || 0,
-          y2_mm: parseFloat(zoneRow.querySelector('.blocked-zone-y2')?.value) || 0,
-          line_width_mm: parseFloat(zoneRow.querySelector('.blocked-zone-line-width')?.value) || 0.3,
-          margin_mm: parseFloat(zoneRow.querySelector('.blocked-zone-margin')?.value) || 0,
-        };
-      }
-
-      return {
-        id: zoneRow.dataset.zoneId || createBlockedZoneId(),
-        type: 'circle',
-        label,
-        x_mm: parseFloat(zoneRow.querySelector('.blocked-zone-x')?.value) || 0,
-        y_mm: parseFloat(zoneRow.querySelector('.blocked-zone-y')?.value) || 0,
-        diameter_mm: parseFloat(zoneRow.querySelector('.blocked-zone-diameter')?.value) || 0,
-        margin_mm: parseFloat(zoneRow.querySelector('.blocked-zone-margin')?.value) || 0,
-      };
-    }).filter(zone => {
-      if (zone.type === 'line') {
-        return zone.x1_mm >= 0 &&
-          zone.y1_mm >= 0 &&
-          zone.x2_mm >= 0 &&
-          zone.y2_mm >= 0 &&
-          (zone.x1_mm !== zone.x2_mm || zone.y1_mm !== zone.y2_mm);
-      }
-
-      return zone.type === 'circle' &&
-        zone.x_mm >= 0 &&
-        zone.y_mm >= 0 &&
-        zone.diameter_mm > 0;
-    });
+    const blockedZones = collectBlockedZonesFromRow(row);
 
     return {
       id: stableId,
@@ -912,21 +928,174 @@ function collectPersonalisationTypes(uploadState) {
       active: row.querySelector('.pers-active')?.checked !== false,
       priceSlabs,
       blockedZones,
+
       previewImageFile: fileState.previewImageFile || null,
       previewImage: fileState.previewImageFile?.dataURL || '',
       templatePdf: fileState.templatePdf || null,
+
       clipShape: row.querySelector('.pers-clip').value.trim() || null,
       allowBackgroundColor: row.querySelector('.pers-bg-allowed')?.checked || false,
-      width_mm: widthMm,
-      height_mm: heightMm,
-      margin_mm: marginMm,
-      width_px: widthPx,
-      height_px: heightPx,
-      margin_px: marginPx,
-      canvas_display_width: displayWidth,
-      canvas_display_height: displayHeight,
+
+      width_mm: spec.finishWidthMm,
+      height_mm: spec.finishHeightMm,
+      finish_width_mm: spec.finishWidthMm,
+      finish_height_mm: spec.finishHeightMm,
+      bleed_mm: spec.bleedMm,
+      safe_margin_mm: spec.safeMarginMm,
+      margin_mm: spec.safeMarginMm,
+      includesBleed: false,
+
+      export_width_mm: spec.exportWidthMm,
+      export_height_mm: spec.exportHeightMm,
+      width_px: spec.exportWidthPx,
+      height_px: spec.exportHeightPx,
+      margin_px: spec.safeMarginPx,
+      canvas_display_width: spec.displayWidthPx,
+      canvas_display_height: spec.displayHeightPx,
     };
   });
+}
+
+function collectBlockedZonesFromRow(row) {
+  return [...row.querySelectorAll('.blocked-zone-row')].map((zoneRow, zoneIndex) => {
+    const type = zoneRow.querySelector('.blocked-zone-type')?.value || 'circle';
+    const label = zoneRow.querySelector('.blocked-zone-label')?.value.trim() || `Zone ${zoneIndex + 1}`;
+    const marginMm = parseFloat(zoneRow.querySelector('.blocked-zone-margin')?.value) || 0;
+
+    if (type === 'line') {
+      return {
+        id: zoneRow.dataset.zoneId || createBlockedZoneId(),
+        type: 'line',
+        label,
+        x1_mm: parseFloat(zoneRow.querySelector('.blocked-zone-x1')?.value) || 0,
+        y1_mm: parseFloat(zoneRow.querySelector('.blocked-zone-y1')?.value) || 0,
+        x2_mm: parseFloat(zoneRow.querySelector('.blocked-zone-x2')?.value) || 0,
+        y2_mm: parseFloat(zoneRow.querySelector('.blocked-zone-y2')?.value) || 0,
+        line_width_mm: parseFloat(zoneRow.querySelector('.blocked-zone-line-width')?.value) || 0.3,
+        margin_mm: marginMm,
+      };
+    }
+
+    if (type === 'rect') {
+      return {
+        id: zoneRow.dataset.zoneId || createBlockedZoneId(),
+        type: 'rect',
+        label,
+        x_mm: parseFloat(zoneRow.querySelector('.blocked-zone-rect-x')?.value) || 0,
+        y_mm: parseFloat(zoneRow.querySelector('.blocked-zone-rect-y')?.value) || 0,
+        width_mm: parseFloat(zoneRow.querySelector('.blocked-zone-width')?.value) || 0,
+        height_mm: parseFloat(zoneRow.querySelector('.blocked-zone-height')?.value) || 0,
+        margin_mm: marginMm,
+      };
+    }
+
+    return {
+      id: zoneRow.dataset.zoneId || createBlockedZoneId(),
+      type: 'circle',
+      label,
+      x_mm: parseFloat(zoneRow.querySelector('.blocked-zone-x')?.value) || 0,
+      y_mm: parseFloat(zoneRow.querySelector('.blocked-zone-y')?.value) || 0,
+      diameter_mm: parseFloat(zoneRow.querySelector('.blocked-zone-diameter')?.value) || 0,
+      margin_mm: marginMm,
+    };
+  }).filter(zone => {
+    if (zone.type === 'line') {
+      return zone.x1_mm !== zone.x2_mm || zone.y1_mm !== zone.y2_mm;
+    }
+
+    if (zone.type === 'rect') {
+      return zone.width_mm > 0 && zone.height_mm > 0;
+    }
+
+    return zone.diameter_mm > 0;
+  });
+}
+
+function normalizeAdminPrintSpec(persType = {}, product = {}) {
+  if (window.PrintSpecs?.normalizePrintSpec) {
+    return PrintSpecs.normalizePrintSpec({
+      ...persType,
+      includesBleed: false,
+    }, {
+      ...product,
+      includesBleed: false,
+    });
+  }
+
+  const dpi = 300;
+  const mmPerInch = 25.4;
+  const bleedMm = positiveNumber(persType.bleed_mm, product.bleed_mm, 3) || 3;
+
+  const finishWidthMm = positiveNumber(
+    persType.finish_width_mm,
+    product.finish_width_mm,
+    persType.width_mm,
+    product.width_mm,
+    100
+  ) || 100;
+
+  const finishHeightMm = positiveNumber(
+    persType.finish_height_mm,
+    product.finish_height_mm,
+    persType.height_mm,
+    product.height_mm,
+    70
+  ) || 70;
+
+  const exportWidthMm = positiveNumber(
+    persType.export_width_mm,
+    product.export_width_mm,
+    finishWidthMm + bleedMm * 2
+  ) || finishWidthMm + bleedMm * 2;
+
+  const exportHeightMm = positiveNumber(
+    persType.export_height_mm,
+    product.export_height_mm,
+    finishHeightMm + bleedMm * 2
+  ) || finishHeightMm + bleedMm * 2;
+
+  const safeMarginMm = positiveNumber(
+    persType.safe_margin_mm,
+    persType.margin_mm,
+    product.safe_margin_mm,
+    product.margin_mm,
+    3
+  ) || 3;
+
+  const exportWidthPx = Math.round(exportWidthMm / mmPerInch * dpi);
+  const exportHeightPx = Math.round(exportHeightMm / mmPerInch * dpi);
+  const safeMarginPx = Math.round(safeMarginMm / mmPerInch * dpi);
+  const scale = exportWidthPx ? Math.min(1, 600 / exportWidthPx) : 1;
+  const displayWidthPx = exportWidthPx ? Math.round(exportWidthPx * scale) : null;
+  const displayHeightPx = exportHeightPx ? Math.round(exportHeightPx * scale) : null;
+
+  return {
+    dpi,
+    finishWidthMm,
+    finishHeightMm,
+    exportWidthMm,
+    exportHeightMm,
+    bleedMm,
+    safeMarginMm,
+    includesBleed: false,
+    exportWidthPx,
+    exportHeightPx,
+    safeMarginPx,
+    displayWidthPx,
+    displayHeightPx,
+  };
+}
+
+function positiveNumber(...values) {
+  for (const value of values) {
+    const number = Number(value);
+
+    if (Number.isFinite(number) && number > 0) {
+      return number;
+    }
+  }
+
+  return null;
 }
 
 function fileToDataURL(file) {
@@ -986,6 +1155,14 @@ function formatEuro(value) {
   }
 
   return `€ ${Number(value).toFixed(2).replace('.', ',')}`;
+}
+
+function formatMm(value) {
+  if (value === null || value === undefined || Number.isNaN(Number(value))) {
+    return '—';
+  }
+
+  return Number(value).toFixed(1).replace('.0', '').replace('.', ',');
 }
 
 function escHtml(value) {

@@ -96,9 +96,9 @@ function renderReviewPage() {
           </div>
 
           <div class="review-field">
-  <label><span class="required-star">*</span> Factuuradres</label>
-  <textarea id="r-factuuradres" placeholder="Volledig factuuradres">${escHtml(savedKlant.factuuradres || '')}</textarea>
-</div>
+            <label><span class="required-star">*</span> Factuuradres</label>
+            <input type="text" id="r-factuuradres" value="${escHtml(savedKlant.factuuradres || '')}" placeholder="Volledig factuuradres">
+          </div>
 
           <div class="review-field">
             <label>KvK-nummer</label>
@@ -241,7 +241,21 @@ function renderReviewPage() {
     }
   });
 
-  ['r-company', 'r-naam', 'r-achternaam', 'r-email', 'r-tel', 'r-straat', 'r-huisnummer', 'r-postcode', 'r-plaats', 'r-land', 'r-kvk', 'r-btw', 'r-factuuradres'].forEach(id => {
+  [
+    'r-company',
+    'r-naam',
+    'r-achternaam',
+    'r-email',
+    'r-tel',
+    'r-straat',
+    'r-huisnummer',
+    'r-postcode',
+    'r-plaats',
+    'r-land',
+    'r-kvk',
+    'r-btw',
+    'r-factuuradres',
+  ].forEach(id => {
     document.getElementById(id)?.addEventListener('input', () => {
       Session.setKlant(collectKlant());
     });
