@@ -88,22 +88,22 @@ function renderDesignPage() {
           </div>
 
           <div class="side-section">
-  <div class="side-label">Lettertype</div>
-  <select id="font-select" class="font-select">
-    ${AVAILABLE_FONTS.map(font => `
-      <option value="${font.value}" style="font-family:${font.value}">${font.label}</option>
-    `).join('')}
-  </select>
-</div>
+            <div class="side-label">Lettertype</div>
+            <select id="font-select" class="font-select">
+              ${AVAILABLE_FONTS.map(font => `
+                <option value="${font.value}" style="font-family:${font.value}">${font.label}</option>
+              `).join('')}
+            </select>
+          </div>
 
-<div class="side-section">
-  <div class="side-label">Lettergrootte</div>
-  <select id="font-size" class="font-select">
-    ${[8, 10, 12, 14, 16, 18, 20, 24, 28, 32, 36, 42, 48, 56, 64, 72, 84, 96].map(size => `
-      <option value="${size}" ${size === 20 ? 'selected' : ''}>${size} px</option>
-    `).join('')}
-  </select>
-</div>
+          <div class="side-section">
+            <div class="side-label">Lettergrootte</div>
+            <select id="font-size" class="font-select">
+              ${[8, 10, 12, 14, 16, 18, 20, 24, 28, 32, 36, 42, 48, 56, 64, 72, 84, 96].map(size => `
+                <option value="${size}" ${size === 20 ? 'selected' : ''}>${size} px</option>
+              `).join('')}
+            </select>
+          </div>
 
           <div class="side-section">
             <div class="side-label">Elementkleur</div>
@@ -147,24 +147,25 @@ function renderDesignPage() {
           <div id="canvas-wrap">
             <div id="margin-warning">Object buiten marge</div>
             <canvas id="c"></canvas>
-            <div class="canvas-zoom-controls" aria-label="Canvas zoom controls">
-    <button class="canvas-zoom-btn" type="button" id="btn-canvas-zoom-out" aria-label="Uitzoomen">
-      <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-        <circle cx="7.5" cy="7.5" r="5.25" stroke="currentColor" stroke-width="1.8"/>
-        <path d="M11.5 11.5L15 15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
-        <path d="M5.25 7.5H9.75" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
-      </svg>
-    </button>
 
-    <button class="canvas-zoom-btn" type="button" id="btn-canvas-zoom-in" aria-label="Inzoomen">
-      <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-        <circle cx="7.5" cy="7.5" r="5.25" stroke="currentColor" stroke-width="1.8"/>
-        <path d="M11.5 11.5L15 15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
-        <path d="M5.25 7.5H9.75" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
-        <path d="M7.5 5.25V9.75" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
-      </svg>
-    </button>
-  </div>
+            <div class="canvas-zoom-controls" aria-label="Canvas zoom controls">
+              <button class="canvas-zoom-btn" type="button" id="btn-canvas-zoom-out" aria-label="Uitzoomen">
+                <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                  <circle cx="7.5" cy="7.5" r="5.25" stroke="currentColor" stroke-width="1.8"/>
+                  <path d="M11.5 11.5L15 15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                  <path d="M5.25 7.5H9.75" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                </svg>
+              </button>
+
+              <button class="canvas-zoom-btn" type="button" id="btn-canvas-zoom-in" aria-label="Inzoomen">
+                <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                  <circle cx="7.5" cy="7.5" r="5.25" stroke="currentColor" stroke-width="1.8"/>
+                  <path d="M11.5 11.5L15 15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                  <path d="M5.25 7.5H9.75" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                  <path d="M7.5 5.25V9.75" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                </svg>
+              </button>
+            </div>
           </div>
 
           <div id="status">Selecteer een element om te bewerken. Klik en sleep om te verplaatsen.</div>
@@ -1634,17 +1635,13 @@ function bindLayerDragAndDrop(canvas, stateKey) {
 }
 
 function reorderCanvasObjectsFromLayerDrop(canvas, draggedId, targetId) {
-  const designObjects = canvas.getObjects().filter(object => !isGuideObject(object));
-  const draggedObject = designObjects.find(object => getFabricObjectId(object) === draggedId);
-  const targetObject = designObjects.find(object => getFabricObjectId(object) === targetId);
+  const editableObjects = canvas.getObjects().filter(object => !isGuideObject(object));
+  const draggedObject = editableObjects.find(object => getFabricObjectId(object) === draggedId);
+  const targetObject = editableObjects.find(object => getFabricObjectId(object) === targetId);
 
   if (!draggedObject || !targetObject) {
     return;
   }
-
-  const currentObjects = canvas.getObjects();
-  const guides = currentObjects.filter(object => isGuideObject(object));
-  const editableObjects = currentObjects.filter(object => !isGuideObject(object));
 
   const fromIndex = editableObjects.indexOf(draggedObject);
   const toIndex = editableObjects.indexOf(targetObject);
@@ -1656,10 +1653,30 @@ function reorderCanvasObjectsFromLayerDrop(canvas, draggedId, targetId) {
   editableObjects.splice(fromIndex, 1);
   editableObjects.splice(toIndex, 0, draggedObject);
 
-  canvas.clear();
-  editableObjects.forEach(object => canvas.add(object));
-  guides.forEach(object => canvas.add(object));
+  const activeObject = canvas.getActiveObject();
+  const backgroundColor = canvas.backgroundColor;
+  const backgroundImage = canvas.backgroundImage || null;
+
+  editableObjects.forEach((object, index) => {
+    if (typeof canvas.moveTo === 'function') {
+      canvas.moveTo(object, index);
+      return;
+    }
+
+    if (typeof object.moveTo === 'function') {
+      object.moveTo(index);
+    }
+  });
+
+  canvas.backgroundColor = backgroundColor;
+  canvas.backgroundImage = backgroundImage;
+
   bringGuidesToFront(canvas);
+
+  if (activeObject && !isGuideObject(activeObject)) {
+    canvas.setActiveObject(activeObject);
+  }
+
   canvas.renderAll();
 }
 
