@@ -954,22 +954,11 @@ function drawBlockedZones(canvas, activePers, product, canvasWidth, canvasHeight
         return;
       }
 
-      const safeLine = new fabric.Line(
-        [lineData.x1, lineData.y1, lineData.x2, lineData.y2],
-        {
-          stroke: '#E8860A',
-          strokeWidth: lineData.safeWidth,
-          strokeDashArray: [8, 5],
-          selectable: false,
-          evented: false,
-          objectCaching: false,
-          excludeFromExport: true,
-          opacity: 0.35,
-          _isMargin: true,
-          _isGuide: true,
-          _isBlockedZone: true,
-        }
-      );
+      const safeZone = createCenteredLineSafeZone(lineData);
+
+      if (safeZone) {
+        canvas.add(safeZone);
+      }
 
       const foldLine = new fabric.Line(
         [lineData.x1, lineData.y1, lineData.x2, lineData.y2],
@@ -987,13 +976,48 @@ function drawBlockedZones(canvas, activePers, product, canvasWidth, canvasHeight
         }
       );
 
-      canvas.add(safeLine);
       canvas.add(foldLine);
     }
   });
 
   bringGuidesToFront(canvas);
   canvas.renderAll();
+}
+
+function createCenteredLineSafeZone(lineData) {
+  const deltaX = lineData.x2 - lineData.x1;
+  const deltaY = lineData.y2 - lineData.y1;
+  const lineLength = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+
+  if (!lineLength) {
+    return null;
+  }
+
+  const centerX = (lineData.x1 + lineData.x2) / 2;
+  const centerY = (lineData.y1 + lineData.y2) / 2;
+  const angle = Math.atan2(deltaY, deltaX) * 180 / Math.PI;
+
+  return new fabric.Rect({
+    left: centerX,
+    top: centerY,
+    width: lineLength,
+    height: lineData.safeWidth,
+    originX: 'center',
+    originY: 'center',
+    angle,
+    fill: 'rgba(232, 134, 10, 0.18)',
+    stroke: '#E8860A',
+    strokeWidth: 1,
+    strokeDashArray: [8, 5],
+    selectable: false,
+    evented: false,
+    objectCaching: false,
+    excludeFromExport: true,
+    opacity: 0.75,
+    _isMargin: true,
+    _isGuide: true,
+    _isBlockedZone: true,
+  });
 }
 
 function redrawGuides(canvas, activePers, product, margin, canvasWidth, canvasHeight, isWarning = false) {
