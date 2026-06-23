@@ -378,7 +378,11 @@ function buildOrder(product, options, design, wensen, klant, orderNumber, forced
   const pricing = Pricing.calculateOrderPricing(product, finalOptions);
   const isLatOntwerpen = finalOptions.designChoice === 'laat-ontwerpen';
   const hasFileCheck = finalOptions.addons?.includes('bestandscontrole');
-  const persType = finalOptions.persType || null;
+  const persType = getSelectedPersonalisationType(product, finalOptions);
+  const printSpec = buildOrderPrintSpec(product, persType);
+  const blockedZonesSnapshot = getBlockedZonesSnapshot(persType);
+  const prepressWarnings = Array.isArray(design?.prepressWarnings) ? design.prepressWarnings : [];
+  const uploadCheck = design?.uploadCheck || null;
 
   return {
     orderNumber,
@@ -417,7 +421,182 @@ function buildOrder(product, options, design, wensen, klant, orderNumber, forced
     officialOrderNumber: '',
     notes: wensen?.opmerkingen || '',
     addons: finalOptions.addons || [],
+    printSpec,
+    blockedZonesSnapshot,
+    prepressWarnings,
+    uploadCheck,
   };
+}
+
+function getSelectedPersonalisationType(product, options) {
+  const sessionPersType = options?.persType || null;
+  const persTypeId = options?.persTypeId || sessionPersType?.id || null;
+  const productPersTypes = Array.isArray(product?.personalisatieTypes) ? product.personalisatieTypes : [];
+  const productPersType = productPersTypes.find(type => type.id === persTypeId) || null;
+
+  if (productPersType) {
+    return productPersType;
+  }
+
+  if (sessionPersType) {
+    return sessionPersType;
+  }
+
+  return productPersTypes.find(type => type.active !== false) || productPersTypes[0] || null;
+}
+
+function buildOrderPrintSpec(product, persType) {
+  const spec = getNormalizedPrintSpec(product, persType);
+
+  if (!spec) {
+    return null;
+  }
+
+  const finishWidthMm = getPositiveNumber(spec.finishWidthMm, persType?.finish_width_mm, persType?.width_mm, product?.finish_width_mm, product?.width_mm);
+  const finishHeightMm = getPositiveNumber(spec.finishHeightMm, persType?.finish_height_mm, persType?.height_mm, product?.finish_height_mm, product?.height_mm);
+  const bleedMm = getPositiveNumber(spec.bleedMm, persType?.bleed_mm, product?.bleed_mm, 3);
+  const exportWidthMm = getPositiveNumber(spec.exportWidthMm, persType?.export_width_mm, product?.export_width_mm, finishWidthMm ? finishWidthMm + bleedMm * 2 : null);
+  const exportHeightMm = getPositiveNumber(spec.exportHeightMm, persType?.export_height_mm, product?.export_height_mm, finishHeightMm ? finishHeightMm + bleedMm * 2 : null);
+  const safeMarginMm = getPositiveNumber(spec.safeMarginMm, persType?.safe_margin_mm, persType?.margin_mm, product?.safe_margin_mm, product?.margin_mm, 3);
+  const trimXmm = getNumberOrNull(spec.trimXmm);
+  const trimYmm = getNumberOrNull(spec.trimYmm);
+  const trimRightMm = getNumberOrNull(spec.trimRightMm);
+  const trimBottomMm = getNumberOrNull(spec.trimBottomMm);
+
+  return {
+    finishWidthMm,
+    finishHeightMm,
+    bleedMm,
+    exportWidthMm,
+    exportHeightMm,
+    safeMarginMm,
+    dpi: getPositiveNumber(spec.dpi, 300),
+    minDpi: getPositiveNumber(spec.minDpi, 150),
+    personalisationTypeId: persType?.id || null,
+    personalisationTypeLabel: persType?.label || null,
+    trimBox: {
+      x: trimXmm,
+      y: trimYmm,
+      width: finishWidthMm,
+      height: finishHeightMm,
+      right: trimRightMm,
+      bottom: trimBottomMm,
+    },
+    bleedBox: {
+      x: 0,
+      y: 0,
+      width: exportWidthMm,
+      height: exportHeightMm,
+      right: exportWidthMm,
+      bottom: exportHeightMm,
+    },
+  };
+}
+
+function getNormalizedPrintSpec(product, persType) {
+  if (window.PrintSpecs?.normalizePrintSpec) {
+    return PrintSpecs.normalizePrintSpec(persType || {}, product || {});
+  }
+
+  const bleedMm = getPositiveNumber(persType?.bleed_mm, product?.bleed_mm, 3) || 3;
+  const finishWidthMm = getPositiveNumber(persType?.finish_width_mm, product?.finish_width_mm, persType?.width_mm, product?.width_mm, 100) || 100;
+  const finishHeightMm = getPositiveNumber(persType?.finish_height_mm, product?.finish_height_mm, persType?.height_mm, product?.height_mm, 70) || 70;
+  const exportWidthMm = getPositiveNumber(persType?.export_width_mm, product?.export_width_mm, finishWidthMm + bleedMm * 2) || finishWidthMm + bleedMm * 2;
+  const exportHeightMm = getPositiveNumber(persType?.export_height_mm, product?.export_height_mm, finishHeightMm + bleedMm * 2) || finishHeightMm + bleedMm * 2;
+  const safeMarginMm = getPositiveNumber(persType?.safe_margin_mm, persType?.margin_mm, product?.safe_margin_mm, product?.margin_mm, 3) || 3;
+  const trimXmm = Math.max(0, (exportWidthMm - finishWidthMm) / 2);
+  const trimYmm = Math.max(0, (exportHeightMm - finishHeightMm) / 2);
+
+  return {
+    dpi: 300,
+    minDpi: 150,
+    finishWidthMm,
+    finishHeightMm,
+    bleedMm,
+    exportWidthMm,
+    exportHeightMm,
+    safeMarginMm,
+    trimXmm,
+    trimYmm,
+    trimRightMm: trimXmm + finishWidthMm,
+    trimBottomMm: trimYmm + finishHeightMm,
+  };
+}
+
+function getBlockedZonesSnapshot(persType) {
+  if (!Array.isArray(persType?.blockedZones)) {
+    return [];
+  }
+
+  return persType.blockedZones
+    .map(zone => sanitizeBlockedZone(zone))
+    .filter(Boolean);
+}
+
+function sanitizeBlockedZone(zone) {
+  if (!zone || typeof zone !== 'object') {
+    return null;
+  }
+
+  const base = {
+    id: zone.id || null,
+    type: zone.type || null,
+    label: zone.label || '',
+    margin_mm: getNumberOrNull(zone.margin_mm) || 0,
+  };
+
+  if (zone.type === 'line') {
+    return {
+      ...base,
+      type: 'line',
+      x1_mm: getNumberOrNull(zone.x1_mm) || 0,
+      y1_mm: getNumberOrNull(zone.y1_mm) || 0,
+      x2_mm: getNumberOrNull(zone.x2_mm) || 0,
+      y2_mm: getNumberOrNull(zone.y2_mm) || 0,
+      line_width_mm: getPositiveNumber(zone.line_width_mm, 0.3) || 0.3,
+    };
+  }
+
+  if (zone.type === 'rect') {
+    return {
+      ...base,
+      type: 'rect',
+      x_mm: getNumberOrNull(zone.x_mm) || 0,
+      y_mm: getNumberOrNull(zone.y_mm) || 0,
+      width_mm: getPositiveNumber(zone.width_mm) || 0,
+      height_mm: getPositiveNumber(zone.height_mm) || 0,
+    };
+  }
+
+  if (zone.type === 'circle') {
+    return {
+      ...base,
+      type: 'circle',
+      x_mm: getNumberOrNull(zone.x_mm) || 0,
+      y_mm: getNumberOrNull(zone.y_mm) || 0,
+      diameter_mm: getPositiveNumber(zone.diameter_mm) || 0,
+    };
+  }
+
+  return null;
+}
+
+function getPositiveNumber(...values) {
+  for (const value of values) {
+    const number = Number(value);
+
+    if (Number.isFinite(number) && number > 0) {
+      return number;
+    }
+  }
+
+  return null;
+}
+
+function getNumberOrNull(value) {
+  const number = Number(value);
+
+  return Number.isFinite(number) ? number : null;
 }
 
 function renderConfirmPage(order, product, pricing) {

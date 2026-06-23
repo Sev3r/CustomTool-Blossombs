@@ -379,9 +379,9 @@ function openOrderOverview(id) {
       </div>
 
       <div class="overview-item overview-wide">
-  <span class="overview-label">Factuuradres</span>
-  <span class="overview-value">${escHtml(order.billingAddress || order.invoiceAddress || '—')}</span>
-</div>
+        <span class="overview-label">Factuuradres</span>
+        <span class="overview-value">${escHtml(order.billingAddress || order.invoiceAddress || '—')}</span>
+      </div>
 
       <div class="section-title" style="margin-top:18px">Product en prijs</div>
 
@@ -454,6 +454,9 @@ function openOrderOverview(id) {
         ` : ''}
       </div>
 
+      ${renderPrepressChecklistOverview(order)}
+      ${renderProductionInstructionOverview(order)}
+
       <div class="section-title" style="margin-top:18px">Interne notities</div>
 
       <div class="overview-grid">
@@ -466,12 +469,12 @@ function openOrderOverview(id) {
   `;
 
   const footer = `
-  <button class="btn btn-secondary" type="button" onclick="AdminUI.closeModal()">Sluiten</button>
-  <button class="btn btn-secondary" type="button" onclick="generateOrderPDF('${order.id}')">Download offerte PDF</button>
-  ${hasOrderFiles(order) ? `<button class="btn btn-secondary" type="button" onclick="viewOrderFiles('${order.id}')">Bestanden bekijken</button>` : ''}
-  ${pdfAvailable ? `<button class="btn btn-secondary" type="button" onclick="downloadPrintPDF('${order.id}')">Download drukbestand PDF</button>` : ''}
-  <button class="btn btn-primary" type="button" onclick="openOrderModal('${order.id}')">Aanpassen</button>
-`;
+    <button class="btn btn-secondary" type="button" onclick="AdminUI.closeModal()">Sluiten</button>
+    <button class="btn btn-secondary" type="button" onclick="generateOrderPDF('${order.id}')">Download offerte PDF</button>
+    ${hasOrderFiles(order) ? `<button class="btn btn-secondary" type="button" onclick="viewOrderFiles('${order.id}')">Bestanden bekijken</button>` : ''}
+    ${pdfAvailable ? `<button class="btn btn-secondary" type="button" onclick="downloadPrintPDF('${order.id}')">Download drukbestand PDF</button>` : ''}
+    <button class="btn btn-primary" type="button" onclick="openOrderModal('${order.id}')">Aanpassen</button>
+  `;
 
   AdminUI.openModal({
     title: `Orderoverzicht — ${order.orderNumber || 'aanvraag'}`,
@@ -527,6 +530,409 @@ function renderOrderWensenOverview(order) {
       ` : ''}
     </div>
   `;
+}
+
+function renderPrepressChecklistOverview(order) {
+  const printSpec = order.printSpec || null;
+  const blockedZones = Array.isArray(order.blockedZonesSnapshot) ? order.blockedZonesSnapshot : [];
+  const warnings = Array.isArray(order.prepressWarnings) ? order.prepressWarnings : [];
+  const uploadCheck = order.uploadCheck || null;
+  const source = getOrderDesignSource(order);
+
+  return `
+    <div class="section-title" style="margin-top:18px">Prepress checklist</div>
+
+    <div class="overview-grid">
+      <div class="overview-item">
+        <span class="overview-label">Ontwerpbron</span>
+        <span class="overview-value">${escHtml(source)}</span>
+      </div>
+
+      <div class="overview-item">
+        <span class="overview-label">Eindformaat bekend</span>
+        <span class="overview-value">${formatChecklistValue(Boolean(printSpec?.finishWidthMm && printSpec?.finishHeightMm))}</span>
+      </div>
+
+      <div class="overview-item">
+        <span class="overview-label">Afloop bekend</span>
+        <span class="overview-value">${formatChecklistValue(Boolean(printSpec?.bleedMm !== null && printSpec?.bleedMm !== undefined))}</span>
+      </div>
+
+      <div class="overview-item">
+        <span class="overview-label">Exportformaat bekend</span>
+        <span class="overview-value">${formatChecklistValue(Boolean(printSpec?.exportWidthMm && printSpec?.exportHeightMm))}</span>
+      </div>
+
+      <div class="overview-item">
+        <span class="overview-label">Veilige marge bekend</span>
+        <span class="overview-value">${formatChecklistValue(Boolean(printSpec?.safeMarginMm !== null && printSpec?.safeMarginMm !== undefined))}</span>
+      </div>
+
+      <div class="overview-item">
+        <span class="overview-label">Rillijnen / no-print zones</span>
+        <span class="overview-value">${blockedZones.length ? `${blockedZones.length} zone(s)` : 'Geen zones opgeslagen'}</span>
+      </div>
+
+      <div class="overview-item">
+        <span class="overview-label">Resolutiecheck</span>
+        <span class="overview-value">${formatUploadCheckStatus(uploadCheck)}</span>
+      </div>
+
+      <div class="overview-item">
+        <span class="overview-label">Waarschuwingen tool</span>
+        <span class="overview-value">${warnings.length ? `${warnings.length} waarschuwing(en)` : 'Geen waarschuwingen'}</span>
+      </div>
+
+      <div class="overview-item">
+        <span class="overview-label">Adobe controle nodig</span>
+        <span class="overview-value">${formatChecklistValue(true)}</span>
+      </div>
+
+      <div class="overview-item">
+        <span class="overview-label">Definitieve drukklare PDF</span>
+        <span class="overview-value">Nog maken in Adobe</span>
+      </div>
+    </div>
+
+    <div class="section-title" style="margin-top:18px">Drukwerkspecificaties</div>
+
+    <div class="overview-grid">
+      <div class="overview-item">
+        <span class="overview-label">Eindformaat</span>
+        <span class="overview-value">${formatPrintSize(printSpec?.finishWidthMm, printSpec?.finishHeightMm)}</span>
+      </div>
+
+      <div class="overview-item">
+        <span class="overview-label">Afloop</span>
+        <span class="overview-value">${formatMm(printSpec?.bleedMm)}</span>
+      </div>
+
+      <div class="overview-item">
+        <span class="overview-label">Exportformaat</span>
+        <span class="overview-value">${formatPrintSize(printSpec?.exportWidthMm, printSpec?.exportHeightMm)}</span>
+      </div>
+
+      <div class="overview-item">
+        <span class="overview-label">Veilige marge</span>
+        <span class="overview-value">${formatMm(printSpec?.safeMarginMm)}</span>
+      </div>
+
+      <div class="overview-item">
+        <span class="overview-label">DPI advies</span>
+        <span class="overview-value">${printSpec?.dpi || '—'}</span>
+      </div>
+
+      <div class="overview-item">
+        <span class="overview-label">Minimale DPI</span>
+        <span class="overview-value">${printSpec?.minDpi || '—'}</span>
+      </div>
+
+      <div class="overview-item overview-wide">
+        <span class="overview-label">TrimBox</span>
+        <span class="overview-value">${formatPdfBox(printSpec?.trimBox)}</span>
+      </div>
+
+      <div class="overview-item overview-wide">
+        <span class="overview-label">BleedBox</span>
+        <span class="overview-value">${formatPdfBox(printSpec?.bleedBox)}</span>
+      </div>
+    </div>
+
+    <div class="section-title" style="margin-top:18px">Uploadcontrole en waarschuwingen</div>
+
+    <div class="overview-grid">
+      <div class="overview-item overview-wide">
+        <span class="overview-label">Uploadcontrole</span>
+        <span class="overview-value">${formatUploadCheckDetails(uploadCheck)}</span>
+      </div>
+
+      <div class="overview-item overview-wide">
+        <span class="overview-label">Rillijnen / no-print zones</span>
+        <span class="overview-value">${formatBlockedZonesSummary(blockedZones)}</span>
+      </div>
+
+      <div class="overview-item overview-wide">
+        <span class="overview-label">Waarschuwingen</span>
+        <span class="overview-value">${formatPrepressWarnings(warnings)}</span>
+      </div>
+    </div>
+  `;
+}
+
+function renderProductionInstructionOverview(order) {
+  const instruction = buildProductionInstruction(order);
+
+  return `
+    <div class="section-title" style="margin-top:18px">Productie-instructie</div>
+
+    <div class="overview-grid">
+      <div class="overview-item overview-wide">
+        <span class="overview-label">Instructie voor creatie / prepress</span>
+        <span class="overview-value">
+          <pre style="white-space:pre-wrap;font-family:var(--font-mono);font-size:12px;line-height:1.5;margin:0">${escHtml(instruction)}</pre>
+        </span>
+      </div>
+
+      <div class="overview-item overview-wide">
+        <span class="overview-label">Actie</span>
+        <span class="overview-value">
+          <button class="btn btn-secondary btn-sm" type="button" onclick="copyProductionInstruction('${escHtml(order.id)}')">
+            Kopieer productie-instructie
+          </button>
+        </span>
+      </div>
+    </div>
+  `;
+}
+
+function buildProductionInstruction(order) {
+  const printSpec = order.printSpec || {};
+  const blockedZones = Array.isArray(order.blockedZonesSnapshot) ? order.blockedZonesSnapshot : [];
+  const warnings = Array.isArray(order.prepressWarnings) ? order.prepressWarnings : [];
+  const uploadCheck = order.uploadCheck || null;
+
+  return [
+    `Aanvraag: ${order.orderNumber || '—'}`,
+    `Officieel ordernummer: ${order.officialOrderNumber || 'Nog niet ingevuld'}`,
+    `Klant: ${order.companyName || order.customerName || '—'}`,
+    `Contactpersoon: ${order.customerName || '—'}`,
+    `Product: ${order.productName || '—'}`,
+    `Personalisatie: ${order.persTypeLabel || '—'}`,
+    `Aantal: ${order.quantity || '—'}`,
+    `Ontwerpbron: ${getOrderDesignSource(order)}`,
+    `Bestandsnaam: ${order.designFile || '—'}`,
+    '',
+    `Eindformaat: ${formatPrintSizePlain(printSpec.finishWidthMm, printSpec.finishHeightMm)}`,
+    `Afloop: ${formatMmPlain(printSpec.bleedMm)}`,
+    `Exportformaat: ${formatPrintSizePlain(printSpec.exportWidthMm, printSpec.exportHeightMm)}`,
+    `Veilige marge: ${formatMmPlain(printSpec.safeMarginMm)}`,
+    `DPI advies: ${printSpec.dpi || '—'}`,
+    '',
+    `Rillijnen / no-print zones: ${formatBlockedZonesSummaryPlain(blockedZones)}`,
+    `Uploadcontrole: ${formatUploadCheckPlain(uploadCheck)}`,
+    `Waarschuwingen: ${formatPrepressWarningsPlain(warnings)}`,
+    '',
+    'Adobe actie: CMYK, kleurprofiel, PDF/X en definitieve preflight uitvoeren.',
+    'Controleer daarnaast of TrimBox, BleedBox, snijtekens, afloop en rillijnen correct staan.',
+  ].join('\n');
+}
+
+async function copyProductionInstruction(id) {
+  const order = DS.getOrderById(id);
+
+  if (!order) {
+    AdminUI.showToast('Order niet gevonden', 'error');
+    return;
+  }
+
+  const instruction = buildProductionInstruction(order);
+
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(instruction);
+    } else {
+      copyTextFallback(instruction);
+    }
+
+    AdminUI.showToast('Productie-instructie gekopieerd');
+  } catch (error) {
+    console.warn('Kopiëren mislukt', error);
+    copyTextFallback(instruction);
+    AdminUI.showToast('Productie-instructie gekopieerd');
+  }
+}
+
+function copyTextFallback(text) {
+  const textarea = document.createElement('textarea');
+  textarea.value = text;
+  textarea.setAttribute('readonly', '');
+  textarea.style.position = 'fixed';
+  textarea.style.left = '-9999px';
+  textarea.style.top = '0';
+
+  document.body.appendChild(textarea);
+  textarea.select();
+  document.execCommand('copy');
+  textarea.remove();
+}
+
+function getOrderDesignSource(order) {
+  if (order.wensen && !order.designDataURL && !order.designFile) {
+    return 'Laat ontwerpen';
+  }
+
+  if (order.designFile) {
+    return 'Upload';
+  }
+
+  if (order.designDataURL || order.designPdfDataURL) {
+    return 'Ontwerptool';
+  }
+
+  return 'Niet beschikbaar';
+}
+
+function formatChecklistValue(value) {
+  return value
+    ? '<span class="badge badge-green">Ja</span>'
+    : '<span class="badge badge-gray">Niet beschikbaar</span>';
+}
+
+function formatPrintSize(width, height) {
+  if (!isFinitePositive(width) || !isFinitePositive(height)) {
+    return '—';
+  }
+
+  return `${formatNumber(width)} × ${formatNumber(height)} mm`;
+}
+
+function formatPrintSizePlain(width, height) {
+  if (!isFinitePositive(width) || !isFinitePositive(height)) {
+    return '—';
+  }
+
+  return `${formatNumber(width)} x ${formatNumber(height)} mm`;
+}
+
+function formatMm(value) {
+  if (value === null || value === undefined || Number.isNaN(Number(value))) {
+    return '—';
+  }
+
+  return `${formatNumber(value)} mm`;
+}
+
+function formatMmPlain(value) {
+  if (value === null || value === undefined || Number.isNaN(Number(value))) {
+    return '—';
+  }
+
+  return `${formatNumber(value)} mm`;
+}
+
+function formatPdfBox(box) {
+  if (!box) {
+    return '—';
+  }
+
+  return [
+    `x: ${formatNumber(box.x)}`,
+    `y: ${formatNumber(box.y)}`,
+    `breedte: ${formatNumber(box.width)}`,
+    `hoogte: ${formatNumber(box.height)}`,
+    `rechts: ${formatNumber(box.right)}`,
+    `onder: ${formatNumber(box.bottom)}`,
+  ].join(' mm, ') + ' mm';
+}
+
+function formatUploadCheckStatus(uploadCheck) {
+  if (!uploadCheck) {
+    return 'Niet beschikbaar';
+  }
+
+  const labels = {
+    good: '<span class="badge badge-green">Goed</span>',
+    warning: '<span class="badge badge-orange">Waarschuwing</span>',
+    error: '<span class="badge badge-red">Lage resolutie</span>',
+    'manual-check': '<span class="badge badge-blue">Adobe controle</span>',
+  };
+
+  return labels[uploadCheck.status] || escHtml(uploadCheck.status || 'Niet beschikbaar');
+}
+
+function formatUploadCheckDetails(uploadCheck) {
+  if (!uploadCheck) {
+    return 'Niet beschikbaar';
+  }
+
+  const parts = [
+    uploadCheck.fileName ? `Bestand: ${escHtml(uploadCheck.fileName)}` : '',
+    uploadCheck.widthPx && uploadCheck.heightPx ? `Afbeelding: ${uploadCheck.widthPx} × ${uploadCheck.heightPx}px` : '',
+    uploadCheck.requiredWidthPx && uploadCheck.requiredHeightPx ? `Advies: ${uploadCheck.requiredWidthPx} × ${uploadCheck.requiredHeightPx}px` : '',
+    uploadCheck.estimatedDpiX && uploadCheck.estimatedDpiY ? `Geschatte DPI: ${uploadCheck.estimatedDpiX} × ${uploadCheck.estimatedDpiY}` : '',
+    uploadCheck.message ? escHtml(uploadCheck.message) : '',
+  ].filter(Boolean);
+
+  return parts.length ? parts.join('<br>') : 'Niet beschikbaar';
+}
+
+function formatUploadCheckPlain(uploadCheck) {
+  if (!uploadCheck) {
+    return 'Niet beschikbaar';
+  }
+
+  return uploadCheck.message || uploadCheck.status || 'Niet beschikbaar';
+}
+
+function formatBlockedZonesSummary(blockedZones) {
+  if (!Array.isArray(blockedZones) || !blockedZones.length) {
+    return 'Geen zones opgeslagen';
+  }
+
+  return blockedZones.map((zone, index) => {
+    const label = zone.label || `Zone ${index + 1}`;
+    const typeLabel = formatBlockedZoneType(zone.type);
+    const margin = zone.margin_mm !== undefined ? `, marge ${formatNumber(zone.margin_mm)} mm` : '';
+
+    return `${escHtml(label)} (${typeLabel}${margin})`;
+  }).join('<br>');
+}
+
+function formatBlockedZonesSummaryPlain(blockedZones) {
+  if (!Array.isArray(blockedZones) || !blockedZones.length) {
+    return 'Geen zones opgeslagen';
+  }
+
+  return blockedZones.map((zone, index) => {
+    const label = zone.label || `Zone ${index + 1}`;
+    const typeLabel = formatBlockedZoneType(zone.type);
+    const margin = zone.margin_mm !== undefined ? `, marge ${formatNumber(zone.margin_mm)} mm` : '';
+
+    return `${label} (${typeLabel}${margin})`;
+  }).join('; ');
+}
+
+function formatBlockedZoneType(type) {
+  const labels = {
+    circle: 'cirkel / gat',
+    line: 'rillijn',
+    rect: 'rechthoekige no-print zone',
+  };
+
+  return labels[type] || type || 'onbekend';
+}
+
+function formatPrepressWarnings(warnings) {
+  if (!Array.isArray(warnings) || !warnings.length) {
+    return 'Geen waarschuwingen';
+  }
+
+  return warnings.map(warning => {
+    const level = warning.level === 'info' ? 'Info' : 'Waarschuwing';
+    return `<strong>${escHtml(level)}:</strong> ${escHtml(warning.message || warning.type || 'Controle nodig')}`;
+  }).join('<br>');
+}
+
+function formatPrepressWarningsPlain(warnings) {
+  if (!Array.isArray(warnings) || !warnings.length) {
+    return 'Geen waarschuwingen';
+  }
+
+  return warnings.map(warning => warning.message || warning.type || 'Controle nodig').join('; ');
+}
+
+function isFinitePositive(value) {
+  const number = Number(value);
+
+  return Number.isFinite(number) && number > 0;
+}
+
+function formatNumber(value) {
+  if (value === null || value === undefined || Number.isNaN(Number(value))) {
+    return '—';
+  }
+
+  return Number(value).toFixed(2).replace(/\.00$/, '').replace('.', ',');
 }
 
 function hasOrderFiles(order) {
@@ -631,7 +1037,7 @@ function viewOrderFiles(id) {
       <div>
         <div class="section-title">Drukbestand PDF</div>
         <p style="font-size:12px;color:var(--text-2);margin-top:4px">
-          Dit is het drukklare PDF bestand van het ontwerp.
+          Dit is het voorbereidende PDF bestand van het ontwerp.
         </p>
         <div style="margin-top:8px">
           <button class="btn btn-secondary btn-sm" type="button" onclick="downloadPrintPDF('${id}')">
@@ -831,11 +1237,11 @@ function openOrderModal(id = null) {
     </div>
 
     <div class="form-row-1">
-  <div class="form-group">
-    <label>Factuuradres</label>
-    <textarea id="of-billing-address" placeholder="Volledig factuuradres">${escHtml(order.billingAddress || order.invoiceAddress || '')}</textarea>
-  </div>
-</div>
+      <div class="form-group">
+        <label>Factuuradres</label>
+        <textarea id="of-billing-address" placeholder="Volledig factuuradres">${escHtml(order.billingAddress || order.invoiceAddress || '')}</textarea>
+      </div>
+    </div>
 
     <div class="section-title" style="margin-top:4px">Order details</div>
 
@@ -923,12 +1329,12 @@ function openOrderModal(id = null) {
   `;
 
   const footer = `
-  <button class="btn btn-secondary" type="button" onclick="AdminUI.closeModal()">Annuleren</button>
-  ${isEdit ? `<button class="btn btn-secondary" type="button" onclick="generateOrderPDF('${order.id}')">Download offerte PDF</button>` : ''}
-  ${isEdit && hasOrderFiles(order) ? `<button class="btn btn-secondary" type="button" onclick="viewOrderFiles('${order.id}')">Bestanden bekijken</button>` : ''}
-  ${isEdit && getOrderPdfDataURL(order) ? `<button class="btn btn-secondary" type="button" onclick="downloadPrintPDF('${order.id}')">Download drukbestand PDF</button>` : ''}
-  <button class="btn btn-primary" type="button" id="btn-order-save">Opslaan</button>
-`;
+    <button class="btn btn-secondary" type="button" onclick="AdminUI.closeModal()">Annuleren</button>
+    ${isEdit ? `<button class="btn btn-secondary" type="button" onclick="generateOrderPDF('${order.id}')">Download offerte PDF</button>` : ''}
+    ${isEdit && hasOrderFiles(order) ? `<button class="btn btn-secondary" type="button" onclick="viewOrderFiles('${order.id}')">Bestanden bekijken</button>` : ''}
+    ${isEdit && getOrderPdfDataURL(order) ? `<button class="btn btn-secondary" type="button" onclick="downloadPrintPDF('${order.id}')">Download drukbestand PDF</button>` : ''}
+    <button class="btn btn-primary" type="button" id="btn-order-save">Opslaan</button>
+  `;
 
   AdminUI.openModal({
     title: isEdit ? 'Order aanpassen' : 'Nieuwe order',
@@ -1215,3 +1621,4 @@ window.generateOrderPDF = generateOrderPDF;
 window.toggleOrderConfirmation = toggleOrderConfirmation;
 window.openOrderModal = openOrderModal;
 window.openOrderOverview = openOrderOverview;
+window.copyProductionInstruction = copyProductionInstruction;

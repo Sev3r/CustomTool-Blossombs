@@ -14,6 +14,7 @@ let fabricActiveColor = '#1D9E75';
 let fabricBackgroundColor = '#b7bdb8';
 let uploadedDataURL = null;
 let uploadedFileName = null;
+let uploadedCheck = null;
 let activeDesignTab = 'tool';
 let fabricInitToken = 0;
 let fabricInitTimer = null;
@@ -62,6 +63,7 @@ function renderDesignPage() {
 
   uploadedDataURL = saved.dataURL || savedState?.dataURL || null;
   uploadedFileName = saved.fileName || savedState?.fileName || null;
+  uploadedCheck = saved.uploadCheck || savedState?.uploadCheck || null;
   activeDesignTab = saved.tab || savedState?.tab || 'tool';
 
   el.innerHTML = `
@@ -196,6 +198,13 @@ function renderDesignPage() {
               <button onclick="clearUpload()" type="button" style="background:none;border:none;cursor:pointer;color:#C0392B;font-size:18px">×</button>
             </div>
           ` : ''}
+
+          ${uploadedCheck ? `
+            <div style="margin-top:10px;padding:10px 14px;background:${getUploadCheckBackground(uploadedCheck.status)};border-radius:8px;
+                        font-size:12px;color:${getUploadCheckTextColor(uploadedCheck.status)}">
+              ${escHtml(uploadedCheck.message || 'Upload gecontroleerd.')}
+            </div>
+          ` : ''}
         </div>
 
         <div>
@@ -221,7 +230,7 @@ function renderDesignPage() {
   `;
 
   bindDesignTabs(product, activePers, savedState, stateKey);
-  bindUploadZone(stateKey);
+  bindUploadZone(stateKey, activePers, product);
   bindDesignNextButton(product, activePers, stateKey);
 
   document.getElementById('btn-zoom')?.addEventListener('click', () => {
@@ -263,7 +272,7 @@ function bindDesignTabs(product, activePers, savedState, stateKey) {
   });
 }
 
-function bindUploadZone(stateKey) {
+function bindUploadZone(stateKey, activePers, product) {
   const zone = document.getElementById('upload-zone');
   const input = document.getElementById('upload-input');
 
@@ -289,7 +298,7 @@ function bindUploadZone(stateKey) {
     const file = event.dataTransfer.files?.[0];
 
     if (file) {
-      handleUpload(file, stateKey);
+      handleUpload(file, stateKey, activePers, product);
     }
   });
 
@@ -297,7 +306,7 @@ function bindUploadZone(stateKey) {
     const file = event.target.files?.[0];
 
     if (file) {
-      handleUpload(file, stateKey);
+      handleUpload(file, stateKey, activePers, product);
     }
   });
 }
@@ -321,6 +330,8 @@ function bindDesignNextButton(product, activePers, stateKey) {
         fileName: uploadedFileName,
         tab: 'upload',
         source: 'upload',
+        uploadCheck: uploadedCheck,
+        prepressWarnings: getUploadPrepressWarnings(uploadedCheck),
       };
 
       Session.setDesign(designData);
@@ -336,6 +347,7 @@ function bindDesignNextButton(product, activePers, stateKey) {
       }
 
       const snapshot = snapshotCanvas(fabricCanvas, product, activePers);
+      const prepressWarnings = collectCanvasPrepressWarnings(fabricCanvas, activePers, product);
 
       Session.setDesign({
         dataURL: snapshot.dataURL,
@@ -344,6 +356,8 @@ function bindDesignNextButton(product, activePers, stateKey) {
         source: 'fabric',
         fabricJSON: snapshot.json,
         backgroundColor: snapshot.backgroundColor,
+        prepressWarnings,
+        uploadCheck: null,
       });
 
       persistDesignState(stateKey, {
@@ -352,6 +366,8 @@ function bindDesignNextButton(product, activePers, stateKey) {
         fabricJSON: snapshot.json,
         backgroundColor: snapshot.backgroundColor,
         tab: 'tool',
+        prepressWarnings,
+        uploadCheck: null,
       });
     }
 
@@ -947,6 +963,54 @@ function drawBlockedZones(canvas, activePers, product, canvasWidth, canvasHeight
       return;
     }
 
+    if (zone.type === 'rect') {
+      const rectData = getBlockedRectCanvasData(zone, activePers, product, canvasWidth, canvasHeight);
+
+      if (!rectData) {
+        return;
+      }
+
+      const safeRect = new fabric.Rect({
+        left: rectData.safeLeft,
+        top: rectData.safeTop,
+        width: rectData.safeWidth,
+        height: rectData.safeHeight,
+        fill: 'rgba(232, 134, 10, 0.14)',
+        stroke: '#E8860A',
+        strokeWidth: 2,
+        strokeDashArray: [8, 5],
+        selectable: false,
+        evented: false,
+        objectCaching: false,
+        excludeFromExport: true,
+        _isMargin: true,
+        _isGuide: true,
+        _isBlockedZone: true,
+      });
+
+      const blockedRect = new fabric.Rect({
+        left: rectData.left,
+        top: rectData.top,
+        width: rectData.width,
+        height: rectData.height,
+        fill: 'rgba(192, 57, 43, 0.18)',
+        stroke: '#C0392B',
+        strokeWidth: 2,
+        strokeDashArray: [4, 3],
+        selectable: false,
+        evented: false,
+        objectCaching: false,
+        excludeFromExport: true,
+        _isMargin: true,
+        _isGuide: true,
+        _isBlockedZone: true,
+      });
+
+      canvas.add(safeRect);
+      canvas.add(blockedRect);
+      return;
+    }
+
     if (zone.type === 'line') {
       const lineData = getBlockedLineCanvasData(zone, activePers, product, canvasWidth, canvasHeight);
 
@@ -1139,6 +1203,46 @@ function getBlockedCircleCanvasData(zone, activePers, product, canvasWidth, canv
     cy: yMm * pxPerMmY,
     holeRadius,
     safeRadius,
+  };
+}
+
+function getBlockedRectCanvasData(zone, activePers, product, canvasWidth, canvasHeight) {
+  const widthMm = Number(activePers?.width_mm || product?.width_mm || 0);
+  const heightMm = Number(activePers?.height_mm || product?.height_mm || 0);
+
+  if (!widthMm || !heightMm) {
+    return null;
+  }
+
+  const xMm = Number(zone.x_mm || 0);
+  const yMm = Number(zone.y_mm || 0);
+  const rectWidthMm = Number(zone.width_mm || 0);
+  const rectHeightMm = Number(zone.height_mm || 0);
+  const marginMm = Number(zone.margin_mm || 0);
+
+  if (!rectWidthMm || !rectHeightMm) {
+    return null;
+  }
+
+  const pxPerMmX = canvasWidth / widthMm;
+  const pxPerMmY = canvasHeight / heightMm;
+
+  const left = xMm * pxPerMmX;
+  const top = yMm * pxPerMmY;
+  const width = rectWidthMm * pxPerMmX;
+  const height = rectHeightMm * pxPerMmY;
+  const marginX = marginMm * pxPerMmX;
+  const marginY = marginMm * pxPerMmY;
+
+  return {
+    left,
+    top,
+    width,
+    height,
+    safeLeft: left - marginX,
+    safeTop: top - marginY,
+    safeWidth: width + marginX * 2,
+    safeHeight: height + marginY * 2,
   };
 }
 
@@ -1495,6 +1599,21 @@ function isObjectOverlappingBlockedZones(object, activePers, product, canvasWidt
       return isRectOverlappingCircle(bounds, circleData.cx, circleData.cy, circleData.safeRadius);
     }
 
+    if (zone.type === 'rect') {
+      const rectData = getBlockedRectCanvasData(zone, activePers, product, canvasWidth, canvasHeight);
+
+      if (!rectData) {
+        return false;
+      }
+
+      return isRectOverlappingRect(bounds, {
+        left: rectData.safeLeft,
+        top: rectData.safeTop,
+        width: rectData.safeWidth,
+        height: rectData.safeHeight,
+      });
+    }
+
     if (zone.type === 'line') {
       const lineData = getBlockedLineCanvasData(zone, activePers, product, canvasWidth, canvasHeight);
 
@@ -1517,6 +1636,13 @@ function isRectOverlappingCircle(rect, circleX, circleY, radius) {
   const distanceY = circleY - closestY;
 
   return (distanceX * distanceX + distanceY * distanceY) <= radius * radius;
+}
+
+function isRectOverlappingRect(rectA, rectB) {
+  return rectA.left < rectB.left + rectB.width &&
+    rectA.left + rectA.width > rectB.left &&
+    rectA.top < rectB.top + rectB.height &&
+    rectA.top + rectA.height > rectB.top;
 }
 
 function isRectNearLine(rect, x1, y1, x2, y2, radius) {
@@ -1562,6 +1688,56 @@ function doLineSegmentsIntersect(x1, y1, x2, y2, x3, y3, x4, y4) {
 
 function clamp(value, min, max) {
   return Math.min(Math.max(value, min), max);
+}
+
+function collectCanvasPrepressWarnings(canvas, activePers, product) {
+  if (!canvas) {
+    return [];
+  }
+
+  const state = window._currentDesignGuideState || {};
+  const canvasWidth = state.canvasWidth || canvas.getWidth();
+  const canvasHeight = state.canvasHeight || canvas.getHeight();
+  const margin = state.margin !== undefined
+    ? state.margin
+    : getFallbackCanvasMargin(activePers, product, canvasWidth);
+  const warnings = [];
+  const editableObjects = canvas.getObjects().filter(object => !isGuideObject(object));
+  const outsideMarginCount = editableObjects.filter(object => isOutsideMargin(object, margin, canvasWidth, canvasHeight)).length;
+  const blockedZoneCount = editableObjects.filter(object => isObjectOverlappingBlockedZones(object, activePers, product, canvasWidth, canvasHeight)).length;
+
+  if (outsideMarginCount > 0) {
+    warnings.push({
+      type: 'safe-margin',
+      level: 'warning',
+      message: outsideMarginCount === 1
+        ? 'Een element staat buiten de veilige marge.'
+        : `${outsideMarginCount} elementen staan buiten de veilige marge.`,
+    });
+  }
+
+  if (blockedZoneCount > 0) {
+    warnings.push({
+      type: 'blocked-zone',
+      level: 'warning',
+      message: blockedZoneCount === 1
+        ? 'Een element raakt een rillijn of no-print zone.'
+        : `${blockedZoneCount} elementen raken een rillijn of no-print zone.`,
+    });
+  }
+
+  return warnings;
+}
+
+function getFallbackCanvasMargin(activePers, product, canvasWidth) {
+  const sourceMarginPx = Number(activePers?.margin_px || product?.margin_px || 20);
+  const sourceWidthPx = Number(activePers?.width_px || product?.width_px || 1181);
+
+  if (!sourceWidthPx) {
+    return sourceMarginPx;
+  }
+
+  return sourceMarginPx * (canvasWidth / sourceWidthPx);
 }
 
 function updateFabricStatus() {
@@ -1916,12 +2092,14 @@ function clearDesignState(stateKey) {
   localStorage.removeItem(stateKey);
 }
 
-function handleUpload(file, stateKey) {
+async function handleUpload(file, stateKey, activePers, product) {
+  const uploadCheck = await buildUploadCheck(file, activePers, product);
   const reader = new FileReader();
 
   reader.onload = event => {
     uploadedDataURL = event.target.result;
     uploadedFileName = file.name;
+    uploadedCheck = uploadCheck;
 
     const data = {
       dataURL: uploadedDataURL,
@@ -1929,6 +2107,8 @@ function handleUpload(file, stateKey) {
       fileName: uploadedFileName,
       tab: 'upload',
       source: 'upload',
+      uploadCheck: uploadedCheck,
+      prepressWarnings: getUploadPrepressWarnings(uploadedCheck),
     };
 
     Session.setDesign(data);
@@ -1939,9 +2119,221 @@ function handleUpload(file, stateKey) {
   reader.readAsDataURL(file);
 }
 
+function buildUploadCheck(file, activePers, product) {
+  const fileName = file?.name || '';
+  const fileType = file?.type || getFileTypeFromName(fileName);
+  const extension = getFileExtension(fileName);
+  const printSpec = getUploadPrintSpec(activePers, product);
+  const requiredWidthPx = printSpec.requiredWidthPx;
+  const requiredHeightPx = printSpec.requiredHeightPx;
+
+  if (!file) {
+    return Promise.resolve(null);
+  }
+
+  if (['pdf', 'ai', 'eps'].includes(extension)) {
+    return Promise.resolve({
+      fileName,
+      fileType,
+      widthPx: null,
+      heightPx: null,
+      requiredWidthPx,
+      requiredHeightPx,
+      estimatedDpiX: null,
+      estimatedDpiY: null,
+      status: 'manual-check',
+      message: 'Dit bestand wordt technisch gecontroleerd in Adobe.',
+    });
+  }
+
+  if (!fileType.startsWith('image/') && !['png', 'jpg', 'jpeg'].includes(extension)) {
+    return Promise.resolve({
+      fileName,
+      fileType,
+      widthPx: null,
+      heightPx: null,
+      requiredWidthPx,
+      requiredHeightPx,
+      estimatedDpiX: null,
+      estimatedDpiY: null,
+      status: 'warning',
+      message: 'Dit bestandstype kan niet automatisch op resolutie worden gecontroleerd.',
+    });
+  }
+
+  return getUploadedImageDimensions(file)
+    .then(dimensions => {
+      const estimatedDpiX = printSpec.exportWidthMm
+        ? Math.round((dimensions.widthPx / printSpec.exportWidthMm) * 25.4)
+        : null;
+      const estimatedDpiY = printSpec.exportHeightMm
+        ? Math.round((dimensions.heightPx / printSpec.exportHeightMm) * 25.4)
+        : null;
+      const minDpi = Math.min(estimatedDpiX || 0, estimatedDpiY || 0);
+
+      let status = 'good';
+      let message = 'De afbeelding heeft voldoende resolutie voor drukwerk op 300 DPI.';
+
+      if (minDpi < 150) {
+        status = 'error';
+        message = `De afbeelding lijkt te laag in resolutie. Advies: minimaal ${requiredWidthPx} × ${requiredHeightPx}px voor 300 DPI.`;
+      } else if (minDpi < 300) {
+        status = 'warning';
+        message = `De afbeelding is bruikbaar, maar lager dan de aanbevolen 300 DPI. Advies: ${requiredWidthPx} × ${requiredHeightPx}px.`;
+      }
+
+      return {
+        fileName,
+        fileType,
+        widthPx: dimensions.widthPx,
+        heightPx: dimensions.heightPx,
+        requiredWidthPx,
+        requiredHeightPx,
+        estimatedDpiX,
+        estimatedDpiY,
+        status,
+        message,
+      };
+    })
+    .catch(() => ({
+      fileName,
+      fileType,
+      widthPx: null,
+      heightPx: null,
+      requiredWidthPx,
+      requiredHeightPx,
+      estimatedDpiX: null,
+      estimatedDpiY: null,
+      status: 'warning',
+      message: 'De resolutie van dit bestand kon niet automatisch worden gecontroleerd.',
+    }));
+}
+
+function getUploadPrintSpec(activePers, product) {
+  if (window.PrintSpecs?.normalizePrintSpec) {
+    const spec = PrintSpecs.normalizePrintSpec(activePers || {}, product || {});
+
+    return {
+      exportWidthMm: spec.exportWidthMm,
+      exportHeightMm: spec.exportHeightMm,
+      requiredWidthPx: spec.requiredImageWidthPx300 || spec.exportWidthPx,
+      requiredHeightPx: spec.requiredImageHeightPx300 || spec.exportHeightPx,
+    };
+  }
+
+  const widthMm = Number(activePers?.width_mm || product?.width_mm || 100);
+  const heightMm = Number(activePers?.height_mm || product?.height_mm || 70);
+
+  return {
+    exportWidthMm: widthMm,
+    exportHeightMm: heightMm,
+    requiredWidthPx: Math.round((widthMm / 25.4) * 300),
+    requiredHeightPx: Math.round((heightMm / 25.4) * 300),
+  };
+}
+
+function getUploadedImageDimensions(file) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    const url = URL.createObjectURL(file);
+
+    image.onload = () => {
+      URL.revokeObjectURL(url);
+
+      resolve({
+        widthPx: image.naturalWidth,
+        heightPx: image.naturalHeight,
+      });
+    };
+
+    image.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error('Afbeelding kon niet worden gelezen.'));
+    };
+
+    image.src = url;
+  });
+}
+
+function getUploadPrepressWarnings(uploadCheck) {
+  if (!uploadCheck) {
+    return [];
+  }
+
+  if (uploadCheck.status === 'manual-check') {
+    return [{
+      type: 'upload-vector-check',
+      level: 'info',
+      message: 'Dit bestand moet technisch worden gecontroleerd in Adobe.',
+    }];
+  }
+
+  if (uploadCheck.status === 'warning') {
+    return [{
+      type: 'upload-resolution-warning',
+      level: 'warning',
+      message: uploadCheck.message || 'De upload heeft mogelijk een te lage resolutie.',
+    }];
+  }
+
+  if (uploadCheck.status === 'error') {
+    return [{
+      type: 'upload-resolution-error',
+      level: 'warning',
+      message: uploadCheck.message || 'De upload heeft waarschijnlijk een te lage resolutie.',
+    }];
+  }
+
+  return [];
+}
+
+function getUploadCheckBackground(status) {
+  if (status === 'good') {
+    return '#EDF2ED';
+  }
+
+  if (status === 'error') {
+    return '#FCE8E3';
+  }
+
+  return '#FFF3D8';
+}
+
+function getUploadCheckTextColor(status) {
+  if (status === 'good') {
+    return '#3E5A3E';
+  }
+
+  if (status === 'error') {
+    return '#C0392B';
+  }
+
+  return '#8A681E';
+}
+
+function getFileExtension(fileName) {
+  return String(fileName || '').split('.').pop().toLowerCase();
+}
+
+function getFileTypeFromName(fileName) {
+  const extension = getFileExtension(fileName);
+
+  const map = {
+    pdf: 'application/pdf',
+    ai: 'application/postscript',
+    eps: 'application/postscript',
+    png: 'image/png',
+    jpg: 'image/jpeg',
+    jpeg: 'image/jpeg',
+  };
+
+  return map[extension] || '';
+}
+
 function clearUpload() {
   uploadedDataURL = null;
   uploadedFileName = null;
+  uploadedCheck = null;
 
   Session.setDesign({
     dataURL: null,
@@ -1949,6 +2341,8 @@ function clearUpload() {
     fileName: null,
     tab: 'upload',
     source: null,
+    uploadCheck: null,
+    prepressWarnings: [],
   });
 
   renderDesignPage();
