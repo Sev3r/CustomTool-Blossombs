@@ -26,6 +26,9 @@ const CANVAS_ZOOM_MIN = 0.5;
 const CANVAS_ZOOM_MAX = 3;
 const CANVAS_ZOOM_STEP = 0.1;
 
+const IMAGE_DPI_RECOMMENDED = 300;
+const IMAGE_DPI_MINIMUM = 150;
+
 const AVAILABLE_FONTS = [
   { label: 'Georgia', value: 'Georgia' },
   { label: 'Playfair Display', value: "'Playfair Display', serif" },
@@ -151,6 +154,7 @@ function renderDesignPage() {
             <button class="tb-btn" type="button" id="btn-clear">Reset</button>
           </div>
 
+
           <div id="canvas-wrap">
             <div id="margin-warning">Object buiten marge</div>
             <canvas id="c"></canvas>
@@ -183,6 +187,11 @@ function renderDesignPage() {
           <div id="layer-list"></div>
         </aside>
       </div>
+
+      <div
+        id="fabric-image-dpi-warning"
+        style="display:none;position:fixed;right:24px;top:160px;z-index:1000;width:min(320px,calc(100vw - 48px));padding:12px 14px;border-radius:10px;font-size:12px;line-height:1.45;box-shadow:0 10px 30px rgba(0,0,0,.12)"
+      ></div>
     </div>
 
     <div id="tab-upload" style="${activeDesignTab === 'upload' ? '' : 'display:none'}">
@@ -667,6 +676,7 @@ function initFabricTool(product, activePers, savedState, stateKey, token = fabri
 
   fabricSaveHistory();
   updateLayerPanel();
+  updateFabricImageDpiWarning(fabricCanvas, activePers, product);
 
   bindCanvasZoomControls();
   applyCanvasZoom();
@@ -674,6 +684,7 @@ function initFabricTool(product, activePers, savedState, stateKey, token = fabri
   setTimeout(() => {
     if (fabricCanvas && token === fabricInitToken) {
       redrawGuides(fabricCanvas, activePers, product, margin, canvasWidth, canvasHeight);
+      updateFabricImageDpiWarning(fabricCanvas, activePers, product);
       applyCanvasZoom();
     }
   }, 120);
@@ -713,6 +724,11 @@ function bindFabricDocumentHandlers() {
 
     if (object && !isGuideObject(object) && !(object.type === 'i-text' && object.isEditing)) {
       fabricCanvas.remove(object);
+      updateFabricImageDpiWarning(
+        fabricCanvas,
+        window._currentDesignGuideState?.activePers,
+        window._currentDesignGuideState?.product
+      );
       fabricSaveHistory();
       updateLayerPanel();
       autoSaveCanvasState(window._currentDesignStateKey);
@@ -1037,7 +1053,7 @@ function drawBlockedZones(canvas, activePers, product, canvasWidth, canvasHeight
         {
           stroke: '#C0392B',
           strokeWidth: Math.max(1.5, lineData.lineWidth),
-          strokeDashArray: [4, 3],
+          strokeDashArray: [2, 1.5],
           selectable: false,
           evented: false,
           objectCaching: false,
@@ -1262,15 +1278,32 @@ function getBlockedLineCanvasData(zone, activePers, product, canvasWidth, canvas
     return null;
   }
 
-  const x1Mm = Number(zone.x1_mm || 0);
-  const y1Mm = Number(zone.y1_mm || 0);
-  const x2Mm = Number(zone.x2_mm || 0);
-  const y2Mm = Number(zone.y2_mm || 0);
+  let x1Mm = Number(zone.x1_mm || 0);
+  let y1Mm = Number(zone.y1_mm || 0);
+  let x2Mm = Number(zone.x2_mm || 0);
+  let y2Mm = Number(zone.y2_mm || 0);
   const lineWidthMm = Number(zone.line_width_mm || 0.3);
   const marginMm = Number(zone.margin_mm || 0);
 
   if (x1Mm === x2Mm && y1Mm === y2Mm) {
     return null;
+  }
+
+  const deltaXmm = Math.abs(x2Mm - x1Mm);
+  const deltaYmm = Math.abs(y2Mm - y1Mm);
+
+  if (deltaYmm <= 0.01) {
+    const centerYmm = (y1Mm + y2Mm) / 2;
+    x1Mm = 0;
+    x2Mm = widthMm;
+    y1Mm = centerYmm;
+    y2Mm = centerYmm;
+  } else if (deltaXmm <= 0.01) {
+    const centerXmm = (x1Mm + x2Mm) / 2;
+    x1Mm = centerXmm;
+    x2Mm = centerXmm;
+    y1Mm = 0;
+    y2Mm = heightMm;
   }
 
   const pxPerMmX = canvasWidth / widthMm;
@@ -1325,6 +1358,8 @@ function loadBackgroundImage(canvas, activePers, product, canvasWidth, canvasHei
 function restoreCanvasStateOrDefault(canvas, savedState, canvasHeight, margin, canvasWidth, canvasHeightValue, activePers, product) {
   const redrawAfterRestore = () => {
     redrawGuides(canvas, activePers, product, margin, canvasWidth, canvasHeightValue);
+    restoreFabricImageUploadMeta(canvas);
+    updateFabricImageDpiWarning(canvas, activePers, product);
     updateLayerPanel();
   };
 
@@ -1399,11 +1434,13 @@ function bindFabricEvents(canvas, margin, canvasWidth, canvasHeight, stateKey, a
 
   canvas.on('object:scaling', event => {
     checkMargin(event.target);
+    updateFabricImageDpiWarning(canvas, activePers, product);
     bringGuidesToFront(canvas);
   });
 
   canvas.on('object:modified', event => {
     checkMargin(event.target);
+    updateFabricImageDpiWarning(canvas, activePers, product);
     bringGuidesToFront(canvas);
   });
 
@@ -1435,11 +1472,13 @@ function bindFabricEvents(canvas, margin, canvasWidth, canvasHeight, stateKey, a
   canvas.on('selection:created', () => {
     updateFabricStatus();
     updateLayerPanel();
+    updateFabricImageDpiWarning(canvas, activePers, product);
   });
 
   canvas.on('selection:updated', () => {
     updateFabricStatus();
     updateLayerPanel();
+    updateFabricImageDpiWarning(canvas, activePers, product);
   });
 
   canvas.on('selection:cleared', () => {
@@ -1450,6 +1489,7 @@ function bindFabricEvents(canvas, margin, canvasWidth, canvasHeight, stateKey, a
     }
 
     updateLayerPanel();
+    updateFabricImageDpiWarning(canvas, activePers, product);
   });
 
   canvas.on('object:scaling', updateLayerPanel);
@@ -1471,13 +1511,20 @@ function bindFabricButtons(canvas, margin, canvasWidth, canvasHeight, stateKey, 
 
     reader.onload = readerEvent => {
       fabric.Image.fromURL(readerEvent.target.result, image => {
+        const uploadMeta = createFabricImageUploadMeta(file, image);
+
         image.scaleToWidth(120);
-        image.set({ left: 140, top: 140 });
+        image.set({
+          left: 140,
+          top: 140,
+          _uploadMeta: uploadMeta,
+        });
 
         canvas.add(image);
         canvas.setActiveObject(image);
         canvas.renderAll();
 
+        updateFabricImageDpiWarning(canvas, activePers, product, image);
         fabricSaveHistory();
         updateLayerPanel();
         autoSaveCanvasState(stateKey);
@@ -1513,6 +1560,7 @@ function bindFabricButtons(canvas, margin, canvasWidth, canvasHeight, stateKey, 
 
     if (object && !isGuideObject(object)) {
       canvas.remove(object);
+      updateFabricImageDpiWarning(canvas, activePers, product);
       fabricSaveHistory();
       updateLayerPanel();
       autoSaveCanvasState(stateKey);
@@ -1551,7 +1599,9 @@ function bindFabricButtons(canvas, margin, canvasWidth, canvasHeight, stateKey, 
     fabricHistory.pop();
 
     canvas.loadFromJSON(fabricHistory[fabricHistory.length - 1], () => {
+      restoreFabricImageUploadMeta(canvas);
       redrawGuides(canvas, activePers, product, margin, canvasWidth, canvasHeight);
+      updateFabricImageDpiWarning(canvas, activePers, product);
       updateLayerPanel();
       autoSaveCanvasState(stateKey);
     });
@@ -1563,6 +1613,7 @@ function bindFabricButtons(canvas, margin, canvasWidth, canvasHeight, stateKey, 
 
     loadBackgroundImage(canvas, activePers, product, canvasWidth, canvasHeight);
     redrawGuides(canvas, activePers, product, margin, canvasWidth, canvasHeight);
+    updateFabricImageDpiWarning(canvas, activePers, product);
 
     fabricSaveHistory();
     updateLayerPanel();
@@ -1572,6 +1623,152 @@ function bindFabricButtons(canvas, margin, canvasWidth, canvasHeight, stateKey, 
   bindFontSelector(canvas, stateKey);
   bindFontSizeControl(canvas, stateKey);
   bindLayerDragAndDrop(canvas, stateKey);
+}
+
+function createFabricImageUploadMeta(file, image) {
+  return {
+    fileName: file?.name || 'Afbeelding',
+    fileType: file?.type || getFileTypeFromName(file?.name || ''),
+    widthPx: Number(image?.width || image?._element?.naturalWidth || 0),
+    heightPx: Number(image?.height || image?._element?.naturalHeight || 0),
+  };
+}
+
+function restoreFabricImageUploadMeta(canvas) {
+  canvas.getObjects()
+    .filter(object => object.type === 'image' && object._uploadMeta)
+    .forEach(object => {
+      object._uploadMeta = {
+        fileName: object._uploadMeta.fileName || 'Afbeelding',
+        fileType: object._uploadMeta.fileType || '',
+        widthPx: Number(object._uploadMeta.widthPx || object.width || 0),
+        heightPx: Number(object._uploadMeta.heightPx || object.height || 0),
+      };
+    });
+}
+
+function updateFabricImageDpiWarning(canvas, activePers, product, preferredObject = null) {
+  const warningElement = document.getElementById('fabric-image-dpi-warning');
+
+  if (!warningElement || !canvas) {
+    return;
+  }
+
+  const imageObject = getSelectedFabricImageForDpiWarning(canvas, preferredObject);
+
+  if (!imageObject) {
+    warningElement.style.display = 'none';
+    warningElement.textContent = '';
+    return;
+  }
+
+  const warning = getFabricImageDpiWarningForCanvas(imageObject, canvas, activePers, product);
+
+  if (!warning) {
+    warningElement.style.display = 'none';
+    warningElement.textContent = '';
+    return;
+  }
+
+  const isError = warning.level === 'error';
+
+  warningElement.style.display = 'block';
+  warningElement.style.background = isError ? '#FCE8E3' : '#FFF3D8';
+  warningElement.style.color = isError ? '#C0392B' : '#8A681E';
+  warningElement.style.border = isError ? '1px solid #F3B7A8' : '1px solid #E6C46A';
+  warningElement.textContent = warning.message;
+}
+
+function getSelectedFabricImageForDpiWarning(canvas, preferredObject = null) {
+  if (preferredObject?.type === 'image' && preferredObject._uploadMeta && !isGuideObject(preferredObject)) {
+    return preferredObject;
+  }
+
+  const activeObject = canvas.getActiveObject();
+
+  if (!activeObject || isGuideObject(activeObject)) {
+    return null;
+  }
+
+  if (activeObject.type === 'image' && activeObject._uploadMeta) {
+    return activeObject;
+  }
+
+  if (activeObject.type === 'activeSelection' && typeof activeObject.getObjects === 'function') {
+    return activeObject.getObjects()
+      .find(object => object.type === 'image' && object._uploadMeta && !isGuideObject(object)) || null;
+  }
+
+  return null;
+}
+
+function getFabricImageDpiWarnings(canvas, activePers, product) {
+  if (!canvas) {
+    return [];
+  }
+
+  return canvas.getObjects()
+    .filter(object => object.type === 'image' && !isGuideObject(object) && object._uploadMeta)
+    .map(object => getFabricImageDpiWarningForCanvas(object, canvas, activePers, product))
+    .filter(Boolean);
+}
+
+function getFabricImageDpiWarningForCanvas(object, canvas, activePers, product) {
+  const canvasWidth = canvas.getWidth();
+  const canvasHeight = canvas.getHeight();
+  const widthMm = Number(activePers?.width_mm || product?.width_mm || 0);
+  const heightMm = Number(activePers?.height_mm || product?.height_mm || 0);
+
+  if (!canvasWidth || !canvasHeight || !widthMm || !heightMm) {
+    return null;
+  }
+
+  return getFabricImageDpiWarning(object, canvasWidth, canvasHeight, widthMm, heightMm);
+}
+
+function getFabricImageDpiWarning(object, canvasWidth, canvasHeight, widthMm, heightMm) {
+  const meta = object._uploadMeta || {};
+  const sourceWidthPx = Number(meta.widthPx || 0);
+  const sourceHeightPx = Number(meta.heightPx || 0);
+
+  if (!sourceWidthPx || !sourceHeightPx) {
+    return null;
+  }
+
+  const bounds = object.getBoundingRect(true, true);
+  const placedWidthMm = (bounds.width / canvasWidth) * widthMm;
+  const placedHeightMm = (bounds.height / canvasHeight) * heightMm;
+
+  if (!placedWidthMm || !placedHeightMm) {
+    return null;
+  }
+
+  const dpiX = Math.round((sourceWidthPx / placedWidthMm) * 25.4);
+  const dpiY = Math.round((sourceHeightPx / placedHeightMm) * 25.4);
+  const dpi = Math.min(dpiX, dpiY);
+  const fileName = meta.fileName || 'afbeelding';
+
+  if (dpi < IMAGE_DPI_MINIMUM) {
+    return {
+      type: 'fabric-image-resolution-low',
+      level: 'error',
+      fileName,
+      dpi,
+      message: `Waarschuwing: "${fileName}" lijkt te laag in resolutie voor drukwerk (${dpi} DPI). Gebruik een groter bestand of verklein de afbeelding in het ontwerp.`,
+    };
+  }
+
+  if (dpi < IMAGE_DPI_RECOMMENDED) {
+    return {
+      type: 'fabric-image-resolution-warning',
+      level: 'warning',
+      fileName,
+      dpi,
+      message: `Let op: "${fileName}" is lager dan de aanbevolen 300 DPI (${dpi} DPI). Gebruik bij voorkeur een hogere resolutie of maak de afbeelding kleiner.`,
+    };
+  }
+
+  return null;
 }
 
 function isOutsideMargin(object, margin, canvasWidth, canvasHeight) {
@@ -1713,6 +1910,7 @@ function collectCanvasPrepressWarnings(canvas, activePers, product) {
   const editableObjects = canvas.getObjects().filter(object => !isGuideObject(object));
   const outsideMarginCount = editableObjects.filter(object => isOutsideMargin(object, margin, canvasWidth, canvasHeight)).length;
   const blockedZoneCount = editableObjects.filter(object => isObjectOverlappingBlockedZones(object, activePers, product, canvasWidth, canvasHeight)).length;
+  const imageDpiWarnings = getFabricImageDpiWarnings(canvas, activePers, product);
 
   if (outsideMarginCount > 0) {
     warnings.push({
@@ -1733,6 +1931,16 @@ function collectCanvasPrepressWarnings(canvas, activePers, product) {
         : `${blockedZoneCount} elementen raken een rillijn of no-print zone.`,
     });
   }
+
+  imageDpiWarnings.forEach(warning => {
+    warnings.push({
+      type: warning.type,
+      level: warning.level === 'error' ? 'warning' : warning.level,
+      message: warning.message,
+      fileName: warning.fileName,
+      dpi: warning.dpi,
+    });
+  });
 
   return warnings;
 }
@@ -1787,6 +1995,13 @@ function updateLayerPanel() {
       item.addEventListener('click', () => {
         fabricCanvas.setActiveObject(object);
         fabricCanvas.renderAll();
+
+        updateFabricImageDpiWarning(
+          fabricCanvas,
+          window._currentDesignGuideState?.activePers,
+          window._currentDesignGuideState?.product,
+          object
+        );
       });
 
       panel.appendChild(item);
@@ -1919,7 +2134,7 @@ function fabricSaveHistory() {
     object.visible = false;
   });
 
-  const json = JSON.stringify(fabricCanvas.toJSON(['_layerId']));
+  const json = JSON.stringify(fabricCanvas.toJSON(['_layerId', '_uploadMeta']));
 
   guideObjects.forEach(object => {
     object.visible = true;
@@ -1960,7 +2175,7 @@ function snapshotCanvas(canvas, product, activePers) {
 
   canvas.renderAll();
 
-  const json = JSON.stringify(canvas.toJSON(['_layerId']));
+  const json = JSON.stringify(canvas.toJSON(['_layerId', '_uploadMeta']));
   const backgroundColor = canvas.backgroundColor || fabricBackgroundColor;
   const finishWidthMm = activePers?.width_mm || product.width_mm || 100;
   const finishHeightMm = activePers?.height_mm || product.height_mm || 70;
@@ -2079,19 +2294,41 @@ function drawRillinesOnPdf(pdf, geometry, activePers, product) {
     return;
   }
 
-  pdf.setDrawColor(192, 57, 43);
+  pdf.setDrawColor(0, 255, 255);
   pdf.setLineWidth(0.25);
 
   zones
     .filter(zone => zone.type === 'line')
     .forEach(zone => {
-      const x1 = (Number(zone.x1_mm || 0) / sourceWidthMm) * geometry.pageW;
-      const y1 = (Number(zone.y1_mm || 0) / sourceHeightMm) * geometry.pageH;
-      const x2 = (Number(zone.x2_mm || 0) / sourceWidthMm) * geometry.pageW;
-      const y2 = (Number(zone.y2_mm || 0) / sourceHeightMm) * geometry.pageH;
+      let x1Mm = Number(zone.x1_mm || 0);
+      let y1Mm = Number(zone.y1_mm || 0);
+      let x2Mm = Number(zone.x2_mm || 0);
+      let y2Mm = Number(zone.y2_mm || 0);
+
+      const deltaXmm = Math.abs(x2Mm - x1Mm);
+      const deltaYmm = Math.abs(y2Mm - y1Mm);
+
+      if (deltaYmm <= 0.01) {
+        const centerYmm = (y1Mm + y2Mm) / 2;
+        x1Mm = 0;
+        x2Mm = sourceWidthMm;
+        y1Mm = centerYmm;
+        y2Mm = centerYmm;
+      } else if (deltaXmm <= 0.01) {
+        const centerXmm = (x1Mm + x2Mm) / 2;
+        x1Mm = centerXmm;
+        x2Mm = centerXmm;
+        y1Mm = 0;
+        y2Mm = sourceHeightMm;
+      }
+
+      const x1 = geometry.trimX1 + (x1Mm / sourceWidthMm) * (geometry.trimX2 - geometry.trimX1);
+      const y1 = geometry.trimY1 + (y1Mm / sourceHeightMm) * (geometry.trimY2 - geometry.trimY1);
+      const x2 = geometry.trimX1 + (x2Mm / sourceWidthMm) * (geometry.trimX2 - geometry.trimX1);
+      const y2 = geometry.trimY1 + (y2Mm / sourceHeightMm) * (geometry.trimY2 - geometry.trimY1);
 
       if (typeof pdf.setLineDashPattern === 'function') {
-        pdf.setLineDashPattern([2, 1.5], 0);
+        pdf.setLineDashPattern([1, 0.75], 0);
       }
 
       pdf.line(x1, y1, x2, y2);
@@ -2113,7 +2350,7 @@ function autoSaveCanvasState(stateKey) {
     object.visible = false;
   });
 
-  const json = JSON.stringify(fabricCanvas.toJSON(['_layerId']));
+  const json = JSON.stringify(fabricCanvas.toJSON(['_layerId', '_uploadMeta']));
 
   guideObjects.forEach(object => {
     object.visible = true;
