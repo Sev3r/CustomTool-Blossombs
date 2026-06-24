@@ -15,10 +15,13 @@ let fabricBackgroundColor = '#b7bdb8';
 let uploadedDataURL = null;
 let uploadedFileName = null;
 let uploadedCheck = null;
+let uploadedPdfDataURL = null;
+let uploadedRillinesPdfDataURL = null;
 let activeDesignTab = 'tool';
 let fabricInitToken = 0;
 let fabricInitTimer = null;
 let canvasZoom = 1;
+
 const CANVAS_ZOOM_MIN = 0.5;
 const CANVAS_ZOOM_MAX = 3;
 const CANVAS_ZOOM_STEP = 0.1;
@@ -64,6 +67,8 @@ function renderDesignPage() {
   uploadedDataURL = saved.dataURL || savedState?.dataURL || null;
   uploadedFileName = saved.fileName || savedState?.fileName || null;
   uploadedCheck = saved.uploadCheck || savedState?.uploadCheck || null;
+  uploadedPdfDataURL = saved.pdfDataURL || savedState?.pdfDataURL || null;
+  uploadedRillinesPdfDataURL = saved.rillinesPdfDataURL || savedState?.rillinesPdfDataURL || null;
   activeDesignTab = saved.tab || savedState?.tab || 'tool';
 
   el.innerHTML = `
@@ -326,7 +331,8 @@ function bindDesignNextButton(product, activePers, stateKey) {
 
       const designData = {
         dataURL: uploadedDataURL,
-        pdfDataURL: uploadedDataURL.startsWith('data:application/pdf') ? uploadedDataURL : '',
+        pdfDataURL: uploadedPdfDataURL || (uploadedDataURL.startsWith('data:application/pdf') ? uploadedDataURL : ''),
+        rillinesPdfDataURL: uploadedRillinesPdfDataURL || '',
         fileName: uploadedFileName,
         tab: 'upload',
         source: 'upload',
@@ -352,6 +358,7 @@ function bindDesignNextButton(product, activePers, stateKey) {
       Session.setDesign({
         dataURL: snapshot.dataURL,
         pdfDataURL: snapshot.pdfDataURL,
+        rillinesPdfDataURL: snapshot.rillinesPdfDataURL,
         tab: 'tool',
         source: 'fabric',
         fabricJSON: snapshot.json,
@@ -363,6 +370,7 @@ function bindDesignNextButton(product, activePers, stateKey) {
       persistDesignState(stateKey, {
         dataURL: snapshot.dataURL,
         pdfDataURL: snapshot.pdfDataURL,
+        rillinesPdfDataURL: snapshot.rillinesPdfDataURL,
         fabricJSON: snapshot.json,
         backgroundColor: snapshot.backgroundColor,
         tab: 'tool',
@@ -1954,11 +1962,21 @@ function snapshotCanvas(canvas, product, activePers) {
 
   const json = JSON.stringify(canvas.toJSON(['_layerId']));
   const backgroundColor = canvas.backgroundColor || fabricBackgroundColor;
+  const finishWidthMm = activePers?.width_mm || product.width_mm || 100;
+  const finishHeightMm = activePers?.height_mm || product.height_mm || 70;
 
   const pdfDataURL = generatePrintPDF(
     dataURL,
-    activePers?.width_mm || product.width_mm || 100,
-    activePers?.height_mm || product.height_mm || 70
+    finishWidthMm,
+    finishHeightMm
+  );
+
+  const rillinesPdfDataURL = generatePrintPDFWithRillines(
+    dataURL,
+    finishWidthMm,
+    finishHeightMm,
+    activePers,
+    product
   );
 
   return {
@@ -1966,6 +1984,7 @@ function snapshotCanvas(canvas, product, activePers) {
     json,
     backgroundColor,
     pdfDataURL,
+    rillinesPdfDataURL,
   };
 }
 
@@ -1976,44 +1995,111 @@ function generatePrintPDF(pngDataURL, widthMm, heightMm) {
   }
 
   const { jsPDF } = window.jspdf;
-
-  const BLEED_MM = 3;
-  const MARK_MM = 5;
-  const GAP_MM = 2.117;
-
-  const pageW = widthMm + BLEED_MM * 2;
-  const pageH = heightMm + BLEED_MM * 2;
+  const pdfGeometry = getPrintPdfGeometry(widthMm, heightMm);
 
   const pdf = new jsPDF({
-    orientation: pageW > pageH ? 'landscape' : 'portrait',
+    orientation: pdfGeometry.pageW > pdfGeometry.pageH ? 'landscape' : 'portrait',
     unit: 'mm',
-    format: [pageW, pageH],
+    format: [pdfGeometry.pageW, pdfGeometry.pageH],
     compress: true,
   });
 
-  pdf.addImage(pngDataURL, 'PNG', 0, 0, pageW, pageH, '', 'FAST');
+  pdf.addImage(pngDataURL, 'PNG', 0, 0, pdfGeometry.pageW, pdfGeometry.pageH, '', 'FAST');
+  drawCropMarks(pdf, pdfGeometry);
 
+  return pdf.output('datauristring');
+}
+
+function generatePrintPDFWithRillines(pngDataURL, widthMm, heightMm, activePers, product) {
+  if (!window.jspdf) {
+    console.warn('jsPDF niet geladen');
+    return null;
+  }
+
+  const { jsPDF } = window.jspdf;
+  const pdfGeometry = getPrintPdfGeometry(widthMm, heightMm);
+
+  const pdf = new jsPDF({
+    orientation: pdfGeometry.pageW > pdfGeometry.pageH ? 'landscape' : 'portrait',
+    unit: 'mm',
+    format: [pdfGeometry.pageW, pdfGeometry.pageH],
+    compress: true,
+  });
+
+  pdf.addImage(pngDataURL, 'PNG', 0, 0, pdfGeometry.pageW, pdfGeometry.pageH, '', 'FAST');
+  drawCropMarks(pdf, pdfGeometry);
+  drawRillinesOnPdf(pdf, pdfGeometry, activePers, product);
+
+  return pdf.output('datauristring');
+}
+
+function getPrintPdfGeometry(widthMm, heightMm) {
+  const bleedMm = 3;
+  const markMm = 5;
+  const gapMm = 2.117;
+  const pageW = Number(widthMm || 100) + bleedMm * 2;
+  const pageH = Number(heightMm || 70) + bleedMm * 2;
+
+  return {
+    bleedMm,
+    markMm,
+    gapMm,
+    pageW,
+    pageH,
+    trimX1: bleedMm,
+    trimY1: bleedMm,
+    trimX2: bleedMm + Number(widthMm || 100),
+    trimY2: bleedMm + Number(heightMm || 70),
+  };
+}
+
+function drawCropMarks(pdf, geometry) {
   pdf.setDrawColor(0, 0, 0);
   pdf.setLineWidth(0.088);
 
-  const x1 = BLEED_MM;
-  const x2 = BLEED_MM + widthMm;
-  const y1 = BLEED_MM;
-  const y2 = BLEED_MM + heightMm;
+  pdf.line(geometry.trimX1 - geometry.gapMm - geometry.markMm, geometry.trimY1, geometry.trimX1 - geometry.gapMm, geometry.trimY1);
+  pdf.line(geometry.trimX1, geometry.trimY1 - geometry.gapMm - geometry.markMm, geometry.trimX1, geometry.trimY1 - geometry.gapMm);
 
-  pdf.line(x1 - GAP_MM - MARK_MM, y1, x1 - GAP_MM, y1);
-  pdf.line(x1, y1 - GAP_MM - MARK_MM, x1, y1 - GAP_MM);
+  pdf.line(geometry.trimX2 + geometry.gapMm, geometry.trimY1, geometry.trimX2 + geometry.gapMm + geometry.markMm, geometry.trimY1);
+  pdf.line(geometry.trimX2, geometry.trimY1 - geometry.gapMm - geometry.markMm, geometry.trimX2, geometry.trimY1 - geometry.gapMm);
 
-  pdf.line(x2 + GAP_MM, y1, x2 + GAP_MM + MARK_MM, y1);
-  pdf.line(x2, y1 - GAP_MM - MARK_MM, x2, y1 - GAP_MM);
+  pdf.line(geometry.trimX1 - geometry.gapMm - geometry.markMm, geometry.trimY2, geometry.trimX1 - geometry.gapMm, geometry.trimY2);
+  pdf.line(geometry.trimX1, geometry.trimY2 + geometry.gapMm, geometry.trimX1, geometry.trimY2 + geometry.gapMm + geometry.markMm);
 
-  pdf.line(x1 - GAP_MM - MARK_MM, y2, x1 - GAP_MM, y2);
-  pdf.line(x1, y2 + GAP_MM, x1, y2 + GAP_MM + MARK_MM);
+  pdf.line(geometry.trimX2 + geometry.gapMm, geometry.trimY2, geometry.trimX2 + geometry.gapMm + geometry.markMm, geometry.trimY2);
+  pdf.line(geometry.trimX2, geometry.trimY2 + geometry.gapMm, geometry.trimX2, geometry.trimY2 + geometry.gapMm + geometry.markMm);
+}
 
-  pdf.line(x2 + GAP_MM, y2, x2 + GAP_MM + MARK_MM, y2);
-  pdf.line(x2, y2 + GAP_MM, x2, y2 + GAP_MM + MARK_MM);
+function drawRillinesOnPdf(pdf, geometry, activePers, product) {
+  const zones = Array.isArray(activePers?.blockedZones) ? activePers.blockedZones : [];
+  const sourceWidthMm = Number(activePers?.width_mm || product?.width_mm || 0);
+  const sourceHeightMm = Number(activePers?.height_mm || product?.height_mm || 0);
 
-  return pdf.output('datauristring');
+  if (!zones.length || !sourceWidthMm || !sourceHeightMm) {
+    return;
+  }
+
+  pdf.setDrawColor(192, 57, 43);
+  pdf.setLineWidth(0.25);
+
+  zones
+    .filter(zone => zone.type === 'line')
+    .forEach(zone => {
+      const x1 = (Number(zone.x1_mm || 0) / sourceWidthMm) * geometry.pageW;
+      const y1 = (Number(zone.y1_mm || 0) / sourceHeightMm) * geometry.pageH;
+      const x2 = (Number(zone.x2_mm || 0) / sourceWidthMm) * geometry.pageW;
+      const y2 = (Number(zone.y2_mm || 0) / sourceHeightMm) * geometry.pageH;
+
+      if (typeof pdf.setLineDashPattern === 'function') {
+        pdf.setLineDashPattern([2, 1.5], 0);
+      }
+
+      pdf.line(x1, y1, x2, y2);
+
+      if (typeof pdf.setLineDashPattern === 'function') {
+        pdf.setLineDashPattern([], 0);
+      }
+    });
 }
 
 function autoSaveCanvasState(stateKey) {
@@ -2101,9 +2187,15 @@ async function handleUpload(file, stateKey, activePers, product) {
     uploadedFileName = file.name;
     uploadedCheck = uploadCheck;
 
+    const generatedUploadPdfs = buildUploadPdfData(uploadedDataURL, activePers, product);
+
+    uploadedPdfDataURL = generatedUploadPdfs.pdfDataURL;
+    uploadedRillinesPdfDataURL = generatedUploadPdfs.rillinesPdfDataURL;
+
     const data = {
       dataURL: uploadedDataURL,
-      pdfDataURL: uploadedDataURL.startsWith('data:application/pdf') ? uploadedDataURL : '',
+      pdfDataURL: uploadedPdfDataURL,
+      rillinesPdfDataURL: uploadedRillinesPdfDataURL,
       fileName: uploadedFileName,
       tab: 'upload',
       source: 'upload',
@@ -2117,6 +2209,30 @@ async function handleUpload(file, stateKey, activePers, product) {
   };
 
   reader.readAsDataURL(file);
+}
+
+function buildUploadPdfData(dataURL, activePers, product) {
+  const finishWidthMm = activePers?.width_mm || product?.width_mm || 100;
+  const finishHeightMm = activePers?.height_mm || product?.height_mm || 70;
+
+  if (dataURL?.startsWith('data:application/pdf')) {
+    return {
+      pdfDataURL: dataURL,
+      rillinesPdfDataURL: '',
+    };
+  }
+
+  if (!dataURL?.startsWith('data:image')) {
+    return {
+      pdfDataURL: '',
+      rillinesPdfDataURL: '',
+    };
+  }
+
+  return {
+    pdfDataURL: generatePrintPDF(dataURL, finishWidthMm, finishHeightMm) || '',
+    rillinesPdfDataURL: generatePrintPDFWithRillines(dataURL, finishWidthMm, finishHeightMm, activePers, product) || '',
+  };
 }
 
 function buildUploadCheck(file, activePers, product) {
@@ -2334,10 +2450,13 @@ function clearUpload() {
   uploadedDataURL = null;
   uploadedFileName = null;
   uploadedCheck = null;
+  uploadedPdfDataURL = null;
+  uploadedRillinesPdfDataURL = null;
 
   Session.setDesign({
     dataURL: null,
     pdfDataURL: null,
+    rillinesPdfDataURL: null,
     fileName: null,
     tab: 'upload',
     source: null,

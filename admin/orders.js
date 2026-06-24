@@ -301,6 +301,7 @@ function openOrderOverview(id) {
   const shipDate = getOrderShipDate(order);
   const address = formatOrderAddress(order);
   const pdfAvailable = Boolean(getOrderPdfDataURL(order));
+  const rillinesPdfAvailable = Boolean(getOrderRillinesPdfDataURL(order));
   const hasImagePreview = Boolean(order.designDataURL && order.designDataURL.startsWith('data:image'));
 
   const body = `
@@ -442,6 +443,11 @@ function openOrderOverview(id) {
           <span class="overview-value">${pdfAvailable ? 'Beschikbaar' : 'Niet beschikbaar'}</span>
         </div>
 
+        <div class="overview-item">
+          <span class="overview-label">Drukbestand met rillijnen</span>
+          <span class="overview-value">${rillinesPdfAvailable ? 'Beschikbaar' : 'Niet beschikbaar'}</span>
+        </div>
+
         ${hasImagePreview ? `
           <div class="overview-item overview-wide">
             <span class="overview-label">Ontwerp preview</span>
@@ -473,6 +479,7 @@ function openOrderOverview(id) {
     <button class="btn btn-secondary" type="button" onclick="generateOrderPDF('${order.id}')">Download offerte PDF</button>
     ${hasOrderFiles(order) ? `<button class="btn btn-secondary" type="button" onclick="viewOrderFiles('${order.id}')">Bestanden bekijken</button>` : ''}
     ${pdfAvailable ? `<button class="btn btn-secondary" type="button" onclick="downloadPrintPDF('${order.id}')">Download drukbestand PDF</button>` : ''}
+    ${rillinesPdfAvailable ? `<button class="btn btn-secondary" type="button" onclick="downloadRillinesPDF('${order.id}')">Download drukbestand met rillijnen</button>` : ''}
     <button class="btn btn-primary" type="button" onclick="openOrderModal('${order.id}')">Aanpassen</button>
   `;
 
@@ -538,6 +545,7 @@ function renderPrepressChecklistOverview(order) {
   const warnings = Array.isArray(order.prepressWarnings) ? order.prepressWarnings : [];
   const uploadCheck = order.uploadCheck || null;
   const source = getOrderDesignSource(order);
+  const rillinesPdfAvailable = Boolean(getOrderRillinesPdfDataURL(order));
 
   return `
     <div class="section-title" style="margin-top:18px">Prepress checklist</div>
@@ -571,6 +579,11 @@ function renderPrepressChecklistOverview(order) {
       <div class="overview-item">
         <span class="overview-label">Rillijnen / no-print zones</span>
         <span class="overview-value">${blockedZones.length ? `${blockedZones.length} zone(s)` : 'Geen zones opgeslagen'}</span>
+      </div>
+
+      <div class="overview-item">
+        <span class="overview-label">Rillijnen PDF</span>
+        <span class="overview-value">${rillinesPdfAvailable ? '<span class="badge badge-green">Beschikbaar</span>' : '<span class="badge badge-gray">Niet beschikbaar</span>'}</span>
       </div>
 
       <div class="overview-item">
@@ -690,6 +703,7 @@ function buildProductionInstruction(order) {
   const blockedZones = Array.isArray(order.blockedZonesSnapshot) ? order.blockedZonesSnapshot : [];
   const warnings = Array.isArray(order.prepressWarnings) ? order.prepressWarnings : [];
   const uploadCheck = order.uploadCheck || null;
+  const rillinesPdfAvailable = Boolean(getOrderRillinesPdfDataURL(order));
 
   return [
     `Aanvraag: ${order.orderNumber || '—'}`,
@@ -709,6 +723,7 @@ function buildProductionInstruction(order) {
     `DPI advies: ${printSpec.dpi || '—'}`,
     '',
     `Rillijnen / no-print zones: ${formatBlockedZonesSummaryPlain(blockedZones)}`,
+    `Rillijnen PDF: ${rillinesPdfAvailable ? 'Beschikbaar' : 'Niet beschikbaar'}`,
     `Uploadcontrole: ${formatUploadCheckPlain(uploadCheck)}`,
     `Waarschuwingen: ${formatPrepressWarningsPlain(warnings)}`,
     '',
@@ -939,6 +954,7 @@ function hasOrderFiles(order) {
   return Boolean(
     order.designDataURL ||
     order.designPdfDataURL ||
+    order.designRillinesPdfDataURL ||
     order.designFile ||
     order.wensen
   );
@@ -1017,7 +1033,8 @@ function viewOrderFiles(id) {
   body.style.cssText = 'display:flex;flex-direction:column;gap:20px';
 
   const hasImagePreview = Boolean(order.designDataURL && order.designDataURL.startsWith('data:image'));
-  const hasPrintPdf = Boolean(order.designPdfDataURL || (order.designDataURL && order.designDataURL.startsWith('data:application/pdf')));
+  const hasPrintPdf = Boolean(getOrderPdfDataURL(order));
+  const hasRillinesPdf = Boolean(getOrderRillinesPdfDataURL(order));
   const hasUploadNameOnly = Boolean(order.designFile && !order.designDataURL && !order.designPdfDataURL);
   const hasWensen = Boolean(order.wensen);
 
@@ -1037,11 +1054,27 @@ function viewOrderFiles(id) {
       <div>
         <div class="section-title">Drukbestand PDF</div>
         <p style="font-size:12px;color:var(--text-2);margin-top:4px">
-          Dit is het voorbereidende PDF bestand van het ontwerp.
+          Dit is het voorbereidende PDF bestand van het ontwerp zonder rillijnen.
         </p>
         <div style="margin-top:8px">
           <button class="btn btn-secondary btn-sm" type="button" onclick="downloadPrintPDF('${id}')">
             Download drukbestand PDF
+          </button>
+        </div>
+      </div>
+    `;
+  }
+
+  if (hasRillinesPdf) {
+    body.innerHTML += `
+      <div>
+        <div class="section-title">Drukbestand met rillijnen</div>
+        <p style="font-size:12px;color:var(--text-2);margin-top:4px">
+          Dit bestand bevat het artwork met technische rillijnen voor de drukker.
+        </p>
+        <div style="margin-top:8px">
+          <button class="btn btn-secondary btn-sm" type="button" onclick="downloadRillinesPDF('${id}')">
+            Download drukbestand met rillijnen
           </button>
         </div>
       </div>
@@ -1077,7 +1110,7 @@ function viewOrderFiles(id) {
     `;
   }
 
-  if (!hasImagePreview && !hasPrintPdf && !hasUploadNameOnly && !hasWensen) {
+  if (!hasImagePreview && !hasPrintPdf && !hasRillinesPdf && !hasUploadNameOnly && !hasWensen) {
     body.innerHTML = '<p style="color:var(--text-3);font-size:13px">Geen bestanden gekoppeld aan deze order.</p>';
   }
 
@@ -1105,6 +1138,28 @@ function downloadPrintPDF(id) {
   const link = document.createElement('a');
   link.href = pdfDataURL;
   link.download = `drukbestand-${order.orderNumber}.pdf`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+}
+
+function downloadRillinesPDF(id) {
+  const order = DS.getOrderById(id);
+
+  if (!order) {
+    return;
+  }
+
+  const pdfDataURL = getOrderRillinesPdfDataURL(order);
+
+  if (!pdfDataURL) {
+    AdminUI.showToast('Geen drukbestand met rillijnen beschikbaar', 'error');
+    return;
+  }
+
+  const link = document.createElement('a');
+  link.href = pdfDataURL;
+  link.download = `drukbestand-met-rillijnen-${order.orderNumber}.pdf`;
   document.body.appendChild(link);
   link.click();
   link.remove();
@@ -1333,6 +1388,7 @@ function openOrderModal(id = null) {
     ${isEdit ? `<button class="btn btn-secondary" type="button" onclick="generateOrderPDF('${order.id}')">Download offerte PDF</button>` : ''}
     ${isEdit && hasOrderFiles(order) ? `<button class="btn btn-secondary" type="button" onclick="viewOrderFiles('${order.id}')">Bestanden bekijken</button>` : ''}
     ${isEdit && getOrderPdfDataURL(order) ? `<button class="btn btn-secondary" type="button" onclick="downloadPrintPDF('${order.id}')">Download drukbestand PDF</button>` : ''}
+    ${isEdit && getOrderRillinesPdfDataURL(order) ? `<button class="btn btn-secondary" type="button" onclick="downloadRillinesPDF('${order.id}')">Download drukbestand met rillijnen</button>` : ''}
     <button class="btn btn-primary" type="button" id="btn-order-save">Opslaan</button>
   `;
 
@@ -1409,6 +1465,7 @@ function openOrderModal(id = null) {
       designFile: uploadData.fileName || document.getElementById('of-file').value.trim(),
       designDataURL: uploadData.designDataURL || order.designDataURL || '',
       designPdfDataURL: uploadData.designPdfDataURL || order.designPdfDataURL || '',
+      designRillinesPdfDataURL: order.designRillinesPdfDataURL || '',
       notes: document.getElementById('of-notes').value.trim(),
     });
 
@@ -1462,6 +1519,10 @@ function bindManualOrderUpload() {
 function getOrderPdfDataURL(order) {
   return order.designPdfDataURL ||
     (order.designDataURL && order.designDataURL.startsWith('data:application/pdf') ? order.designDataURL : '');
+}
+
+function getOrderRillinesPdfDataURL(order) {
+  return order.designRillinesPdfDataURL || '';
 }
 
 function getOrderSortValue(order, field) {
@@ -1617,6 +1678,7 @@ function escHtml(value) {
 
 window.viewOrderFiles = viewOrderFiles;
 window.downloadPrintPDF = downloadPrintPDF;
+window.downloadRillinesPDF = downloadRillinesPDF;
 window.generateOrderPDF = generateOrderPDF;
 window.toggleOrderConfirmation = toggleOrderConfirmation;
 window.openOrderModal = openOrderModal;

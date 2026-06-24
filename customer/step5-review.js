@@ -411,6 +411,7 @@ function buildOrder(product, options, design, wensen, klant, orderNumber, forced
     designFile: design?.fileName || '',
     designDataURL: design?.dataURL || '',
     designPdfDataURL: design?.pdfDataURL || (design?.dataURL?.startsWith('data:application/pdf') ? design.dataURL : ''),
+    designRillinesPdfDataURL: design?.rillinesPdfDataURL || '',
     wensen: wensen || null,
     quoteAmount: pricing.totalIncl,
     workType: isLatOntwerpen ? 'ontwerp' : (hasFileCheck ? 'bestandscheck' : null),
