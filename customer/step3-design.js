@@ -29,6 +29,11 @@ const CANVAS_ZOOM_STEP = 0.1;
 const IMAGE_DPI_RECOMMENDED = 300;
 const IMAGE_DPI_MINIMUM = 150;
 
+const CENTER_SNAP_THRESHOLD_PX = 6;
+const CENTER_GUIDE_COLOR = '#5C7A5C';
+const CENTER_GUIDE_STROKE_WIDTH = 1.25;
+const CENTER_GUIDE_DASH = [6, 4];
+
 const AVAILABLE_FONTS = [
   { label: 'Georgia', value: 'Georgia' },
   { label: 'Playfair Display', value: "'Playfair Display', serif" },
@@ -1398,6 +1403,120 @@ function addDefaultText(canvas, canvasHeight) {
   updateLayerPanel();
 }
 
+function isCenterSnappableObject(object) {
+  return object &&
+    object.type === 'image' &&
+    !isGuideObject(object);
+}
+
+function getCanvasCenterPoint(canvas) {
+  return new fabric.Point(
+    canvas.getWidth() / 2,
+    canvas.getHeight() / 2
+  );
+}
+
+function getCenterSnapThreshold(canvas) {
+  const zoom = typeof canvas.getZoom === 'function' ? canvas.getZoom() || 1 : 1;
+
+  return CENTER_SNAP_THRESHOLD_PX / zoom;
+}
+
+function applyCenterSnap(canvas, object) {
+  if (!canvas || !isCenterSnappableObject(object)) {
+    removeCenterSnapGuides(canvas);
+    return;
+  }
+
+  const canvasCenter = getCanvasCenterPoint(canvas);
+  const objectCenter = object.getCenterPoint();
+  const threshold = getCenterSnapThreshold(canvas);
+
+  const shouldSnapX = Math.abs(objectCenter.x - canvasCenter.x) <= threshold;
+  const shouldSnapY = Math.abs(objectCenter.y - canvasCenter.y) <= threshold;
+
+  if (!shouldSnapX && !shouldSnapY) {
+    removeCenterSnapGuides(canvas);
+    return;
+  }
+
+  const snappedCenter = new fabric.Point(
+    shouldSnapX ? canvasCenter.x : objectCenter.x,
+    shouldSnapY ? canvasCenter.y : objectCenter.y
+  );
+
+  object.setPositionByOrigin(snappedCenter, 'center', 'center');
+  object.setCoords();
+
+  renderCenterSnapGuides(canvas, {
+    showVertical: shouldSnapX,
+    showHorizontal: shouldSnapY,
+  });
+}
+
+function renderCenterSnapGuides(canvas, { showVertical, showHorizontal }) {
+  if (!canvas) {
+    return;
+  }
+
+  removeCenterSnapGuides(canvas);
+
+  const centerX = canvas.getWidth() / 2;
+  const centerY = canvas.getHeight() / 2;
+  const guideObjects = [];
+
+  if (showVertical) {
+    guideObjects.push(new fabric.Line(
+      [centerX, 0, centerX, canvas.getHeight()],
+      getCenterGuideObjectOptions()
+    ));
+  }
+
+  if (showHorizontal) {
+    guideObjects.push(new fabric.Line(
+      [0, centerY, canvas.getWidth(), centerY],
+      getCenterGuideObjectOptions()
+    ));
+  }
+
+  guideObjects.forEach(guide => {
+    canvas.add(guide);
+    guide.bringToFront();
+  });
+
+  canvas._centerSnapGuides = guideObjects;
+  canvas.requestRenderAll();
+}
+
+function getCenterGuideObjectOptions() {
+  return {
+    stroke: CENTER_GUIDE_COLOR,
+    strokeWidth: CENTER_GUIDE_STROKE_WIDTH,
+    strokeDashArray: CENTER_GUIDE_DASH,
+    selectable: false,
+    evented: false,
+    objectCaching: false,
+    excludeFromExport: true,
+    _isGuide: true,
+    _isCenterGuide: true,
+  };
+}
+
+function removeCenterSnapGuides(canvas) {
+  if (!canvas || !Array.isArray(canvas._centerSnapGuides)) {
+    return;
+  }
+
+  canvas._centerSnapGuides.forEach(guide => {
+    if (canvas.getObjects().includes(guide)) {
+      canvas.remove(guide);
+    }
+  });
+
+  canvas._centerSnapGuides = [];
+  canvas.requestRenderAll();
+}
+
 function bindFabricEvents(canvas, margin, canvasWidth, canvasHeight, stateKey, activePers, product) {
   const checkMargin = object => {
     if (!object || isGuideObject(object)) {
@@ -1424,21 +1543,25 @@ function bindFabricEvents(canvas, margin, canvasWidth, canvasHeight, stateKey, a
 
   canvas.on('object:moving', event => {
     checkMargin(event.target);
+    applyCenterSnap(canvas, event.target);
     bringGuidesToFront(canvas);
   });
 
   canvas.on('object:rotating', event => {
     checkMargin(event.target);
+    removeCenterSnapGuides(canvas);
     bringGuidesToFront(canvas);
   });
 
   canvas.on('object:scaling', event => {
     checkMargin(event.target);
+    applyCenterSnap(canvas, event.target);
     updateFabricImageDpiWarning(canvas, activePers, product);
     bringGuidesToFront(canvas);
   });
 
   canvas.on('object:modified', event => {
+    removeCenterSnapGuides(canvas);
     checkMargin(event.target);
     updateFabricImageDpiWarning(canvas, activePers, product);
     bringGuidesToFront(canvas);
@@ -1452,6 +1575,8 @@ function bindFabricEvents(canvas, margin, canvasWidth, canvasHeight, stateKey, a
   });
 
   canvas.on('object:moved', () => {
+    removeCenterSnapGuides(canvas);
+
     const warning = document.getElementById('margin-warning');
 
     if (warning) {
@@ -1464,6 +1589,7 @@ function bindFabricEvents(canvas, margin, canvasWidth, canvasHeight, stateKey, a
   });
 
   canvas.on('object:modified', () => {
+    removeCenterSnapGuides(canvas);
     redrawGuides(canvas, activePers, product, margin, canvasWidth, canvasHeight);
     fabricSaveHistory();
     autoSaveCanvasState(stateKey);
@@ -1482,6 +1608,8 @@ function bindFabricEvents(canvas, margin, canvasWidth, canvasHeight, stateKey, a
   });
 
   canvas.on('selection:cleared', () => {
+    removeCenterSnapGuides(canvas);
+
     const status = document.getElementById('status');
 
     if (status) {
@@ -1490,6 +1618,10 @@ function bindFabricEvents(canvas, margin, canvasWidth, canvasHeight, stateKey, a
 
     updateLayerPanel();
     updateFabricImageDpiWarning(canvas, activePers, product);
+  });
+
+  canvas.on('mouse:up', () => {
+    removeCenterSnapGuides(canvas);
   });
 
   canvas.on('object:scaling', updateLayerPanel);
