@@ -642,7 +642,7 @@ function renderConfirmPage(order, product, pricing) {
       </div>
 
       <div style="margin-top:32px;display:flex;gap:12px;justify-content:center;flex-wrap:wrap">
-        <a href="/" class="btn btn-outline">Terug naar de webshop</a>
+        <a href="../admin/index.html#sales" class="btn btn-outline">Terug naar de webshop</a>
         <button class="btn btn-outline" type="button" onclick="resetFlow()">Nieuwe bestelling plaatsen</button>
       </div>
     </div>
