@@ -12,7 +12,30 @@ function renderSelectPage() {
   const el = document.getElementById('page-select');
 
   // Laad alleen actieve producten
-  const products = (typeof DS !== 'undefined' ? DS.getProducts() : [])
+  const dummyProducts = [
+    {
+      id: 'dummy-product-1',
+      name: 'Dummy product',
+      active: true,
+      imageProduct: '',
+      personalisatieTypes: [
+        {
+          id: 'standaard',
+          name: 'Standaard personalisatie',
+          priceSlabs: [
+            { qty: 100, price: 1.25 },
+            { qty: 250, price: 1.10 },
+            { qty: 500, price: 0.95 }
+          ]
+        }
+      ]
+    }
+  ];
+
+  // Laad alleen actieve producten
+  const rawProducts = typeof DS !== 'undefined' ? DS.getProducts() : [];
+
+  const products = (rawProducts.length > 0 ? rawProducts : dummyProducts)
     .filter(p => p.active !== false);
 
   const selectedProduct = Session.getProduct();
