@@ -262,7 +262,8 @@ function escHtml(str) {
 
 // ─── INIT ─────────────────────────────────────────────────────────────────────
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
+  await DS.init();
   DS.seedDemoData();
 
   const modalCloseButton = document.getElementById('btn-modal-close');

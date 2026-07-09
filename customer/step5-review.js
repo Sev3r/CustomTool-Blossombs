@@ -361,13 +361,21 @@ function updateSummaryPrice() {
   document.getElementById('summary-incl').textContent = formatEuro(pricing.totalIncl);
 }
 
-function placeOrder(product, options, design, wensen, klant) {
+async function placeOrder(product, options, design, wensen, klant) {
   const orderNumber = `BLS-${Date.now()}`;
   const order = buildOrder(product, options, design, wensen, klant, orderNumber, null);
   const pricing = getCurrentPricing(product, options);
 
   if (typeof DS !== 'undefined') {
-    DS.saveOrder(order);
+    if (typeof DS.init === 'function') {
+      await DS.init();
+    }
+
+    if (typeof DS.saveOrderAsync === 'function') {
+      await DS.saveOrderAsync(order);
+    } else {
+      DS.saveOrder(order);
+    }
   }
 
   renderConfirmPage(order, product, pricing);
