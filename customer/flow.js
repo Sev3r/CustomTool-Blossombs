@@ -3,6 +3,7 @@
  * SPA router + klikbare progress bar
  * Progressbar + sessie volledig gereset na afronding bestelling.
  * Stap 3 Ontwerp wordt geblokkeerd wanneer gekozen is voor Laat ons ontwerpen.
+ * Wacht op DS.init() voordat de flow rendert, zodat producten uit Supabase beschikbaar zijn.
  */
 
 const STEPS = [
@@ -15,6 +16,45 @@ const STEPS = [
 
 let currentStep = 0;
 let highestStep = 0;
+let flowInitialized = false;
+let isNavigating = false;
+
+async function initCustomerFlow() {
+  if (flowInitialized) {
+    return;
+  }
+
+  showInitialLoadingState();
+
+  if (typeof DS !== 'undefined' && typeof DS.init === 'function') {
+    await DS.init();
+  }
+
+  if (typeof DS !== 'undefined' && typeof DS.seedDemoData === 'function') {
+    DS.seedDemoData();
+  }
+
+  flowInitialized = true;
+}
+
+function showInitialLoadingState() {
+  const selectPage = document.getElementById('page-select');
+
+  if (!selectPage) {
+    return;
+  }
+
+  selectPage.innerHTML = `
+    <h1 class="page-title">Kies uw product</h1>
+    <p class="page-subtitle">Selecteer het product dat u wilt personaliseren</p>
+
+    <div class="empty-state">
+      <div class="empty-state-icon">📦</div>
+      <h3>Producten laden...</h3>
+      <p>Een moment geduld.</p>
+    </div>
+  `;
+}
 
 function canNavigateToStep(hash) {
   const options = Session.getOptions();
@@ -36,51 +76,66 @@ function getFallbackStep(hash) {
   return 'select';
 }
 
-function navigate(hash) {
-  const idx = STEPS.findIndex(step => step.hash === hash);
-
-  if (idx === -1) {
-    navigate('select');
+async function navigate(hash) {
+  if (isNavigating) {
     return;
   }
 
-  if (!canNavigateToStep(hash)) {
-    const fallbackHash = getFallbackStep(hash);
-    const fallbackIdx = STEPS.findIndex(step => step.hash === fallbackHash);
+  isNavigating = true;
 
-    if (fallbackIdx !== -1 && fallbackIdx <= highestStep) {
-      navigate(fallbackHash);
+  try {
+    if (!flowInitialized) {
+      await initCustomerFlow();
+    }
+
+    const targetHash = hash || 'select';
+    const idx = STEPS.findIndex(step => step.hash === targetHash);
+
+    if (idx === -1) {
+      await navigate('select');
       return;
     }
 
-    navigate('options');
-    return;
+    if (!canNavigateToStep(targetHash)) {
+      const fallbackHash = getFallbackStep(targetHash);
+      const fallbackIdx = STEPS.findIndex(step => step.hash === fallbackHash);
+
+      if (fallbackIdx !== -1 && fallbackIdx <= highestStep) {
+        await navigate(fallbackHash);
+        return;
+      }
+
+      await navigate('options');
+      return;
+    }
+
+    if (idx > highestStep) {
+      return;
+    }
+
+    currentStep = idx;
+
+    document.querySelectorAll('.flow-page').forEach(el => {
+      el.classList.remove('active');
+    });
+
+    const pageEl = document.getElementById(`page-${targetHash}`);
+
+    if (pageEl) {
+      pageEl.classList.add('active');
+    }
+
+    await STEPS[idx].render();
+    renderProgressBar(idx);
+
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    history.replaceState(null, '', `#${targetHash}`);
+  } finally {
+    isNavigating = false;
   }
-
-  if (idx > highestStep) {
-    return;
-  }
-
-  currentStep = idx;
-
-  document.querySelectorAll('.flow-page').forEach(el => {
-    el.classList.remove('active');
-  });
-
-  const pageEl = document.getElementById(`page-${hash}`);
-
-  if (pageEl) {
-    pageEl.classList.add('active');
-  }
-
-  STEPS[idx].render();
-  renderProgressBar(idx);
-
-  window.scrollTo({ top: 0, behavior: 'smooth' });
-  history.replaceState(null, '', `#${hash}`);
 }
 
-function navigateTo(hash) {
+async function navigateTo(hash) {
   const idx = STEPS.findIndex(step => step.hash === hash);
 
   if (idx === -1) {
@@ -95,7 +150,7 @@ function navigateTo(hash) {
       highestStep = fallbackIdx;
     }
 
-    navigate(fallbackHash);
+    await navigate(fallbackHash);
     return;
   }
 
@@ -103,10 +158,10 @@ function navigateTo(hash) {
     highestStep = idx;
   }
 
-  navigate(hash);
+  await navigate(hash);
 }
 
-function resetFlow() {
+async function resetFlow() {
   currentStep = 0;
   highestStep = 0;
 
@@ -134,7 +189,7 @@ function resetFlow() {
     el.classList.remove('active');
   });
 
-  navigateTo('select');
+  await navigateTo('select');
 }
 
 function renderProgressBar(activeIdx) {
@@ -190,14 +245,14 @@ function renderProgressBar(activeIdx) {
   }).join('');
 
   bar.querySelectorAll('.step-circle[data-step]').forEach(button => {
-    button.addEventListener('click', () => {
+    button.addEventListener('click', async () => {
       const step = button.dataset.step;
 
       if (!step || button.getAttribute('aria-disabled') === 'true') {
         return;
       }
 
-      navigate(step);
+      await navigate(step);
     });
   });
 }
@@ -215,17 +270,13 @@ function escHtml(value) {
     .replace(/>/g, '&gt;');
 }
 
-document.addEventListener('DOMContentLoaded', () => {
-  if (typeof DS !== 'undefined') {
-    DS.seedDemoData();
-  }
-
+document.addEventListener('DOMContentLoaded', async () => {
   const hash = location.hash.replace('#', '') || 'select';
-  navigate(hash);
+  await navigate(hash);
 });
 
-window.addEventListener('hashchange', () => {
-  navigate(location.hash.replace('#', ''));
+window.addEventListener('hashchange', async () => {
+  await navigate(location.hash.replace('#', ''));
 });
 
 window.navigate = navigate;
