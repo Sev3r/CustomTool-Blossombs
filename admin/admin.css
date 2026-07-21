@@ -1878,3 +1878,122 @@ input[type="file"]::file-selector-button:hover {
     gap: 2px;
   }
 }
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Productpreview calibratie
+───────────────────────────────────────────────────────────────────────────── */
+
+.preview-calibration-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 10px 0 12px;
+  padding: 12px;
+  border: 1px solid rgba(92, 122, 92, .22);
+  border-radius: var(--radius-lg);
+  background: rgba(237, 242, 237, .52);
+}
+
+.preview-calibration-intro {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 11px;
+  border: 1px solid rgba(92, 122, 92, .18);
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, .74);
+}
+
+.preview-calibration-intro strong {
+  color: var(--accent-dark);
+  font-size: 13px;
+}
+
+.preview-calibration-intro span {
+  color: var(--text-2);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.preview-toggle-row {
+  align-items: center;
+  gap: 10px;
+  min-height: 58px;
+  padding: 11px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.preview-toggle-row strong {
+  display: block;
+  color: var(--text);
+  font-size: 13px;
+}
+
+.preview-view-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.preview-view-row,
+.preview-fold-row {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.preview-view-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.preview-view-header strong {
+  color: var(--accent-dark);
+  font-size: 13px;
+}
+
+.preview-view-header span {
+  color: var(--text-3);
+  font-size: 11.5px;
+  text-align: right;
+}
+
+.preview-subtitle {
+  margin-top: 2px;
+  color: var(--text-3);
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.preview-view-row .file-preview-box {
+  width: 160px;
+  height: 112px;
+}
+
+.preview-view-row input[type="number"] {
+  min-width: 0;
+}
+
+@media (max-width: 900px) {
+  .preview-view-header {
+    flex-direction: column;
+  }
+
+  .preview-view-header span {
+    text-align: left;
+  }
+}
