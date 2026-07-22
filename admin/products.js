@@ -445,21 +445,43 @@ function persTypeRow(type, index, uploadKey) {
          style="border:1px solid var(--border);border-radius:var(--radius);
                 padding:12px;margin-bottom:8px;background:var(--surface-2)">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-        <strong style="font-size:13px">Personalisatietype ${index + 1}</strong>
-        <button class="icon-btn danger" type="button" onclick="this.closest('.pers-type-row').remove()" title="Verwijder">×</button>
+        <strong style="font-size:13px">
+          Personalisatietype ${index + 1}
+        </strong>
+
+        <button
+          class="icon-btn danger"
+          type="button"
+          onclick="this.closest('.pers-type-row').remove()"
+          title="Verwijder"
+        >
+          ×
+        </button>
       </div>
 
       <div class="form-row-1" style="margin-bottom:8px">
         <div class="form-group">
-          <label class="toggle-wrap" style="flex-direction:row;align-items:center;justify-content:space-between;gap:14px">
+          <label
+            class="toggle-wrap"
+            style="flex-direction:row;align-items:center;justify-content:space-between;gap:14px"
+          >
             <span>
-              <strong style="display:block;font-size:13px">Actief</strong>
+              <strong style="display:block;font-size:13px">
+                Actief
+              </strong>
+
               <span class="form-hint" style="margin:2px 0 0">
                 Zichtbaar in de klantflow
               </span>
             </span>
+
             <span class="toggle">
-              <input type="checkbox" class="pers-active" ${isActive ? 'checked' : ''}>
+              <input
+                type="checkbox"
+                class="pers-active"
+                ${isActive ? 'checked' : ''}
+              >
+
               <span class="toggle-slider"></span>
             </span>
           </label>
@@ -469,110 +491,237 @@ function persTypeRow(type, index, uploadKey) {
       <div class="form-row" style="margin-bottom:8px">
         <div class="form-group">
           <label>Label</label>
-          <input type="text" class="pers-label" value="${escHtml(type.label || '')}" placeholder="Voorkant">
+
+          <input
+            type="text"
+            class="pers-label"
+            value="${escHtml(type.label || '')}"
+            placeholder="Voorkant"
+          >
         </div>
 
         <div class="form-group">
           <label>Clip-vorm optioneel</label>
-          <input type="text" class="pers-clip" value="${escHtml(type.clipShape || '')}" placeholder="circle(50%) of leeg voor rechthoek">
-          <span class="form-hint">CSS clip-path voor niet-rechthoekige printzone</span>
+
+          <input
+            type="text"
+            class="pers-clip"
+            value="${escHtml(type.clipShape || '')}"
+            placeholder="circle(50%) of leeg voor rechthoek"
+          >
+
+          <span class="form-hint">
+            CSS clip-path voor niet-rechthoekige printzone
+          </span>
         </div>
       </div>
 
       <div class="form-row-1" style="margin-bottom:8px">
         <div class="form-group">
-          <label class="toggle-wrap" style="flex-direction:row;align-items:center;gap:10px">
+          <label
+            class="toggle-wrap"
+            style="flex-direction:row;align-items:center;gap:10px"
+          >
             <span class="toggle">
-              <input type="checkbox" class="pers-bg-allowed" ${type.allowBackgroundColor ? 'checked' : ''}>
+              <input
+                type="checkbox"
+                class="pers-bg-allowed"
+                ${type.allowBackgroundColor ? 'checked' : ''}
+              >
+
               <span class="toggle-slider"></span>
             </span>
-            <span>Achtergrondkleur canvas mag aangepast worden</span>
+
+            <span>
+              Achtergrondkleur canvas mag aangepast worden
+            </span>
           </label>
+
           <span class="form-hint">
             Zet dit alleen aan wanneer de achtergrondkleur ook echt bedrukt of zichtbaar mag worden.
           </span>
         </div>
       </div>
 
+      <div class="section-title" style="margin-top:10px">
+        Formaat en afloop
+      </div>
+
       <div class="form-row" style="margin-bottom:8px">
         <div class="form-group">
           <label>Eindformaat breedte mm</label>
-          <input type="number" class="pers-finish-w-mm pers-w-mm" value="${escHtml(spec.finishWidthMm || '')}" placeholder="100" min="1" step="0.1">
+
+          <input
+            type="number"
+            class="pers-finish-w-mm pers-w-mm"
+            value="${escHtml(spec.finishWidthMm || '')}"
+            placeholder="100"
+            min="1"
+            step="0.1"
+          >
         </div>
 
         <div class="form-group">
           <label>Eindformaat hoogte mm</label>
-          <input type="number" class="pers-finish-h-mm pers-h-mm" value="${escHtml(spec.finishHeightMm || '')}" placeholder="70" min="1" step="0.1">
+
+          <input
+            type="number"
+            class="pers-finish-h-mm pers-h-mm"
+            value="${escHtml(spec.finishHeightMm || '')}"
+            placeholder="70"
+            min="1"
+            step="0.1"
+          >
         </div>
       </div>
 
       <div class="form-row" style="margin-bottom:8px">
         <div class="form-group">
           <label>Afloop rondom mm</label>
-          <input type="number" class="pers-bleed-mm" value="${escHtml(spec.bleedMm || 3)}" placeholder="3" min="0" step="0.1">
+
+          <input
+            type="number"
+            class="pers-bleed-mm"
+            value="${escHtml(spec.bleedMm || 3)}"
+            placeholder="3"
+            min="0"
+            step="0.1"
+          >
         </div>
 
         <div class="form-group">
           <label>Veilige marge mm</label>
-          <input type="number" class="pers-m-mm" value="${escHtml(spec.safeMarginMm || 3)}" placeholder="3" min="0" step="0.1">
+
+          <input
+            type="number"
+            class="pers-m-mm"
+            value="${escHtml(spec.safeMarginMm || 3)}"
+            placeholder="3"
+            min="0"
+            step="0.1"
+          >
         </div>
       </div>
 
-      <div class="pers-px-preview form-hint" style="color:var(--text-2);margin:4px 0 12px"></div>
+      <div
+        class="pers-px-preview form-hint"
+        style="color:var(--text-2);margin:4px 0 12px"
+      ></div>
 
-      ${renderPreviewCalibrationPanel(type)}
-
-      <div class="section-title" style="margin-top:10px">Uitsparingen, rillijnen en no-print zones</div>
-
-      <div class="blocked-zone-list">
-        ${blockedZones.map((zone, zoneIndex) => blockedZoneRow(zone, zoneIndex)).join('')}
+      <div class="section-title" style="margin-top:10px">
+        Uitsparingen, rillijnen en no-print zones
       </div>
 
-      <button class="btn btn-secondary btn-sm btn-add-blocked-zone" type="button" style="margin:8px 0 12px">
+      <div class="blocked-zone-list">
+        ${blockedZones
+      .map((zone, zoneIndex) => blockedZoneRow(zone, zoneIndex))
+      .join('')}
+      </div>
+
+      <button
+        class="btn btn-secondary btn-sm btn-add-blocked-zone"
+        type="button"
+        style="margin:8px 0 12px"
+      >
         + Drukzone toevoegen
       </button>
 
-      <span class="form-hint" style="display:block;margin-bottom:12px">
+      <span
+        class="form-hint"
+        style="display:block;margin-bottom:12px"
+      >
         Gebruik dit voor gaten, rillijnen, vouwlijnen, nietzones of andere zones waar geen tekst of logo overheen mag vallen.
       </span>
 
-      <div class="section-title" style="margin-top:10px">Staffelprijzen voor deze personalisatie</div>
-
-      <div class="pers-slab-list">
-        ${priceSlabs.map((slab, slabIndex) => personalisationSlabRow(slab, slabIndex)).join('')}
+      <div class="section-title" style="margin-top:10px">
+        Staffelprijzen voor deze personalisatie
       </div>
 
-      <button class="btn btn-secondary btn-sm btn-add-pers-slab" type="button" style="margin:8px 0 12px">
+      <div class="pers-slab-list">
+        ${priceSlabs
+      .map((slab, slabIndex) => personalisationSlabRow(slab, slabIndex))
+      .join('')}
+      </div>
+
+      <button
+        class="btn btn-secondary btn-sm btn-add-pers-slab"
+        type="button"
+        style="margin:8px 0 12px"
+      >
         + Staffel toevoegen
       </button>
+
+      <div class="section-title" style="margin-top:10px">
+        Ontwerpbestanden
+      </div>
 
       <div class="form-row" style="margin-bottom:8px">
         <div class="form-group">
           <label>Personalisatieafbeelding</label>
+
           <div class="file-upload-field">
             <div class="pers-preview-output">
-              ${renderStoredFile(previewFile, 'Personalisatieafbeelding')}
+              ${renderStoredFile(
+        previewFile,
+        'Personalisatieafbeelding'
+      )}
             </div>
+
             <div class="file-upload-actions">
-              <input type="file" class="pers-preview-file" accept="image/*">
-              <button type="button" class="btn btn-secondary btn-sm pers-preview-remove">Verwijderen</button>
+              <input
+                type="file"
+                class="pers-preview-file"
+                accept="image/*"
+              >
+
+              <button
+                type="button"
+                class="btn btn-secondary btn-sm pers-preview-remove"
+              >
+                Verwijderen
+              </button>
             </div>
           </div>
+
+          <span class="form-hint">
+            Deze afbeelding wordt als technische achtergrond van het ontwerpcanvas gebruikt en als testbron in de calibratiepreview.
+          </span>
         </div>
 
         <div class="form-group">
           <label>Template PDF</label>
+
           <div class="file-upload-field">
             <div class="pers-template-output">
-              ${renderStoredFile(templatePdf, 'Template PDF')}
+              ${renderStoredFile(
+        templatePdf,
+        'Template PDF'
+      )}
             </div>
+
             <div class="file-upload-actions">
-              <input type="file" class="pers-template-file" accept="application/pdf">
-              <button type="button" class="btn btn-secondary btn-sm pers-template-remove">Verwijderen</button>
+              <input
+                type="file"
+                class="pers-template-file"
+                accept="application/pdf"
+              >
+
+              <button
+                type="button"
+                class="btn btn-secondary btn-sm pers-template-remove"
+              >
+                Verwijderen
+              </button>
             </div>
           </div>
+
+          <span class="form-hint">
+            Technisch templatebestand voor productie en bestandscontrole.
+          </span>
         </div>
       </div>
+
+      ${renderPreviewCalibrationPanel(type)}
     </div>
   `;
 }
