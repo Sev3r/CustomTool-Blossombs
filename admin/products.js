@@ -947,23 +947,50 @@ function previewViewRow(view = {}, index = 0, canvasGuides = []) {
       </span>
 
       <div class="form-row-4">
-        <div class="form-group">
-          <label>X mm</label>
-          <input type="number" class="preview-source-x" value="${numberInputValue(sourceZone.x_mm)}" min="0" step="0.1">
-        </div>
-        <div class="form-group">
-          <label>Y mm</label>
-          <input type="number" class="preview-source-y" value="${numberInputValue(sourceZone.y_mm)}" min="0" step="0.1">
-        </div>
-        <div class="form-group">
-          <label>Breedte mm</label>
-          <input type="number" class="preview-source-width" value="${numberInputValue(sourceZone.width_mm)}" min="0.1" step="0.1">
-        </div>
-        <div class="form-group">
-          <label>Hoogte mm</label>
-          <input type="number" class="preview-source-height" value="${numberInputValue(sourceZone.height_mm)}" min="0.1" step="0.1">
-        </div>
-      </div>
+  <div class="form-group">
+    <label>X-startpunt mm</label>
+    <input
+      type="number"
+      class="preview-source-x"
+      value="${numberInputValue(sourceZone.x_mm)}"
+      min="0"
+      step="0.1"
+    >
+  </div>
+
+  <div class="form-group">
+    <label>Y-startpunt mm</label>
+    <input
+      type="number"
+      class="preview-source-y"
+      value="${numberInputValue(sourceZone.y_mm)}"
+      min="0"
+      step="0.1"
+    >
+  </div>
+
+  <div class="form-group">
+    <label>X-eindpunt mm</label>
+    <input
+      type="number"
+      class="preview-source-width"
+      value="${numberInputValue(sourceZone.width_mm)}"
+      min="0.1"
+      step="0.1"
+    >
+  </div>
+
+  <div class="form-group">
+    <label>Y-eindpunt mm</label>
+    <input
+      type="number"
+      class="preview-source-height"
+      value="${numberInputValue(sourceZone.height_mm)}"
+      min="0.1"
+      step="0.1"
+    >
+  </div>
+</div>
 
       <div class="form-row-3">
         <div class="form-group">
