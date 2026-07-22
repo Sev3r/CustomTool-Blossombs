@@ -1353,141 +1353,436 @@ async function refreshPreviewCalibration(row, uploadState) {
   const uploadKey = row.dataset.uploadKey;
   const fileState = uploadState.persFiles[uploadKey] || {};
   const spec = getAdminSpecFromRow(row);
-  const config = collectPreviewConfigFromRow(row, fileState, spec);
-  const type = getAdminPersonalisationDraft(row, config, spec);
-  const product = getAdminProductDraft();
-  const token = String(Date.now() + Math.random());
 
-  row.dataset.previewRenderToken = token;
-  updatePreviewDefaultViewOptions(row, config);
+  const config = collectPreviewConfigFromRow(
+    row,
+    fileState,
+    spec
+  );
 
-  const sourceCanvas = await buildAdminCalibrationSourceCanvas(row, config, spec, fileState.previewImageFile);
+  const renderToken = (
+    typeof crypto !== 'undefined' &&
+    typeof crypto.randomUUID === 'function'
+  )
+    ? crypto.randomUUID()
+    : `${Date.now()}-${Math.random()}`;
 
-  if (row.dataset.previewRenderToken !== token) {
-    return;
-  }
+  row.dataset.previewRenderToken = renderToken;
 
-  await Promise.all(config.views.map(async view => {
-    const viewRow = [...row.querySelectorAll('.preview-view-row')]
-      .find(candidate => candidate.dataset.previewViewId === view.id);
-    const targetCanvas = viewRow?.querySelector('.preview-calibration-canvas');
-    const status = viewRow?.querySelector('.preview-calibration-status');
+  updatePreviewDefaultViewOptions(
+    row,
+    config
+  );
 
-    if (!targetCanvas) {
-      return;
-    }
+  await Promise.all(
+    config.views.map(async view => {
+      const viewRow = [...row.querySelectorAll('.preview-view-row')]
+        .find(candidate => candidate.dataset.previewViewId === view.id);
 
-    try {
-      await ProductPreview.renderFromCanvas({
-        sourceCanvas,
+      const targetCanvas = viewRow?.querySelector(
+        '.preview-calibration-canvas'
+      );
+
+      const status = viewRow?.querySelector(
+        '.preview-calibration-status'
+      );
+
+      if (!targetCanvas) {
+        return;
+      }
+
+      const [baseImage, overlayImage] = await Promise.all([
+        ProductPreview.loadImage(
+          view.mockup?.baseImage
+        ).catch(() => null),
+
+        ProductPreview.loadImage(
+          view.mockup?.overlayImage
+        ).catch(() => null),
+      ]);
+
+      if (row.dataset.previewRenderToken !== renderToken) {
+        return;
+      }
+
+      renderAdminPreviewPlacement({
         targetCanvas,
-        product,
-        personalisationType: type,
-        viewId: view.id,
-        width: 620,
+        baseImage,
+        overlayImage,
+        view,
       });
 
-      if (status) {
-        status.textContent = view.mockup.baseImage
-          ? 'Mockup geladen'
-          : 'Voorbeeld zonder basismockup';
+      if (!status) {
+        return;
       }
-    } catch (error) {
-      console.warn('Calibratiepreview renderen mislukt', error);
 
-      if (status) {
-        status.textContent = 'Preview kon niet worden opgebouwd';
+      if (!baseImage) {
+        status.textContent = 'Upload eerst een productfoto / onderlaag';
+        return;
       }
-    }
-  }));
+
+      const sourceZone = view.sourceZone || {};
+
+      status.textContent = [
+        `Canvasbron X ${formatMm(sourceZone.x_mm)} mm`,
+        `Y ${formatMm(sourceZone.y_mm)} mm`,
+        `${formatMm(sourceZone.width_mm)} × ${formatMm(sourceZone.height_mm)} mm`,
+      ].join(' · ');
+    })
+  );
 }
 
-async function buildAdminCalibrationSourceCanvas(row, config, spec, previewImageFile) {
-  const width = 700;
-  const ratio = spec.exportWidthMm > 0 ? spec.exportHeightMm / spec.exportWidthMm : 0.7;
-  const height = Math.max(220, Math.min(620, Math.round(width * ratio)));
-  const canvas = document.createElement('canvas');
-  canvas.width = width;
-  canvas.height = height;
+function renderAdminPreviewPlacement({
+  targetCanvas,
+  baseImage,
+  overlayImage,
+  view,
+}) {
+  const requestedWidth = 620;
 
-  const context = canvas.getContext('2d');
-  context.fillStyle = '#FFFFFF';
-  context.fillRect(0, 0, width, height);
+  const baseWidth =
+    baseImage?.naturalWidth ||
+    baseImage?.width ||
+    0;
 
-  if (previewImageFile?.dataURL && window.ProductPreview?.loadImage) {
-    try {
-      const image = await ProductPreview.loadImage(previewImageFile);
-      const scale = Math.min(width / image.naturalWidth, height / image.naturalHeight);
-      const imageWidth = image.naturalWidth * scale;
-      const imageHeight = image.naturalHeight * scale;
-      context.drawImage(image, (width - imageWidth) / 2, (height - imageHeight) / 2, imageWidth, imageHeight);
-    } catch (error) {
-      console.warn('Personalisatieafbeelding kon niet in calibratiepreview worden geladen', error);
-    }
+  const baseHeight =
+    baseImage?.naturalHeight ||
+    baseImage?.height ||
+    0;
+
+  let canvasWidth = requestedWidth;
+  let canvasHeight = 420;
+
+  if (baseWidth > 0 && baseHeight > 0) {
+    canvasHeight = Math.round(
+      canvasWidth * baseHeight / baseWidth
+    );
   }
 
-  const trimX = spec.trimXmm / spec.exportWidthMm * width;
-  const trimY = spec.trimYmm / spec.exportHeightMm * height;
-  const finishWidth = spec.finishWidthMm / spec.exportWidthMm * width;
-  const finishHeight = spec.finishHeightMm / spec.exportHeightMm * height;
+  const maximumHeight = 620;
 
-  context.save();
-  context.strokeStyle = '#A8A39B';
-  context.lineWidth = 2;
-  context.setLineDash([8, 6]);
-  context.strokeRect(trimX, trimY, finishWidth, finishHeight);
-  context.restore();
+  if (canvasHeight > maximumHeight) {
+    const scale = maximumHeight / canvasHeight;
 
-  const swatches = [
-    ['rgba(92, 122, 92, .18)', '#3E5A3E'],
-    ['rgba(201, 168, 76, .22)', '#9B7C24'],
-    ['rgba(95, 127, 145, .18)', '#496A78'],
-    ['rgba(192, 57, 43, .13)', '#8F2D22'],
-  ];
+    canvasWidth = Math.round(
+      canvasWidth * scale
+    );
 
-  config.views.forEach((view, index) => {
-    const [fill, stroke] = swatches[index % swatches.length];
-    const x = (spec.trimXmm + view.sourceZone.x_mm) / spec.exportWidthMm * width;
-    const y = (spec.trimYmm + view.sourceZone.y_mm) / spec.exportHeightMm * height;
-    const zoneWidth = view.sourceZone.width_mm / spec.exportWidthMm * width;
-    const zoneHeight = view.sourceZone.height_mm / spec.exportHeightMm * height;
+    canvasHeight = maximumHeight;
+  }
 
-    context.save();
-    context.fillStyle = fill;
-    context.strokeStyle = stroke;
-    context.lineWidth = 2;
-    context.fillRect(x, y, zoneWidth, zoneHeight);
-    context.strokeRect(x, y, zoneWidth, zoneHeight);
+  targetCanvas.width = Math.max(
+    240,
+    canvasWidth
+  );
 
-    const fontSize = Math.max(12, Math.min(26, zoneWidth / 7));
-    context.fillStyle = stroke;
-    context.font = `700 ${fontSize}px sans-serif`;
+  targetCanvas.height = Math.max(
+    180,
+    canvasHeight
+  );
+
+  const context = targetCanvas.getContext('2d');
+
+  context.clearRect(
+    0,
+    0,
+    targetCanvas.width,
+    targetCanvas.height
+  );
+
+  context.imageSmoothingEnabled = true;
+  context.imageSmoothingQuality = 'high';
+
+  if (baseImage) {
+    context.drawImage(
+      baseImage,
+      0,
+      0,
+      targetCanvas.width,
+      targetCanvas.height
+    );
+  } else {
+    context.fillStyle = '#F5F3EE';
+
+    context.fillRect(
+      0,
+      0,
+      targetCanvas.width,
+      targetCanvas.height
+    );
+
+    context.fillStyle = '#77736C';
+    context.font = '600 15px "DM Sans", sans-serif';
     context.textAlign = 'center';
     context.textBaseline = 'middle';
-    context.fillText(view.label, x + zoneWidth / 2, y + zoneHeight / 2, Math.max(20, zoneWidth - 12));
-    context.restore();
-  });
 
-  const foldGuide = config.canvasGuides.find(guide => guide.type === 'line');
-
-  if (foldGuide) {
-    const x1 = (spec.trimXmm + foldGuide.x1_mm) / spec.exportWidthMm * width;
-    const y1 = (spec.trimYmm + foldGuide.y1_mm) / spec.exportHeightMm * height;
-    const x2 = (spec.trimXmm + foldGuide.x2_mm) / spec.exportWidthMm * width;
-    const y2 = (spec.trimYmm + foldGuide.y2_mm) / spec.exportHeightMm * height;
-
-    context.save();
-    context.strokeStyle = '#C0392B';
-    context.lineWidth = 3;
-    context.setLineDash([10, 6]);
-    context.beginPath();
-    context.moveTo(x1, y1);
-    context.lineTo(x2, y2);
-    context.stroke();
-    context.restore();
+    context.fillText(
+      'Upload een productfoto / onderlaag',
+      targetCanvas.width / 2,
+      targetCanvas.height / 2
+    );
   }
 
-  return canvas;
+  /*
+   * Het groene vlak toont uitsluitend waar het uitgesneden canvasdeel
+   * straks op de productfoto wordt geplaatst.
+   */
+  drawAdminPreviewPlacementSlot(
+    context,
+    view,
+    targetCanvas.width,
+    targetCanvas.height
+  );
+
+  /*
+   * De transparante bovenlaag wordt als laatste getekend, zodat bijvoorbeeld
+   * blisterplastic, schaduwen en productranden vóór het ontwerpvlak liggen.
+   */
+  if (overlayImage) {
+    context.drawImage(
+      overlayImage,
+      0,
+      0,
+      targetCanvas.width,
+      targetCanvas.height
+    );
+  }
+}
+
+function drawAdminPreviewPlacementSlot(
+  context,
+  view,
+  canvasWidth,
+  canvasHeight
+) {
+  const slot = view.mockup?.slot || {};
+  const sourceZone = view.sourceZone || {};
+
+  const xPercent = Number(slot.xPercent);
+  const yPercent = Number(slot.yPercent);
+  const widthPercent = Number(slot.widthPercent);
+  const heightPercent = Number(slot.heightPercent);
+  const rotation = Number(slot.rotation);
+  const borderRadius = Number(slot.borderRadius);
+
+  const slotX = (
+    Number.isFinite(xPercent)
+      ? xPercent
+      : 20
+  ) / 100 * canvasWidth;
+
+  const slotY = (
+    Number.isFinite(yPercent)
+      ? yPercent
+      : 10
+  ) / 100 * canvasHeight;
+
+  const slotWidth = (
+    Number.isFinite(widthPercent) &&
+      widthPercent > 0
+      ? widthPercent
+      : 60
+  ) / 100 * canvasWidth;
+
+  const slotHeight = (
+    Number.isFinite(heightPercent) &&
+      heightPercent > 0
+      ? heightPercent
+      : 55
+  ) / 100 * canvasHeight;
+
+  const slotRotation = Number.isFinite(rotation)
+    ? rotation
+    : 0;
+
+  const radiusPercentage = Number.isFinite(borderRadius)
+    ? Math.min(
+      50,
+      Math.max(0, borderRadius)
+    )
+    : 0;
+
+  const radius = (
+    Math.min(slotWidth, slotHeight) *
+    radiusPercentage /
+    100
+  );
+
+  context.save();
+
+  context.translate(
+    slotX + slotWidth / 2,
+    slotY + slotHeight / 2
+  );
+
+  context.rotate(
+    slotRotation * Math.PI / 180
+  );
+
+  createAdminPreviewRoundedRectPath(
+    context,
+    -slotWidth / 2,
+    -slotHeight / 2,
+    slotWidth,
+    slotHeight,
+    radius
+  );
+
+  context.fillStyle = 'rgba(92, 122, 92, 0.32)';
+  context.fill();
+
+  context.strokeStyle = '#365D45';
+
+  context.lineWidth = Math.max(
+    2,
+    canvasWidth / 260
+  );
+
+  context.setLineDash([
+    Math.max(7, canvasWidth / 75),
+    Math.max(5, canvasWidth / 105),
+  ]);
+
+  context.stroke();
+  context.setLineDash([]);
+
+  createAdminPreviewRoundedRectPath(
+    context,
+    -slotWidth / 2,
+    -slotHeight / 2,
+    slotWidth,
+    slotHeight,
+    radius
+  );
+
+  context.clip();
+
+  const titleFontSize = Math.max(
+    12,
+    Math.min(
+      22,
+      slotWidth / 9
+    )
+  );
+
+  const detailsFontSize = Math.max(
+    10,
+    Math.min(
+      14,
+      slotWidth / 15
+    )
+  );
+
+  context.fillStyle = '#294C36';
+  context.textAlign = 'center';
+  context.textBaseline = 'middle';
+
+  context.font = `700 ${titleFontSize}px "DM Sans", sans-serif`;
+
+  context.fillText(
+    view.label || 'Ontwerpvlak',
+    0,
+    -detailsFontSize,
+    Math.max(
+      20,
+      slotWidth - 18
+    )
+  );
+
+  context.font = `600 ${detailsFontSize}px "DM Sans", sans-serif`;
+
+  context.fillText(
+    `Canvas: X ${formatMm(sourceZone.x_mm)} · Y ${formatMm(sourceZone.y_mm)} mm`,
+    0,
+    detailsFontSize * 0.7,
+    Math.max(
+      20,
+      slotWidth - 18
+    )
+  );
+
+  context.fillText(
+    `${formatMm(sourceZone.width_mm)} × ${formatMm(sourceZone.height_mm)} mm`,
+    0,
+    detailsFontSize * 2.1,
+    Math.max(
+      20,
+      slotWidth - 18
+    )
+  );
+
+  context.restore();
+}
+
+function createAdminPreviewRoundedRectPath(
+  context,
+  x,
+  y,
+  width,
+  height,
+  radius
+) {
+  const safeRadius = Math.min(
+    Math.max(0, radius),
+    Math.min(width, height) / 2
+  );
+
+  context.beginPath();
+
+  context.moveTo(
+    x + safeRadius,
+    y
+  );
+
+  context.lineTo(
+    x + width - safeRadius,
+    y
+  );
+
+  context.quadraticCurveTo(
+    x + width,
+    y,
+    x + width,
+    y + safeRadius
+  );
+
+  context.lineTo(
+    x + width,
+    y + height - safeRadius
+  );
+
+  context.quadraticCurveTo(
+    x + width,
+    y + height,
+    x + width - safeRadius,
+    y + height
+  );
+
+  context.lineTo(
+    x + safeRadius,
+    y + height
+  );
+
+  context.quadraticCurveTo(
+    x,
+    y + height,
+    x,
+    y + height - safeRadius
+  );
+
+  context.lineTo(
+    x,
+    y + safeRadius
+  );
+
+  context.quadraticCurveTo(
+    x,
+    y,
+    x + safeRadius,
+    y
+  );
+
+  context.closePath();
 }
 
 function collectPreviewConfigFromRow(row, fileState = {}, spec = getAdminSpecFromRow(row)) {
@@ -1612,31 +1907,6 @@ function getAdminSpecFromRow(row) {
     margin_mm: safeMarginMm,
     includesBleed: false,
   });
-}
-
-function getAdminPersonalisationDraft(row, preview, spec = getAdminSpecFromRow(row)) {
-  return {
-    id: row.dataset.persistedId || row.dataset.uploadKey || 'preview-draft',
-    label: row.querySelector('.pers-label')?.value.trim() || 'Standaard',
-    width_mm: spec.finishWidthMm,
-    height_mm: spec.finishHeightMm,
-    finish_width_mm: spec.finishWidthMm,
-    finish_height_mm: spec.finishHeightMm,
-    export_width_mm: spec.exportWidthMm,
-    export_height_mm: spec.exportHeightMm,
-    bleed_mm: spec.bleedMm,
-    safe_margin_mm: spec.safeMarginMm,
-    margin_mm: spec.safeMarginMm,
-    includesBleed: false,
-    preview,
-  };
-}
-
-function getAdminProductDraft() {
-  return {
-    id: document.getElementById('pf-id')?.value.trim() || 'preview-product',
-    name: document.getElementById('pf-name')?.value.trim() || 'Product',
-  };
 }
 
 function finiteInputValue(input, fallback = 0) {
@@ -1880,13 +2150,33 @@ function bindPersPreview(row) {
 }
 
 function bindProductModalActions(uploadState, product, isEdit) {
-  document.getElementById('btn-add-slab').addEventListener('click', () => {
+  document.getElementById('btn-add-slab')?.addEventListener('click', () => {
     const list = document.getElementById('slab-list');
-    list.insertAdjacentHTML('beforeend', slabRow({ from: '', to: '', price: '' }, list.children.length));
+
+    if (!list) {
+      return;
+    }
+
+    list.insertAdjacentHTML(
+      'beforeend',
+      slabRow(
+        {
+          from: '',
+          to: '',
+          price: '',
+        },
+        list.children.length
+      )
+    );
   });
 
-  document.getElementById('btn-add-pers').addEventListener('click', () => {
+  document.getElementById('btn-add-pers')?.addEventListener('click', () => {
     const list = document.getElementById('pers-type-list');
+
+    if (!list) {
+      return;
+    }
+
     const uploadKey = createUploadKey();
 
     uploadState.persFiles[uploadKey] = {
@@ -1896,117 +2186,280 @@ function bindProductModalActions(uploadState, product, isEdit) {
       previewViews: {},
     };
 
-    list.insertAdjacentHTML('beforeend', persTypeRow({
-      label: '',
-      active: true,
-      finish_width_mm: '',
-      finish_height_mm: '',
-      width_mm: '',
-      height_mm: '',
-      bleed_mm: 3,
-      safe_margin_mm: 3,
-      margin_mm: 3,
-      includesBleed: false,
-      clipShape: '',
-      priceSlabs: [],
-      blockedZones: [],
-      preview: {
-        enabled: false,
-        type: 'single-view',
-        defaultViewId: 'front',
-        views: [],
-        canvasGuides: [],
-      },
-    }, list.children.length, uploadKey));
+    list.insertAdjacentHTML(
+      'beforeend',
+      persTypeRow(
+        {
+          label: '',
+          active: true,
+          finish_width_mm: '',
+          finish_height_mm: '',
+          width_mm: '',
+          height_mm: '',
+          bleed_mm: 3,
+          safe_margin_mm: 3,
+          margin_mm: 3,
+          includesBleed: false,
+          clipShape: '',
+          priceSlabs: [],
+          blockedZones: [],
+          preview: {
+            enabled: false,
+            type: 'single-view',
+            defaultViewId: 'front',
+            views: [],
+            canvasGuides: [],
+          },
+        },
+        list.children.length,
+        uploadKey
+      )
+    );
 
     const newRow = list.lastElementChild;
+
+    if (!newRow) {
+      return;
+    }
+
     bindPersRowUploads(newRow, uploadState);
     bindPersPreview(newRow);
   });
 
-  document.getElementById('btn-product-save').addEventListener('click', () => {
-    saveProductFromModal(uploadState, product, isEdit);
+  document.getElementById('btn-product-save')?.addEventListener('click', () => {
+    saveProductFromModal(
+      uploadState,
+      product,
+      isEdit
+    );
   });
 }
 
 function saveProductFromModal(uploadState, product, isEdit) {
-  const name = document.getElementById('pf-name').value.trim();
-  const error = document.getElementById('pf-error');
+  const saveButton = document.getElementById('btn-product-save');
+  const nameInput = document.getElementById('pf-name');
+  const idInput = document.getElementById('pf-id');
 
-  if (!name) {
-    error.textContent = 'Productnaam is verplicht.';
-    error.classList.add('visible');
+  clearProductModalError();
+  setProductSaveButtonState(saveButton, true);
+
+  try {
+    const name = nameInput?.value.trim() || '';
+
+    if (!name) {
+      showProductModalError('Productnaam is verplicht.');
+      return;
+    }
+
+    const personalisatieTypes = collectPersonalisationTypes(
+      uploadState
+    );
+
+    if (!personalisatieTypes.length) {
+      showProductModalError(
+        'Voeg minimaal één personalisatietype toe.'
+      );
+
+      return;
+    }
+
+    const activePersonalisationTypes = personalisatieTypes.filter(
+      type => type.active !== false
+    );
+
+    if (!activePersonalisationTypes.length) {
+      showProductModalError(
+        'Zet minimaal één personalisatietype op actief.'
+      );
+
+      return;
+    }
+
+    const previewValidationError = personalisatieTypes
+      .map(validatePersonalisationPreview)
+      .find(Boolean);
+
+    if (previewValidationError) {
+      showProductModalError(
+        previewValidationError
+      );
+
+      return;
+    }
+
+    const priceSlabs = [
+      ...document.querySelectorAll(
+        '#slab-list .slab-row'
+      ),
+    ]
+      .map(row => ({
+        from:
+          Number(
+            row.querySelector('.slab-from')?.value
+          ) || 1,
+
+        to:
+          Number(
+            row.querySelector('.slab-to')?.value
+          ) || null,
+
+        price:
+          Number(
+            row.querySelector('.slab-price')?.value
+          ) || 0,
+      }))
+      .filter(priceSlab => priceSlab.price > 0);
+
+    const firstPers =
+      activePersonalisationTypes[0] ||
+      personalisatieTypes[0];
+
+    const customId = idInput?.value.trim() || '';
+
+    const updatedProduct = {
+      ...product,
+
+      id: isEdit
+        ? product.id
+        : customId || undefined,
+
+      name,
+      active: product.active !== false,
+      priceSlabs,
+
+      imageProductFile:
+        uploadState.imageProductFile ||
+        null,
+
+      imageProduct:
+        uploadState.imageProductFile?.dataURL ||
+        '',
+
+      personalisatieTypes,
+
+      width_mm:
+        firstPers.width_mm,
+
+      height_mm:
+        firstPers.height_mm,
+
+      finish_width_mm:
+        firstPers.finish_width_mm,
+
+      finish_height_mm:
+        firstPers.finish_height_mm,
+
+      bleed_mm:
+        firstPers.bleed_mm,
+
+      safe_margin_mm:
+        firstPers.safe_margin_mm,
+
+      margin_mm:
+        firstPers.margin_mm,
+
+      includesBleed: false,
+
+      export_width_mm:
+        firstPers.export_width_mm,
+
+      export_height_mm:
+        firstPers.export_height_mm,
+
+      width_px:
+        firstPers.width_px,
+
+      height_px:
+        firstPers.height_px,
+
+      margin_px:
+        firstPers.margin_px,
+
+      canvas_display_width:
+        firstPers.canvas_display_width,
+
+      canvas_display_height:
+        firstPers.canvas_display_height,
+    };
+
+    const savedProduct = DS.saveProduct(
+      updatedProduct
+    );
+
+    if (!savedProduct?.id) {
+      throw new Error(
+        'De datalaag heeft geen opgeslagen product teruggegeven.'
+      );
+    }
+
+    AdminUI.closeModal();
+    renderProductGrid();
+
+    AdminUI.showToast(
+      isEdit
+        ? 'Product bijgewerkt'
+        : 'Product aangemaakt'
+    );
+  } catch (error) {
+    console.error(
+      'Product opslaan mislukt',
+      error
+    );
+
+    showProductModalError(
+      error instanceof Error
+        ? `Product opslaan mislukt: ${error.message}`
+        : 'Product opslaan mislukt door een onbekende fout.'
+    );
+  } finally {
+    setProductSaveButtonState(
+      saveButton,
+      false
+    );
+  }
+}
+
+function showProductModalError(message) {
+  const errorElement = document.getElementById('pf-error');
+
+  if (errorElement) {
+    errorElement.textContent = message;
+    errorElement.classList.add('visible');
+
+    requestAnimationFrame(() => {
+      errorElement.scrollIntoView({
+        behavior: 'smooth',
+        block: 'center',
+      });
+    });
+  }
+
+  AdminUI.showToast(
+    message,
+    'error'
+  );
+}
+
+function clearProductModalError() {
+  const errorElement = document.getElementById('pf-error');
+
+  if (!errorElement) {
     return;
   }
 
-  const personalisatieTypes = collectPersonalisationTypes(uploadState);
+  errorElement.textContent = '';
+  errorElement.classList.remove('visible');
+}
 
-  if (personalisatieTypes.length === 0) {
-    error.textContent = 'Voeg minimaal één personalisatietype toe.';
-    error.classList.add('visible');
+function setProductSaveButtonState(button, saving) {
+  if (!button) {
     return;
   }
 
-  const activePersonalisationTypes = personalisatieTypes.filter(type => type.active !== false);
-  const previewValidationError = personalisatieTypes
-    .map(validatePersonalisationPreview)
-    .find(Boolean);
-
-  if (previewValidationError) {
-    error.textContent = previewValidationError;
-    error.classList.add('visible');
-    return;
-  }
-
-  if (activePersonalisationTypes.length === 0) {
-    error.textContent = 'Zet minimaal één personalisatietype op actief.';
-    error.classList.add('visible');
-    return;
-  }
-
-  error.classList.remove('visible');
-
-  const priceSlabs = [...document.querySelectorAll('#slab-list .slab-row')].map(row => ({
-    from: parseFloat(row.querySelector('.slab-from').value) || 1,
-    to: parseFloat(row.querySelector('.slab-to').value) || null,
-    price: parseFloat(row.querySelector('.slab-price').value) || 0,
-  })).filter(priceSlab => priceSlab.price > 0);
-
-  const customId = document.getElementById('pf-id').value.trim();
-  const firstPers = activePersonalisationTypes[0] || personalisatieTypes[0];
-
-  const updated = {
-    ...product,
-    id: isEdit ? product.id : (customId || undefined),
-    name,
-    active: product.active !== false,
-    priceSlabs,
-    imageProductFile: uploadState.imageProductFile || null,
-    imageProduct: uploadState.imageProductFile?.dataURL || '',
-    personalisatieTypes,
-
-    width_mm: firstPers.width_mm,
-    height_mm: firstPers.height_mm,
-    finish_width_mm: firstPers.finish_width_mm,
-    finish_height_mm: firstPers.finish_height_mm,
-    bleed_mm: firstPers.bleed_mm,
-    safe_margin_mm: firstPers.safe_margin_mm,
-    margin_mm: firstPers.margin_mm,
-    includesBleed: false,
-    export_width_mm: firstPers.export_width_mm,
-    export_height_mm: firstPers.export_height_mm,
-
-    width_px: firstPers.width_px,
-    height_px: firstPers.height_px,
-    margin_px: firstPers.margin_px,
-    canvas_display_width: firstPers.canvas_display_width,
-    canvas_display_height: firstPers.canvas_display_height,
-  };
-
-  DS.saveProduct(updated);
-  AdminUI.closeModal();
-  renderProductGrid();
-  AdminUI.showToast(isEdit ? 'Product bijgewerkt' : 'Product aangemaakt');
+  button.disabled = saving;
+  button.textContent = saving
+    ? 'Opslaan…'
+    : 'Opslaan';
 }
 
 function validatePersonalisationPreview(personalisationType = {}) {
