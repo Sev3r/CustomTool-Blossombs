@@ -426,12 +426,16 @@ function persTypeRow(type, index, uploadKey) {
   const key = uploadKey || createUploadKey();
   const spec = normalizeAdminPrintSpec(type);
 
-  const previewFile = type.previewImageFile || (type.previewImage ? {
-    name: 'Personalisatieafbeelding',
-    type: 'image/png',
-    size: 0,
-    dataURL: type.previewImage,
-  } : null);
+  const previewFile = type.previewImageFile || (
+    type.previewImage
+      ? {
+        name: 'Afbeelding personalisatiekeuze',
+        type: 'image/png',
+        size: 0,
+        dataURL: type.previewImage,
+      }
+      : null
+  );
 
   const templatePdf = type.templatePdf || null;
   const priceSlabs = getDefaultPersonalisationPriceSlabs(type);
@@ -439,13 +443,27 @@ function persTypeRow(type, index, uploadKey) {
   const isActive = type.active !== false;
 
   return `
-    <div class="pers-type-row"
-         data-upload-key="${escHtml(key)}"
-         data-persisted-id="${escHtml(type.id || '')}"
-         style="border:1px solid var(--border);border-radius:var(--radius);
-                padding:12px;margin-bottom:8px;background:var(--surface-2)">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-        <strong style="font-size:13px">
+    <div
+      class="pers-type-row"
+      data-upload-key="${escHtml(key)}"
+      data-persisted-id="${escHtml(type.id || '')}"
+      style="
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 12px;
+        margin-bottom: 8px;
+        background: var(--surface-2);
+      "
+    >
+      <div
+        style="
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 10px;
+        "
+      >
+        <strong style="font-size: 13px">
           Personalisatietype ${index + 1}
         </strong>
 
@@ -453,24 +471,30 @@ function persTypeRow(type, index, uploadKey) {
           class="icon-btn danger"
           type="button"
           onclick="this.closest('.pers-type-row').remove()"
-          title="Verwijder"
+          title="Personalisatietype verwijderen"
+          aria-label="Personalisatietype verwijderen"
         >
           ×
         </button>
       </div>
 
-      <div class="form-row-1" style="margin-bottom:8px">
+      <div class="form-row-1" style="margin-bottom: 8px">
         <div class="form-group">
           <label
             class="toggle-wrap"
-            style="flex-direction:row;align-items:center;justify-content:space-between;gap:14px"
+            style="
+              flex-direction: row;
+              align-items: center;
+              justify-content: space-between;
+              gap: 14px;
+            "
           >
             <span>
-              <strong style="display:block;font-size:13px">
+              <strong style="display: block; font-size: 13px">
                 Actief
               </strong>
 
-              <span class="form-hint" style="margin:2px 0 0">
+              <span class="form-hint" style="margin: 2px 0 0">
                 Zichtbaar in de klantflow
               </span>
             </span>
@@ -488,7 +512,7 @@ function persTypeRow(type, index, uploadKey) {
         </div>
       </div>
 
-      <div class="form-row" style="margin-bottom:8px">
+      <div class="form-row" style="margin-bottom: 8px">
         <div class="form-group">
           <label>Label</label>
 
@@ -496,12 +520,12 @@ function persTypeRow(type, index, uploadKey) {
             type="text"
             class="pers-label"
             value="${escHtml(type.label || '')}"
-            placeholder="Voorkant"
+            placeholder="Bijvoorbeeld Header, Sticker of Wikkel"
           >
         </div>
 
         <div class="form-group">
-          <label>Clip-vorm optioneel</label>
+          <label>Vorm van ontwerpgebied optioneel</label>
 
           <input
             type="text"
@@ -511,16 +535,20 @@ function persTypeRow(type, index, uploadKey) {
           >
 
           <span class="form-hint">
-            CSS clip-path voor niet-rechthoekige printzone
+            CSS clip-path voor een niet-rechthoekig ontwerpgebied.
           </span>
         </div>
       </div>
 
-      <div class="form-row-1" style="margin-bottom:8px">
+      <div class="form-row-1" style="margin-bottom: 8px">
         <div class="form-group">
           <label
             class="toggle-wrap"
-            style="flex-direction:row;align-items:center;gap:10px"
+            style="
+              flex-direction: row;
+              align-items: center;
+              gap: 10px;
+            "
           >
             <span class="toggle">
               <input
@@ -533,21 +561,22 @@ function persTypeRow(type, index, uploadKey) {
             </span>
 
             <span>
-              Achtergrondkleur canvas mag aangepast worden
+              Achtergrondkleur van het ontwerpcanvas mag worden aangepast
             </span>
           </label>
 
           <span class="form-hint">
-            Zet dit alleen aan wanneer de achtergrondkleur ook echt bedrukt of zichtbaar mag worden.
+            Zet dit alleen aan wanneer een volledig gekleurde achtergrond
+            bedrukt mag worden.
           </span>
         </div>
       </div>
 
-      <div class="section-title" style="margin-top:10px">
+      <div class="section-title" style="margin-top: 10px">
         Formaat en afloop
       </div>
 
-      <div class="form-row" style="margin-bottom:8px">
+      <div class="form-row" style="margin-bottom: 8px">
         <div class="form-group">
           <label>Eindformaat breedte mm</label>
 
@@ -575,14 +604,14 @@ function persTypeRow(type, index, uploadKey) {
         </div>
       </div>
 
-      <div class="form-row" style="margin-bottom:8px">
+      <div class="form-row" style="margin-bottom: 8px">
         <div class="form-group">
           <label>Afloop rondom mm</label>
 
           <input
             type="number"
             class="pers-bleed-mm"
-            value="${escHtml(spec.bleedMm || 3)}"
+            value="${escHtml(spec.bleedMm ?? 3)}"
             placeholder="3"
             min="0"
             step="0.1"
@@ -595,7 +624,7 @@ function persTypeRow(type, index, uploadKey) {
           <input
             type="number"
             class="pers-m-mm"
-            value="${escHtml(spec.safeMarginMm || 3)}"
+            value="${escHtml(spec.safeMarginMm ?? 3)}"
             placeholder="3"
             min="0"
             step="0.1"
@@ -605,10 +634,13 @@ function persTypeRow(type, index, uploadKey) {
 
       <div
         class="pers-px-preview form-hint"
-        style="color:var(--text-2);margin:4px 0 12px"
+        style="
+          color: var(--text-2);
+          margin: 4px 0 12px;
+        "
       ></div>
 
-      <div class="section-title" style="margin-top:10px">
+      <div class="section-title" style="margin-top: 10px">
         Uitsparingen, rillijnen en no-print zones
       </div>
 
@@ -621,19 +653,23 @@ function persTypeRow(type, index, uploadKey) {
       <button
         class="btn btn-secondary btn-sm btn-add-blocked-zone"
         type="button"
-        style="margin:8px 0 12px"
+        style="margin: 8px 0 12px"
       >
         + Drukzone toevoegen
       </button>
 
       <span
         class="form-hint"
-        style="display:block;margin-bottom:12px"
+        style="
+          display: block;
+          margin-bottom: 12px;
+        "
       >
-        Gebruik dit voor gaten, rillijnen, vouwlijnen, nietzones of andere zones waar geen tekst of logo overheen mag vallen.
+        Gebruik dit voor gaten, rillijnen, nietzones en andere gebieden
+        waar geen tekst, logo of afbeelding overheen mag vallen.
       </span>
 
-      <div class="section-title" style="margin-top:10px">
+      <div class="section-title" style="margin-top: 10px">
         Staffelprijzen voor deze personalisatie
       </div>
 
@@ -646,24 +682,24 @@ function persTypeRow(type, index, uploadKey) {
       <button
         class="btn btn-secondary btn-sm btn-add-pers-slab"
         type="button"
-        style="margin:8px 0 12px"
+        style="margin: 8px 0 12px"
       >
         + Staffel toevoegen
       </button>
 
-      <div class="section-title" style="margin-top:10px">
+      <div class="section-title" style="margin-top: 10px">
         Ontwerpbestanden
       </div>
 
-      <div class="form-row" style="margin-bottom:8px">
+      <div class="form-row" style="margin-bottom: 8px">
         <div class="form-group">
-          <label>Personalisatieafbeelding</label>
+          <label>Afbeelding personalisatiekeuze</label>
 
           <div class="file-upload-field">
             <div class="pers-preview-output">
               ${renderStoredFile(
         previewFile,
-        'Personalisatieafbeelding'
+        'Afbeelding personalisatiekeuze'
       )}
             </div>
 
@@ -684,7 +720,9 @@ function persTypeRow(type, index, uploadKey) {
           </div>
 
           <span class="form-hint">
-            Deze afbeelding wordt als technische achtergrond van het ontwerpcanvas gebruikt en als testbron in de calibratiepreview.
+            Wordt in stap 2 getoond bij de keuze voor dit
+            personalisatietype. De afbeelding wordt niet op het
+            ontwerpcanvas geplaatst en komt niet in het drukbestand.
           </span>
         </div>
 
@@ -716,7 +754,8 @@ function persTypeRow(type, index, uploadKey) {
           </div>
 
           <span class="form-hint">
-            Technisch templatebestand voor productie en bestandscontrole.
+            Technisch templatebestand voor productie en
+            bestandscontrole.
           </span>
         </div>
       </div>

@@ -1326,54 +1326,49 @@ function getBlockedLineCanvasData(zone, activePers, product, canvasWidth, canvas
   };
 }
 
-function loadBackgroundImage(canvas, activePers, product, canvasWidth, canvasHeight) {
-  if (activePers?.allowBackgroundColor) {
-    return;
-  }
+function restoreCanvasStateOrDefault(
+  canvas,
+  savedState,
+  canvasHeight,
+  margin,
+  canvasWidth,
+  canvasHeightValue,
+  activePers,
+  product
+) {
+  const redrawAfterRestore = () => {
+    canvas.backgroundImage = null;
+    canvas.backgroundColor = fabricBackgroundColor;
 
-  const bgImg = getPersonalisationImageSrc(activePers, product);
-
-  if (!bgImg) {
-    return;
-  }
-
-  fabric.Image.fromURL(bgImg, image => {
-    const scale = Math.min(
-      canvasWidth / image.width,
-      canvasHeight / image.height
+    redrawGuides(
+      canvas,
+      activePers,
+      product,
+      margin,
+      canvasWidth,
+      canvasHeightValue
     );
 
-    image.set({
-      originX: 'center',
-      originY: 'center',
-      left: canvasWidth / 2,
-      top: canvasHeight / 2,
-      scaleX: scale,
-      scaleY: scale,
-    });
-
-    canvas.setBackgroundImage(image, () => {
-      canvas.renderAll();
-    });
-  }, {
-    crossOrigin: 'anonymous',
-  });
-}
-
-function restoreCanvasStateOrDefault(canvas, savedState, canvasHeight, margin, canvasWidth, canvasHeightValue, activePers, product) {
-  const redrawAfterRestore = () => {
-    redrawGuides(canvas, activePers, product, margin, canvasWidth, canvasHeightValue);
     restoreFabricImageUploadMeta(canvas);
     updateFabricImageDpiWarning(canvas, activePers, product);
     updateLayerPanel();
+    canvas.renderAll();
   };
 
   if (savedState?.fabricJSON) {
     try {
-      canvas.loadFromJSON(savedState.fabricJSON, () => {
+      const fabricState = typeof savedState.fabricJSON === 'string'
+        ? JSON.parse(savedState.fabricJSON)
+        : { ...savedState.fabricJSON };
+
+      delete fabricState.backgroundImage;
+      fabricState.background = fabricBackgroundColor;
+
+      canvas.loadFromJSON(fabricState, () => {
         removeGuideObjects(canvas);
         redrawAfterRestore();
       });
+
       return;
     } catch (error) {
       console.warn('Canvas state herstellen mislukt', error);
@@ -1743,7 +1738,6 @@ function bindFabricButtons(canvas, margin, canvasWidth, canvasHeight, stateKey, 
     canvas.clear();
     canvas.backgroundColor = fabricBackgroundColor;
 
-    loadBackgroundImage(canvas, activePers, product, canvasWidth, canvasHeight);
     redrawGuides(canvas, activePers, product, margin, canvasWidth, canvasHeight);
     updateFabricImageDpiWarning(canvas, activePers, product);
 
@@ -2190,9 +2184,17 @@ function bindLayerDragAndDrop(canvas, stateKey) {
 }
 
 function reorderCanvasObjectsFromLayerDrop(canvas, draggedId, targetId) {
-  const editableObjects = canvas.getObjects().filter(object => !isGuideObject(object));
-  const draggedObject = editableObjects.find(object => getFabricObjectId(object) === draggedId);
-  const targetObject = editableObjects.find(object => getFabricObjectId(object) === targetId);
+  const editableObjects = canvas
+    .getObjects()
+    .filter(object => !isGuideObject(object));
+
+  const draggedObject = editableObjects.find(
+    object => getFabricObjectId(object) === draggedId
+  );
+
+  const targetObject = editableObjects.find(
+    object => getFabricObjectId(object) === targetId
+  );
 
   if (!draggedObject || !targetObject) {
     return;
@@ -2209,8 +2211,6 @@ function reorderCanvasObjectsFromLayerDrop(canvas, draggedId, targetId) {
   editableObjects.splice(toIndex, 0, draggedObject);
 
   const activeObject = canvas.getActiveObject();
-  const backgroundColor = canvas.backgroundColor;
-  const backgroundImage = canvas.backgroundImage || null;
 
   editableObjects.forEach((object, index) => {
     if (typeof canvas.moveTo === 'function') {
@@ -2222,9 +2222,6 @@ function reorderCanvasObjectsFromLayerDrop(canvas, draggedId, targetId) {
       object.moveTo(index);
     }
   });
-
-  canvas.backgroundColor = backgroundColor;
-  canvas.backgroundImage = backgroundImage;
 
   bringGuidesToFront(canvas);
 
@@ -2834,14 +2831,6 @@ function clearUpload() {
   });
 
   renderDesignPage();
-}
-
-function getPersonalisationImageSrc(persType, product) {
-  return persType?.previewImageFile?.dataURL ||
-    persType?.previewImage ||
-    product?.imageProductFile?.dataURL ||
-    product?.imageProduct ||
-    '';
 }
 
 function escHtml(value) {
