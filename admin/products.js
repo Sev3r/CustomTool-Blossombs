@@ -59,6 +59,8 @@ function renderProductGrid() {
       const isActive = type.active !== false;
       const spec = normalizeAdminPrintSpec(type, product);
       const zoneCount = Array.isArray(type.blockedZones) ? type.blockedZones.length : 0;
+      const previewConfig = normalizeAdminPreviewConfig(type, product);
+      const previewViewCount = previewConfig.enabled ? previewConfig.views.length : 0;
 
       return `
         <span class="spec-tag ${isActive ? '' : 'inactive'}">
@@ -67,6 +69,7 @@ function renderProductGrid() {
           · export ${spec.exportWidthMm || '—'}×${spec.exportHeightMm || '—'}mm
           ${priceCount ? `, ${priceCount} staffels` : ''}
           ${zoneCount ? `, ${zoneCount} zones` : ''}
+          ${previewViewCount ? `, ${previewViewCount} productpreview${previewViewCount === 1 ? '' : 's'}` : ''}
           ${isActive ? '' : ' · inactief'}
         </span>
       `;
@@ -162,6 +165,7 @@ function openProductModal(id = null) {
 
   persTypes.forEach(type => {
     uploadState.persFiles[type.id] = {
+      sourceType: { ...type },
       previewImageFile: type.previewImageFile || (type.previewImage ? {
         name: 'Personalisatieafbeelding',
         type: 'image/png',
@@ -169,6 +173,7 @@ function openProductModal(id = null) {
         dataURL: type.previewImage,
       } : null),
       templatePdf: type.templatePdf || null,
+      ...createPreviewFileState(type.preview),
     };
   });
 
@@ -515,6 +520,8 @@ function persTypeRow(type, index, uploadKey) {
 
       <div class="pers-px-preview form-hint" style="color:var(--text-2);margin:4px 0 12px"></div>
 
+      ${renderPreviewCalibrationPanel(type)}
+
       <div class="section-title" style="margin-top:10px">Uitsparingen, rillijnen en no-print zones</div>
 
       <div class="blocked-zone-list">
@@ -570,6 +577,899 @@ function persTypeRow(type, index, uploadKey) {
   `;
 }
 
+function normalizeAdminPreviewConfig(type = {}, product = {}) {
+  const spec = normalizeAdminPrintSpec(type, product);
+  const normalized = window.ProductPreview?.normalizeConfig
+    ? ProductPreview.normalizeConfig(type, product)
+    : {
+      enabled: type.preview?.enabled === true,
+      type: type.preview?.type || 'single-view',
+      defaultViewId: type.preview?.defaultViewId || null,
+      views: Array.isArray(type.preview?.views) ? type.preview.views : [],
+      canvasGuides: Array.isArray(type.preview?.canvasGuides) ? type.preview.canvasGuides : [],
+    };
+
+  if (normalized.views.length > 0) {
+    return normalized;
+  }
+
+  const defaultView = {
+    id: 'front',
+    label: 'Voorkant',
+    helpText: 'Dit deel is zichtbaar aan de voorkant van het product.',
+    sourceZone: {
+      x_mm: 0,
+      y_mm: 0,
+      width_mm: spec.finishWidthMm,
+      height_mm: spec.finishHeightMm,
+      rotation: 0,
+      flipX: false,
+      flipY: false,
+    },
+    mockup: {
+      baseImage: null,
+      overlayImage: null,
+      slot: {
+        xPercent: 20,
+        yPercent: 10,
+        widthPercent: 60,
+        heightPercent: 55,
+        rotation: 0,
+        borderRadius: 0,
+        fit: 'cover',
+      },
+    },
+  };
+
+  return {
+    enabled: false,
+    type: 'single-view',
+    defaultViewId: defaultView.id,
+    views: [defaultView],
+    canvasGuides: [],
+  };
+}
+
+function createPreviewFileState(preview = null) {
+  const state = { previewViews: {} };
+  const views = Array.isArray(preview?.views) ? preview.views : [];
+
+  views.forEach(view => {
+    if (!view?.id) {
+      return;
+    }
+
+    state.previewViews[view.id] = {
+      baseImage: view.mockup?.baseImage || null,
+      overlayImage: view.mockup?.overlayImage || null,
+    };
+  });
+
+  return state;
+}
+
+function renderPreviewCalibrationPanel(type = {}) {
+  const config = normalizeAdminPreviewConfig(type);
+  const foldGuide = config.canvasGuides.find(guide => guide.type === 'line') || null;
+  const contentHidden = config.enabled ? '' : 'is-disabled';
+
+  return `
+    <div class="section-title preview-section-title">Productpreview en zichtbare zijden</div>
+
+    <div class="preview-calibration-panel" data-preview-panel>
+      <div class="preview-calibration-intro">
+        <strong>Klantvriendelijke productpreview</strong>
+        <span>
+          Het volledige drukcanvas blijft intact. Iedere weergave gebruikt alleen het ingestelde brongebied
+          en plaatst dat live op een mockup van het eindproduct.
+        </span>
+      </div>
+
+      <label class="toggle-wrap preview-toggle-row">
+        <span>
+          <strong>Productpreview inschakelen</strong>
+          <span class="form-hint">De customerflow gebruikt deze configuratie voor stap 3 en de eindcontrole.</span>
+        </span>
+        <span class="toggle">
+          <input type="checkbox" class="pers-product-preview-enabled" ${config.enabled ? 'checked' : ''}>
+          <span class="toggle-slider"></span>
+        </span>
+      </label>
+
+      <div class="preview-calibration-content ${contentHidden}">
+        <div class="form-row" style="margin-bottom:0">
+          <div class="form-group">
+            <label>Weergavetype</label>
+            <select class="pers-preview-type">
+              <option value="single-view" ${config.type === 'single-view' ? 'selected' : ''}>Eén weergave</option>
+              <option value="two-sided-toggle" ${config.type === 'two-sided-toggle' ? 'selected' : ''}>Voor- en achterkant met toggle</option>
+              <option value="multi-view-toggle" ${config.type === 'multi-view-toggle' ? 'selected' : ''}>Meerdere zijden met toggle</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label>Standaard getoonde zijde</label>
+            <select class="pers-preview-default-view">
+              ${config.views.map(view => `
+                <option value="${escHtml(view.id)}" ${view.id === config.defaultViewId ? 'selected' : ''}>
+                  ${escHtml(view.label)}
+                </option>
+              `).join('')}
+            </select>
+          </div>
+        </div>
+
+        <div class="preview-subtitle">Zijden en brongebieden</div>
+
+        <div class="preview-view-list">
+          ${config.views.map((view, viewIndex) => previewViewRow(view, viewIndex, config.canvasGuides)).join('')}
+        </div>
+
+        <button class="btn btn-secondary btn-sm btn-add-preview-view" type="button">
+          + Zijde toevoegen
+        </button>
+
+        <div class="preview-subtitle">Vouwlijn op het ontwerpcanvas</div>
+        ${previewFoldRow(foldGuide)}
+      </div>
+    </div>
+  `;
+}
+
+function previewViewRow(view = {}, index = 0, canvasGuides = []) {
+  const sourceZone = view.sourceZone || {};
+  const slot = view.mockup?.slot || {};
+  const viewId = view.id || createPreviewViewId();
+  const labelGuide = canvasGuides.find(guide => guide.type === 'label' && guide.viewId === viewId) || null;
+  const showGuide = Boolean(labelGuide) || canvasGuides.length === 0;
+
+  return `
+    <article class="preview-view-row" data-preview-view-id="${escHtml(viewId)}">
+      <div class="preview-view-header">
+        <div>
+          <strong>Zijde ${index + 1}: <span class="preview-view-title">${escHtml(view.label || `Weergave ${index + 1}`)}</span></strong>
+          <span>Brongebied op het volledige drukcanvas en plaatsing op de productmockup</span>
+        </div>
+        <button class="icon-btn danger btn-remove-preview-view" type="button" title="Verwijder zijde">×</button>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label>Label</label>
+          <input type="text" class="preview-view-label" value="${escHtml(view.label || '')}" placeholder="Voorkant">
+        </div>
+
+        <div class="form-group">
+          <label>Technisch ID</label>
+          <input type="text" class="preview-view-id" value="${escHtml(viewId)}" readonly>
+          <span class="form-hint">Blijft stabiel voor bestaande producten en orders.</span>
+        </div>
+      </div>
+
+      <div class="form-row-1">
+        <div class="form-group">
+          <label>Uitleg voor de klant</label>
+          <input type="text" class="preview-view-help" value="${escHtml(view.helpText || '')}" placeholder="Dit deel wordt naar achteren gevouwen.">
+        </div>
+      </div>
+
+      <div class="preview-subtitle">Brongebied op het eindformaat</div>
+      <span class="form-hint preview-coordinate-hint">
+        X en Y starten linksboven op het afgewerkte formaat, dus zonder afloop. De preview-engine verwerkt de afloop automatisch.
+      </span>
+
+      <div class="form-row-4">
+        <div class="form-group">
+          <label>X mm</label>
+          <input type="number" class="preview-source-x" value="${numberInputValue(sourceZone.x_mm)}" min="0" step="0.1">
+        </div>
+        <div class="form-group">
+          <label>Y mm</label>
+          <input type="number" class="preview-source-y" value="${numberInputValue(sourceZone.y_mm)}" min="0" step="0.1">
+        </div>
+        <div class="form-group">
+          <label>Breedte mm</label>
+          <input type="number" class="preview-source-width" value="${numberInputValue(sourceZone.width_mm)}" min="0.1" step="0.1">
+        </div>
+        <div class="form-group">
+          <label>Hoogte mm</label>
+          <input type="number" class="preview-source-height" value="${numberInputValue(sourceZone.height_mm)}" min="0.1" step="0.1">
+        </div>
+      </div>
+
+      <div class="form-row-3">
+        <div class="form-group">
+          <label>Bronrotatie</label>
+          <select class="preview-source-rotation">
+            ${[0, 90, 180, 270].map(rotation => `
+              <option value="${rotation}" ${Number(sourceZone.rotation || 0) === rotation ? 'selected' : ''}>${rotation}°</option>
+            `).join('')}
+          </select>
+        </div>
+
+        <label class="preview-check-row">
+          <input type="checkbox" class="preview-source-flip-x" ${sourceZone.flipX ? 'checked' : ''}>
+          <span>Horizontaal spiegelen</span>
+        </label>
+
+        <label class="preview-check-row">
+          <input type="checkbox" class="preview-source-flip-y" ${sourceZone.flipY ? 'checked' : ''}>
+          <span>Verticaal spiegelen</span>
+        </label>
+      </div>
+
+      <label class="preview-guide-toggle">
+        <input type="checkbox" class="preview-guide-enabled" ${showGuide ? 'checked' : ''}>
+        <span>
+          <strong>Toon dit gebied als label op het ontwerpcanvas</strong>
+          <small>Dit label is alleen een hulplijn en komt nooit in de print-export.</small>
+        </span>
+      </label>
+
+      <div class="form-row-1 preview-guide-description-wrap">
+        <div class="form-group">
+          <label>Beschrijving onder canvaslabel</label>
+          <input type="text" class="preview-guide-description" value="${escHtml(labelGuide?.description || view.helpText || '')}" placeholder="Zichtbaar op het product">
+        </div>
+      </div>
+
+      <div class="preview-subtitle">Mockupbestanden</div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label>Basismockup</label>
+          <div class="file-upload-field">
+            <div class="preview-base-output">
+              ${renderStoredFile(view.mockup?.baseImage || null, 'Basismockup')}
+            </div>
+            <div class="file-upload-actions">
+              <input type="file" class="preview-base-file" accept="image/*">
+              <button type="button" class="btn btn-secondary btn-sm preview-base-remove">Verwijderen</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>Overlay optioneel</label>
+          <div class="file-upload-field">
+            <div class="preview-overlay-output">
+              ${renderStoredFile(view.mockup?.overlayImage || null, 'Overlay')}
+            </div>
+            <div class="file-upload-actions">
+              <input type="file" class="preview-overlay-file" accept="image/*">
+              <button type="button" class="btn btn-secondary btn-sm preview-overlay-remove">Verwijderen</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="preview-subtitle">Plaatsing op de mockup</div>
+
+      <div class="form-row-4">
+        <div class="form-group">
+          <label>X %</label>
+          <input type="number" class="preview-slot-x" value="${numberInputValue(slot.xPercent, 20)}" step="0.1">
+        </div>
+        <div class="form-group">
+          <label>Y %</label>
+          <input type="number" class="preview-slot-y" value="${numberInputValue(slot.yPercent, 10)}" step="0.1">
+        </div>
+        <div class="form-group">
+          <label>Breedte %</label>
+          <input type="number" class="preview-slot-width" value="${numberInputValue(slot.widthPercent, 60)}" min="0.1" step="0.1">
+        </div>
+        <div class="form-group">
+          <label>Hoogte %</label>
+          <input type="number" class="preview-slot-height" value="${numberInputValue(slot.heightPercent, 55)}" min="0.1" step="0.1">
+        </div>
+      </div>
+
+      <div class="form-row-3">
+        <div class="form-group">
+          <label>Rotatie op mockup</label>
+          <input type="number" class="preview-slot-rotation" value="${numberInputValue(slot.rotation, 0)}" step="0.1">
+        </div>
+        <div class="form-group">
+          <label>Hoekafronding %</label>
+          <input type="number" class="preview-slot-radius" value="${numberInputValue(slot.borderRadius, 0)}" min="0" max="50" step="0.1">
+        </div>
+        <div class="form-group">
+          <label>Vulling</label>
+          <select class="preview-slot-fit">
+            <option value="cover" ${slot.fit !== 'contain' && slot.fit !== 'stretch' ? 'selected' : ''}>Vullend uitsnijden</option>
+            <option value="contain" ${slot.fit === 'contain' ? 'selected' : ''}>Volledig zichtbaar</option>
+            <option value="stretch" ${slot.fit === 'stretch' ? 'selected' : ''}>Uitrekken naar slot</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="preview-calibration-result">
+        <div class="preview-calibration-result-header">
+          <strong>Calibratievoorbeeld</strong>
+          <span class="preview-calibration-status">Wordt bijgewerkt…</span>
+        </div>
+        <canvas class="preview-calibration-canvas" aria-label="Calibratievoorbeeld van ${escHtml(view.label || `weergave ${index + 1}`)}"></canvas>
+      </div>
+    </article>
+  `;
+}
+
+function previewFoldRow(guide = null) {
+  return `
+    <div class="preview-fold-row">
+      <label class="toggle-wrap preview-fold-toggle">
+        <span>
+          <strong>Vouwlijn tonen</strong>
+          <span class="form-hint">Alleen zichtbaar als hulplijn in de ontwerptool.</span>
+        </span>
+        <span class="toggle">
+          <input type="checkbox" class="preview-fold-enabled" ${guide ? 'checked' : ''}>
+          <span class="toggle-slider"></span>
+        </span>
+      </label>
+
+      <div class="preview-fold-fields ${guide ? '' : 'is-disabled'}">
+        <div class="form-row-1">
+          <div class="form-group">
+            <label>Label</label>
+            <input type="text" class="preview-fold-label" value="${escHtml(guide?.label || 'Vouwlijn')}" placeholder="Vouwlijn">
+          </div>
+        </div>
+
+        <div class="form-row-4">
+          <div class="form-group">
+            <label>X start mm</label>
+            <input type="number" class="preview-fold-x1" value="${numberInputValue(guide?.x1_mm, 0)}" min="0" step="0.1">
+          </div>
+          <div class="form-group">
+            <label>Y start mm</label>
+            <input type="number" class="preview-fold-y1" value="${numberInputValue(guide?.y1_mm, 0)}" min="0" step="0.1">
+          </div>
+          <div class="form-group">
+            <label>X eind mm</label>
+            <input type="number" class="preview-fold-x2" value="${numberInputValue(guide?.x2_mm, 0)}" min="0" step="0.1">
+          </div>
+          <div class="form-group">
+            <label>Y eind mm</label>
+            <input type="number" class="preview-fold-y2" value="${numberInputValue(guide?.y2_mm, 0)}" min="0" step="0.1">
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function bindPreviewCalibration(row, uploadState) {
+  const uploadKey = row.dataset.uploadKey;
+  const fileState = uploadState.persFiles[uploadKey];
+  const panel = row.querySelector('[data-preview-panel]');
+
+  if (!panel) {
+    return;
+  }
+
+  fileState.previewViews = fileState.previewViews || {};
+
+  panel.querySelector('.pers-product-preview-enabled')?.addEventListener('change', event => {
+    panel.querySelector('.preview-calibration-content')?.classList.toggle('is-disabled', !event.target.checked);
+    refreshPreviewCalibration(row, uploadState);
+  });
+
+  panel.querySelector('.preview-fold-enabled')?.addEventListener('change', event => {
+    panel.querySelector('.preview-fold-fields')?.classList.toggle('is-disabled', !event.target.checked);
+    refreshPreviewCalibration(row, uploadState);
+  });
+
+  panel.querySelector('.btn-add-preview-view')?.addEventListener('click', () => {
+    const list = panel.querySelector('.preview-view-list');
+
+    if (!list) {
+      return;
+    }
+
+    const viewCount = list.children.length;
+    const viewId = createPreviewViewId();
+    const spec = getAdminSpecFromRow(row);
+    const view = {
+      id: viewId,
+      label: viewCount === 1 ? 'Achterkant' : `Zijde ${viewCount + 1}`,
+      helpText: viewCount === 1 ? 'Dit deel is zichtbaar aan de achterkant van het product.' : '',
+      sourceZone: {
+        x_mm: 0,
+        y_mm: 0,
+        width_mm: spec.finishWidthMm,
+        height_mm: spec.finishHeightMm,
+        rotation: 0,
+        flipX: false,
+        flipY: false,
+      },
+      mockup: {
+        baseImage: null,
+        overlayImage: null,
+        slot: {
+          xPercent: 20,
+          yPercent: 10,
+          widthPercent: 60,
+          heightPercent: 55,
+          rotation: 0,
+          borderRadius: 0,
+          fit: 'cover',
+        },
+      },
+    };
+
+    fileState.previewViews[viewId] = {
+      baseImage: null,
+      overlayImage: null,
+    };
+
+    list.insertAdjacentHTML('beforeend', previewViewRow(view, viewCount, []));
+
+    const typeSelect = panel.querySelector('.pers-preview-type');
+
+    if (typeSelect && viewCount === 1 && typeSelect.value === 'single-view') {
+      typeSelect.value = 'two-sided-toggle';
+    } else if (typeSelect && viewCount >= 2) {
+      typeSelect.value = 'multi-view-toggle';
+    }
+
+    bindPreviewViewRow(list.lastElementChild, row, uploadState);
+    refreshPreviewCalibration(row, uploadState);
+  });
+
+  panel.querySelectorAll('.preview-view-row').forEach(viewRow => {
+    const viewId = viewRow.dataset.previewViewId;
+    fileState.previewViews[viewId] = fileState.previewViews[viewId] || {
+      baseImage: null,
+      overlayImage: null,
+    };
+    bindPreviewViewRow(viewRow, row, uploadState);
+  });
+
+  panel.querySelectorAll('input, select').forEach(input => {
+    if (input.closest('.preview-view-row')) {
+      return;
+    }
+
+    input.addEventListener('input', () => refreshPreviewCalibration(row, uploadState));
+    input.addEventListener('change', () => refreshPreviewCalibration(row, uploadState));
+  });
+
+  refreshPreviewCalibration(row, uploadState);
+}
+
+function bindPreviewViewRow(viewRow, personalisationRow, uploadState) {
+  if (!viewRow) {
+    return;
+  }
+
+  const uploadKey = personalisationRow.dataset.uploadKey;
+  const fileState = uploadState.persFiles[uploadKey];
+  const viewId = viewRow.dataset.previewViewId;
+
+  fileState.previewViews[viewId] = fileState.previewViews[viewId] || {
+    baseImage: null,
+    overlayImage: null,
+  };
+
+  viewRow.querySelector('.btn-remove-preview-view')?.addEventListener('click', () => {
+    const list = viewRow.closest('.preview-view-list');
+
+    if (list?.children.length <= 1) {
+      AdminUI.showToast('Laat minimaal één previewzijde staan.', 'error');
+      return;
+    }
+
+    delete fileState.previewViews[viewId];
+    viewRow.remove();
+    renumberPreviewViewRows(personalisationRow);
+    refreshPreviewCalibration(personalisationRow, uploadState);
+  });
+
+  const baseInput = viewRow.querySelector('.preview-base-file');
+  const baseOutput = viewRow.querySelector('.preview-base-output');
+  const overlayInput = viewRow.querySelector('.preview-overlay-file');
+  const overlayOutput = viewRow.querySelector('.preview-overlay-output');
+
+  baseInput?.addEventListener('change', async event => {
+    const file = event.target.files?.[0];
+
+    if (!file) {
+      return;
+    }
+
+    fileState.previewViews[viewId].baseImage = await fileToDataURL(file);
+    baseOutput.innerHTML = renderStoredFile(fileState.previewViews[viewId].baseImage, 'Basismockup');
+    event.target.value = '';
+    refreshPreviewCalibration(personalisationRow, uploadState);
+  });
+
+  viewRow.querySelector('.preview-base-remove')?.addEventListener('click', () => {
+    fileState.previewViews[viewId].baseImage = null;
+    baseOutput.innerHTML = renderStoredFile(null);
+    refreshPreviewCalibration(personalisationRow, uploadState);
+  });
+
+  overlayInput?.addEventListener('change', async event => {
+    const file = event.target.files?.[0];
+
+    if (!file) {
+      return;
+    }
+
+    fileState.previewViews[viewId].overlayImage = await fileToDataURL(file);
+    overlayOutput.innerHTML = renderStoredFile(fileState.previewViews[viewId].overlayImage, 'Overlay');
+    event.target.value = '';
+    refreshPreviewCalibration(personalisationRow, uploadState);
+  });
+
+  viewRow.querySelector('.preview-overlay-remove')?.addEventListener('click', () => {
+    fileState.previewViews[viewId].overlayImage = null;
+    overlayOutput.innerHTML = renderStoredFile(null);
+    refreshPreviewCalibration(personalisationRow, uploadState);
+  });
+
+  viewRow.querySelectorAll('input, select').forEach(input => {
+    if (input.matches('.preview-base-file, .preview-overlay-file')) {
+      return;
+    }
+
+    const eventName = input.type === 'checkbox' || input.tagName === 'SELECT' ? 'change' : 'input';
+    input.addEventListener(eventName, () => {
+      if (input.classList.contains('preview-view-label')) {
+        const title = viewRow.querySelector('.preview-view-title');
+
+        if (title) {
+          title.textContent = input.value.trim() || 'Naamloze zijde';
+        }
+      }
+
+      refreshPreviewCalibration(personalisationRow, uploadState);
+    });
+  });
+}
+
+function renumberPreviewViewRows(row) {
+  row.querySelectorAll('.preview-view-row').forEach((viewRow, index) => {
+    const header = viewRow.querySelector('.preview-view-header strong');
+    const title = viewRow.querySelector('.preview-view-label')?.value.trim() || `Weergave ${index + 1}`;
+
+    if (header) {
+      header.innerHTML = `Zijde ${index + 1}: <span class="preview-view-title">${escHtml(title)}</span>`;
+    }
+  });
+}
+
+function updatePreviewDefaultViewOptions(row, config) {
+  const select = row.querySelector('.pers-preview-default-view');
+
+  if (!select) {
+    return;
+  }
+
+  const currentValue = select.value;
+  select.innerHTML = config.views.map(view => `
+    <option value="${escHtml(view.id)}">${escHtml(view.label)}</option>
+  `).join('');
+
+  select.value = config.views.some(view => view.id === currentValue)
+    ? currentValue
+    : config.views[0]?.id || '';
+}
+
+async function refreshPreviewCalibration(row, uploadState) {
+  if (!window.ProductPreview) {
+    return;
+  }
+
+  const uploadKey = row.dataset.uploadKey;
+  const fileState = uploadState.persFiles[uploadKey] || {};
+  const spec = getAdminSpecFromRow(row);
+  const config = collectPreviewConfigFromRow(row, fileState, spec);
+  const type = getAdminPersonalisationDraft(row, config, spec);
+  const product = getAdminProductDraft();
+  const token = String(Date.now() + Math.random());
+
+  row.dataset.previewRenderToken = token;
+  updatePreviewDefaultViewOptions(row, config);
+
+  const sourceCanvas = await buildAdminCalibrationSourceCanvas(row, config, spec, fileState.previewImageFile);
+
+  if (row.dataset.previewRenderToken !== token) {
+    return;
+  }
+
+  await Promise.all(config.views.map(async view => {
+    const viewRow = [...row.querySelectorAll('.preview-view-row')]
+      .find(candidate => candidate.dataset.previewViewId === view.id);
+    const targetCanvas = viewRow?.querySelector('.preview-calibration-canvas');
+    const status = viewRow?.querySelector('.preview-calibration-status');
+
+    if (!targetCanvas) {
+      return;
+    }
+
+    try {
+      await ProductPreview.renderFromCanvas({
+        sourceCanvas,
+        targetCanvas,
+        product,
+        personalisationType: type,
+        viewId: view.id,
+        width: 620,
+      });
+
+      if (status) {
+        status.textContent = view.mockup.baseImage
+          ? 'Mockup geladen'
+          : 'Voorbeeld zonder basismockup';
+      }
+    } catch (error) {
+      console.warn('Calibratiepreview renderen mislukt', error);
+
+      if (status) {
+        status.textContent = 'Preview kon niet worden opgebouwd';
+      }
+    }
+  }));
+}
+
+async function buildAdminCalibrationSourceCanvas(row, config, spec, previewImageFile) {
+  const width = 700;
+  const ratio = spec.exportWidthMm > 0 ? spec.exportHeightMm / spec.exportWidthMm : 0.7;
+  const height = Math.max(220, Math.min(620, Math.round(width * ratio)));
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+
+  const context = canvas.getContext('2d');
+  context.fillStyle = '#FFFFFF';
+  context.fillRect(0, 0, width, height);
+
+  if (previewImageFile?.dataURL && window.ProductPreview?.loadImage) {
+    try {
+      const image = await ProductPreview.loadImage(previewImageFile);
+      const scale = Math.min(width / image.naturalWidth, height / image.naturalHeight);
+      const imageWidth = image.naturalWidth * scale;
+      const imageHeight = image.naturalHeight * scale;
+      context.drawImage(image, (width - imageWidth) / 2, (height - imageHeight) / 2, imageWidth, imageHeight);
+    } catch (error) {
+      console.warn('Personalisatieafbeelding kon niet in calibratiepreview worden geladen', error);
+    }
+  }
+
+  const trimX = spec.trimXmm / spec.exportWidthMm * width;
+  const trimY = spec.trimYmm / spec.exportHeightMm * height;
+  const finishWidth = spec.finishWidthMm / spec.exportWidthMm * width;
+  const finishHeight = spec.finishHeightMm / spec.exportHeightMm * height;
+
+  context.save();
+  context.strokeStyle = '#A8A39B';
+  context.lineWidth = 2;
+  context.setLineDash([8, 6]);
+  context.strokeRect(trimX, trimY, finishWidth, finishHeight);
+  context.restore();
+
+  const swatches = [
+    ['rgba(92, 122, 92, .18)', '#3E5A3E'],
+    ['rgba(201, 168, 76, .22)', '#9B7C24'],
+    ['rgba(95, 127, 145, .18)', '#496A78'],
+    ['rgba(192, 57, 43, .13)', '#8F2D22'],
+  ];
+
+  config.views.forEach((view, index) => {
+    const [fill, stroke] = swatches[index % swatches.length];
+    const x = (spec.trimXmm + view.sourceZone.x_mm) / spec.exportWidthMm * width;
+    const y = (spec.trimYmm + view.sourceZone.y_mm) / spec.exportHeightMm * height;
+    const zoneWidth = view.sourceZone.width_mm / spec.exportWidthMm * width;
+    const zoneHeight = view.sourceZone.height_mm / spec.exportHeightMm * height;
+
+    context.save();
+    context.fillStyle = fill;
+    context.strokeStyle = stroke;
+    context.lineWidth = 2;
+    context.fillRect(x, y, zoneWidth, zoneHeight);
+    context.strokeRect(x, y, zoneWidth, zoneHeight);
+
+    const fontSize = Math.max(12, Math.min(26, zoneWidth / 7));
+    context.fillStyle = stroke;
+    context.font = `700 ${fontSize}px sans-serif`;
+    context.textAlign = 'center';
+    context.textBaseline = 'middle';
+    context.fillText(view.label, x + zoneWidth / 2, y + zoneHeight / 2, Math.max(20, zoneWidth - 12));
+    context.restore();
+  });
+
+  const foldGuide = config.canvasGuides.find(guide => guide.type === 'line');
+
+  if (foldGuide) {
+    const x1 = (spec.trimXmm + foldGuide.x1_mm) / spec.exportWidthMm * width;
+    const y1 = (spec.trimYmm + foldGuide.y1_mm) / spec.exportHeightMm * height;
+    const x2 = (spec.trimXmm + foldGuide.x2_mm) / spec.exportWidthMm * width;
+    const y2 = (spec.trimYmm + foldGuide.y2_mm) / spec.exportHeightMm * height;
+
+    context.save();
+    context.strokeStyle = '#C0392B';
+    context.lineWidth = 3;
+    context.setLineDash([10, 6]);
+    context.beginPath();
+    context.moveTo(x1, y1);
+    context.lineTo(x2, y2);
+    context.stroke();
+    context.restore();
+  }
+
+  return canvas;
+}
+
+function collectPreviewConfigFromRow(row, fileState = {}, spec = getAdminSpecFromRow(row)) {
+  const panel = row.querySelector('[data-preview-panel]');
+
+  if (!panel) {
+    return {
+      enabled: false,
+      type: 'single-view',
+      defaultViewId: null,
+      views: [],
+      canvasGuides: [],
+    };
+  }
+
+  const views = [...panel.querySelectorAll('.preview-view-row')].map((viewRow, index) => {
+    const viewId = viewRow.dataset.previewViewId || createPreviewViewId();
+    const files = fileState.previewViews?.[viewId] || {};
+    const label = viewRow.querySelector('.preview-view-label')?.value.trim() || `Weergave ${index + 1}`;
+
+    return {
+      id: viewId,
+      label,
+      helpText: viewRow.querySelector('.preview-view-help')?.value.trim() || '',
+      sourceZone: {
+        x_mm: finiteInputValue(viewRow.querySelector('.preview-source-x'), 0),
+        y_mm: finiteInputValue(viewRow.querySelector('.preview-source-y'), 0),
+        width_mm: positiveInputValue(viewRow.querySelector('.preview-source-width'), spec.finishWidthMm),
+        height_mm: positiveInputValue(viewRow.querySelector('.preview-source-height'), spec.finishHeightMm),
+        rotation: finiteInputValue(viewRow.querySelector('.preview-source-rotation'), 0),
+        flipX: viewRow.querySelector('.preview-source-flip-x')?.checked || false,
+        flipY: viewRow.querySelector('.preview-source-flip-y')?.checked || false,
+      },
+      mockup: {
+        baseImage: files.baseImage || null,
+        overlayImage: files.overlayImage || null,
+        slot: {
+          xPercent: finiteInputValue(viewRow.querySelector('.preview-slot-x'), 20),
+          yPercent: finiteInputValue(viewRow.querySelector('.preview-slot-y'), 10),
+          widthPercent: positiveInputValue(viewRow.querySelector('.preview-slot-width'), 60),
+          heightPercent: positiveInputValue(viewRow.querySelector('.preview-slot-height'), 55),
+          rotation: finiteInputValue(viewRow.querySelector('.preview-slot-rotation'), 0),
+          borderRadius: Math.max(0, finiteInputValue(viewRow.querySelector('.preview-slot-radius'), 0)),
+          fit: viewRow.querySelector('.preview-slot-fit')?.value || 'cover',
+        },
+      },
+    };
+  });
+
+  const canvasGuides = [];
+
+  [...panel.querySelectorAll('.preview-view-row')].forEach((viewRow, index) => {
+    if (!viewRow.querySelector('.preview-guide-enabled')?.checked) {
+      return;
+    }
+
+    const view = views[index];
+
+    if (!view) {
+      return;
+    }
+
+    canvasGuides.push({
+      id: `${view.id}-zone`,
+      type: 'label',
+      viewId: view.id,
+      label: view.label,
+      description: viewRow.querySelector('.preview-guide-description')?.value.trim() || view.helpText || '',
+      x_mm: view.sourceZone.x_mm,
+      y_mm: view.sourceZone.y_mm,
+      width_mm: view.sourceZone.width_mm,
+      height_mm: view.sourceZone.height_mm,
+    });
+  });
+
+  if (panel.querySelector('.preview-fold-enabled')?.checked) {
+    canvasGuides.push({
+      id: 'fold-line',
+      type: 'line',
+      label: panel.querySelector('.preview-fold-label')?.value.trim() || 'Vouwlijn',
+      x1_mm: finiteInputValue(panel.querySelector('.preview-fold-x1'), 0),
+      y1_mm: finiteInputValue(panel.querySelector('.preview-fold-y1'), 0),
+      x2_mm: finiteInputValue(panel.querySelector('.preview-fold-x2'), spec.finishWidthMm),
+      y2_mm: finiteInputValue(panel.querySelector('.preview-fold-y2'), 0),
+    });
+  }
+
+  const selectedDefault = panel.querySelector('.pers-preview-default-view')?.value;
+  const defaultViewId = views.some(view => view.id === selectedDefault)
+    ? selectedDefault
+    : views[0]?.id || null;
+
+  const selectedType = panel.querySelector('.pers-preview-type')?.value || 'single-view';
+  const previewType = views.length === 1
+    ? 'single-view'
+    : selectedType === 'single-view'
+      ? (views.length === 2 ? 'two-sided-toggle' : 'multi-view-toggle')
+      : selectedType;
+
+  return {
+    enabled: panel.querySelector('.pers-product-preview-enabled')?.checked || false,
+    type: previewType,
+    defaultViewId,
+    views,
+    canvasGuides,
+  };
+}
+
+function getAdminSpecFromRow(row) {
+  const finishWidthMm = positiveInputValue(row.querySelector('.pers-finish-w-mm') || row.querySelector('.pers-w-mm'), 100);
+  const finishHeightMm = positiveInputValue(row.querySelector('.pers-finish-h-mm') || row.querySelector('.pers-h-mm'), 70);
+  const bleedMm = Math.max(0, finiteInputValue(row.querySelector('.pers-bleed-mm'), 3));
+  const safeMarginMm = Math.max(0, finiteInputValue(row.querySelector('.pers-m-mm'), 3));
+
+  return normalizeAdminPrintSpec({
+    width_mm: finishWidthMm,
+    height_mm: finishHeightMm,
+    finish_width_mm: finishWidthMm,
+    finish_height_mm: finishHeightMm,
+    bleed_mm: bleedMm,
+    safe_margin_mm: safeMarginMm,
+    margin_mm: safeMarginMm,
+    includesBleed: false,
+  });
+}
+
+function getAdminPersonalisationDraft(row, preview, spec = getAdminSpecFromRow(row)) {
+  return {
+    id: row.dataset.persistedId || row.dataset.uploadKey || 'preview-draft',
+    label: row.querySelector('.pers-label')?.value.trim() || 'Standaard',
+    width_mm: spec.finishWidthMm,
+    height_mm: spec.finishHeightMm,
+    finish_width_mm: spec.finishWidthMm,
+    finish_height_mm: spec.finishHeightMm,
+    export_width_mm: spec.exportWidthMm,
+    export_height_mm: spec.exportHeightMm,
+    bleed_mm: spec.bleedMm,
+    safe_margin_mm: spec.safeMarginMm,
+    margin_mm: spec.safeMarginMm,
+    includesBleed: false,
+    preview,
+  };
+}
+
+function getAdminProductDraft() {
+  return {
+    id: document.getElementById('pf-id')?.value.trim() || 'preview-product',
+    name: document.getElementById('pf-name')?.value.trim() || 'Product',
+  };
+}
+
+function finiteInputValue(input, fallback = 0) {
+  const value = Number(input?.value);
+  return Number.isFinite(value) ? value : fallback;
+}
+
+function positiveInputValue(input, fallback = 1) {
+  const value = Number(input?.value);
+  return Number.isFinite(value) && value > 0 ? value : fallback;
+}
+
+function numberInputValue(value, fallback = '') {
+  const number = Number(value);
+  return Number.isFinite(number) ? String(number) : String(fallback);
+}
+
+function createPreviewViewId() {
+  return `view-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+}
+
 function bindProductImageUpload(uploadState) {
   document.getElementById('pf-img-file')?.addEventListener('change', async event => {
     const file = event.target.files?.[0];
@@ -597,8 +1497,15 @@ function bindExistingPersRows(uploadState, persTypes) {
     row.dataset.uploadKey = uploadKey;
 
     uploadState.persFiles[uploadKey] = uploadState.persFiles[uploadKey] || {
-      previewImageFile: existingType.previewImageFile || null,
+      sourceType: { ...existingType },
+      previewImageFile: existingType.previewImageFile || (existingType.previewImage ? {
+        name: 'Personalisatieafbeelding',
+        type: 'image/png',
+        size: 0,
+        dataURL: existingType.previewImage,
+      } : null),
       templatePdf: existingType.templatePdf || null,
+      ...createPreviewFileState(existingType.preview),
     };
 
     bindPersRowUploads(row, uploadState);
@@ -610,9 +1517,13 @@ function bindPersRowUploads(row, uploadState) {
   const uploadKey = row.dataset.uploadKey;
 
   uploadState.persFiles[uploadKey] = uploadState.persFiles[uploadKey] || {
+    sourceType: {},
     previewImageFile: null,
     templatePdf: null,
+    previewViews: {},
   };
+
+  uploadState.persFiles[uploadKey].previewViews = uploadState.persFiles[uploadKey].previewViews || {};
 
   const previewInput = row.querySelector('.pers-preview-file');
   const previewRemove = row.querySelector('.pers-preview-remove');
@@ -680,11 +1591,13 @@ function bindPersRowUploads(row, uploadState) {
     uploadState.persFiles[uploadKey].previewImageFile = await fileToDataURL(file);
     previewOutput.innerHTML = renderStoredFile(uploadState.persFiles[uploadKey].previewImageFile);
     event.target.value = '';
+    refreshPreviewCalibration(row, uploadState);
   });
 
   previewRemove?.addEventListener('click', () => {
     uploadState.persFiles[uploadKey].previewImageFile = null;
     previewOutput.innerHTML = renderStoredFile(null);
+    refreshPreviewCalibration(row, uploadState);
   });
 
   templateInput?.addEventListener('change', async event => {
@@ -709,6 +1622,8 @@ function bindPersRowUploads(row, uploadState) {
     uploadState.persFiles[uploadKey].templatePdf = null;
     templateOutput.innerHTML = renderStoredFile(null);
   });
+
+  bindPreviewCalibration(row, uploadState);
 }
 
 function bindBlockedZoneTypeSwitch(zoneRow) {
@@ -787,8 +1702,10 @@ function bindProductModalActions(uploadState, product, isEdit) {
     const uploadKey = createUploadKey();
 
     uploadState.persFiles[uploadKey] = {
+      sourceType: {},
       previewImageFile: null,
       templatePdf: null,
+      previewViews: {},
     };
 
     list.insertAdjacentHTML('beforeend', persTypeRow({
@@ -805,6 +1722,13 @@ function bindProductModalActions(uploadState, product, isEdit) {
       clipShape: '',
       priceSlabs: [],
       blockedZones: [],
+      preview: {
+        enabled: false,
+        type: 'single-view',
+        defaultViewId: 'front',
+        views: [],
+        canvasGuides: [],
+      },
     }, list.children.length, uploadKey));
 
     const newRow = list.lastElementChild;
@@ -836,6 +1760,15 @@ function saveProductFromModal(uploadState, product, isEdit) {
   }
 
   const activePersonalisationTypes = personalisatieTypes.filter(type => type.active !== false);
+  const previewValidationError = personalisatieTypes
+    .map(validatePersonalisationPreview)
+    .find(Boolean);
+
+  if (previewValidationError) {
+    error.textContent = previewValidationError;
+    error.classList.add('visible');
+    return;
+  }
 
   if (activePersonalisationTypes.length === 0) {
     error.textContent = 'Zet minimaal één personalisatietype op actief.';
@@ -888,6 +1821,73 @@ function saveProductFromModal(uploadState, product, isEdit) {
   AdminUI.showToast(isEdit ? 'Product bijgewerkt' : 'Product aangemaakt');
 }
 
+function validatePersonalisationPreview(personalisationType = {}) {
+  const preview = personalisationType.preview || {};
+
+  if (preview.enabled !== true) {
+    return '';
+  }
+
+  const typeLabel = personalisationType.label || 'Personalisatietype';
+  const views = Array.isArray(preview.views) ? preview.views : [];
+
+  if (!views.length) {
+    return `${typeLabel}: voeg minimaal één productpreviewzijde toe.`;
+  }
+
+  if (preview.type === 'single-view' && views.length !== 1) {
+    return `${typeLabel}: het weergavetype “Eén weergave” vereist precies één zijde.`;
+  }
+
+  if (preview.type === 'two-sided-toggle' && views.length !== 2) {
+    return `${typeLabel}: “Voor- en achterkant” vereist precies twee zijden.`;
+  }
+
+  if (preview.type === 'multi-view-toggle' && views.length < 2) {
+    return `${typeLabel}: een meervoudige preview vereist minimaal twee zijden.`;
+  }
+
+  const viewIds = views.map(view => view.id);
+
+  if (new Set(viewIds).size !== viewIds.length) {
+    return `${typeLabel}: iedere previewzijde moet een uniek technisch ID hebben.`;
+  }
+
+  if (!views.some(view => view.id === preview.defaultViewId)) {
+    return `${typeLabel}: kies een geldige standaardzijde voor de productpreview.`;
+  }
+
+  for (const view of views) {
+    const zone = view.sourceZone || {};
+    const viewLabel = view.label || view.id || 'Previewzijde';
+
+    if (Number(zone.width_mm) <= 0 || Number(zone.height_mm) <= 0) {
+      return `${typeLabel} – ${viewLabel}: vul een geldig brongebied in.`;
+    }
+
+    if (Number(zone.x_mm) < 0 || Number(zone.y_mm) < 0) {
+      return `${typeLabel} – ${viewLabel}: X en Y mogen niet negatief zijn.`;
+    }
+
+    if (
+      Number(zone.x_mm) + Number(zone.width_mm) > Number(personalisationType.finish_width_mm) + 0.01 ||
+      Number(zone.y_mm) + Number(zone.height_mm) > Number(personalisationType.finish_height_mm) + 0.01
+    ) {
+      return `${typeLabel} – ${viewLabel}: het brongebied valt buiten het eindformaat.`;
+    }
+
+    if (!view.mockup?.baseImage?.dataURL) {
+      return `${typeLabel} – ${viewLabel}: upload een basismockup voordat u de productpreview inschakelt.`;
+    }
+
+    if (Number(view.mockup?.slot?.widthPercent) <= 0 || Number(view.mockup?.slot?.heightPercent) <= 0) {
+      return `${typeLabel} – ${viewLabel}: de mockup-slot moet een geldige breedte en hoogte hebben.`;
+    }
+  }
+
+  return '';
+}
+
 function collectPersonalisationTypes(uploadState) {
   return [...document.querySelectorAll('#pers-type-list .pers-type-row')].map(row => {
     const label = row.querySelector('.pers-label').value.trim();
@@ -921,8 +1921,10 @@ function collectPersonalisationTypes(uploadState) {
     })).filter(priceSlab => priceSlab.price > 0);
 
     const blockedZones = collectBlockedZonesFromRow(row);
+    const preview = collectPreviewConfigFromRow(row, fileState, spec);
 
     return {
+      ...(fileState.sourceType || {}),
       id: stableId,
       label: label || 'Standaard',
       active: row.querySelector('.pers-active')?.checked !== false,
@@ -932,6 +1934,7 @@ function collectPersonalisationTypes(uploadState) {
       previewImageFile: fileState.previewImageFile || null,
       previewImage: fileState.previewImageFile?.dataURL || '',
       templatePdf: fileState.templatePdf || null,
+      preview,
 
       clipShape: row.querySelector('.pers-clip').value.trim() || null,
       allowBackgroundColor: row.querySelector('.pers-bg-allowed')?.checked || false,
@@ -1078,6 +2081,8 @@ function normalizeAdminPrintSpec(persType = {}, product = {}) {
     bleedMm,
     safeMarginMm,
     includesBleed: false,
+    trimXmm: Math.max(0, (exportWidthMm - finishWidthMm) / 2),
+    trimYmm: Math.max(0, (exportHeightMm - finishHeightMm) / 2),
     exportWidthPx,
     exportHeightPx,
     safeMarginPx,
@@ -1169,5 +2174,7 @@ function escHtml(value) {
   return String(value || '')
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
+    .replace(/>/g, '&gt;')
+    .replace(/\"/g, '&quot;')
+    .replace(/'/g, '&#039;');
 }

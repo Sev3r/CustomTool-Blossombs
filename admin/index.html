@@ -4,11 +4,15 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
   <title>Blossombs Admin</title>
+
   <link rel="preconnect" href="https://fonts.googleapis.com">
+
   <link
     href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap"
     rel="stylesheet">
+
   <link rel="stylesheet" href="admin.css">
 </head>
 
@@ -46,7 +50,9 @@
     </nav>
 
     <div class="sidebar-footer">
-      <button class="reset-btn" id="btn-reset-data" type="button" title="Reset demo data">↺ Reset data</button>
+      <button class="reset-btn" id="btn-reset-data" type="button" title="Reset demo data">
+        ↺ Reset data
+      </button>
     </div>
   </aside>
 
@@ -63,8 +69,12 @@
     <div class="modal" id="modal-box">
       <div class="modal-header">
         <h2 id="modal-title">Modal</h2>
-        <button class="modal-close" id="btn-modal-close" type="button">✕</button>
+
+        <button class="modal-close" id="btn-modal-close" type="button" aria-label="Modal sluiten">
+          ✕
+        </button>
       </div>
+
       <div class="modal-body" id="modal-body"></div>
       <div class="modal-footer" id="modal-footer"></div>
     </div>
@@ -79,6 +89,7 @@
   <script src="../shared/js/offertePdf.js"></script>
   <script src="orders.js"></script>
   <script src="../shared/js/printSpecs.js"></script>
+  <script src="../shared/js/productPreview.js"></script>
   <script src="products.js"></script>
   <script src="admin.js"></script>
 </body>

@@ -4,29 +4,43 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
   <title>Blossombs — Custom Order</title>
+
   <link rel="preconnect" href="https://fonts.googleapis.com">
+
   <link
     href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600&family=DM+Sans:wght@300;400;500;600&display=swap"
     rel="stylesheet">
+
   <link rel="stylesheet" href="flow.css">
+
+  <link rel="stylesheet" href="product-preview.css">
 </head>
 
 <body>
+  <!-- PROGRESS BAR -->
   <div class="progress-wrap">
     <div class="progress-inner" id="progress-bar">
     </div>
   </div>
 
+  <!-- PAGES -->
   <main class="flow-main">
     <div id="page-select" class="flow-page"></div>
+
     <div id="page-options" class="flow-page"></div>
+
     <div id="page-design" class="flow-page"></div>
+
     <div id="page-wensen" class="flow-page"></div>
+
     <div id="page-review" class="flow-page"></div>
+
     <div id="page-confirm" class="flow-page"></div>
   </main>
 
+  <!-- SCRIPTS -->
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="../admin/dataService.js"></script>
@@ -40,6 +54,7 @@
   <script src="step1-select.js"></script>
   <script src="step2-options.js"></script>
   <script src="step3-design.js"></script>
+  <script src="liveProductPreview.js"></script>
   <script src="step4-wensen.js"></script>
   <script src="step5-review.js"></script>
   <script src="flow.js"></script>
