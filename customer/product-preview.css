@@ -1,0 +1,205 @@
+/*
+ * customer/product-preview.css
+ * Live productpreview voor de ontwerptool en uploadflow.
+ */
+
+#layer-panel {
+    width: 300px;
+    flex: 0 0 300px;
+}
+
+.product-preview-panel {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 12px;
+    background: var(--color-background-primary);
+    border-bottom: 1px solid var(--color-border-tertiary);
+}
+
+.product-preview-panel-compact {
+    max-height: 58%;
+    overflow-y: auto;
+}
+
+.product-preview-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.product-preview-header strong {
+    display: block;
+    color: var(--green-dark);
+    font-size: 14px;
+    line-height: 1.25;
+}
+
+.product-preview-eyebrow {
+    margin-bottom: 2px;
+    color: var(--color-text-secondary);
+    font-size: 10px;
+    font-weight: 900;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+}
+
+.product-preview-live-indicator {
+    width: 9px;
+    height: 9px;
+    flex: 0 0 auto;
+    margin-top: 4px;
+    border-radius: 50%;
+    background: var(--green);
+    box-shadow: 0 0 0 4px rgba(92, 122, 92, .12);
+    transition: background .15s ease, box-shadow .15s ease;
+}
+
+.product-preview-panel.is-loading .product-preview-live-indicator {
+    background: #D59A25;
+    box-shadow: 0 0 0 4px rgba(213, 154, 37, .14);
+}
+
+.product-preview-tabs {
+    display: flex;
+    gap: 6px;
+    overflow-x: auto;
+    padding-bottom: 1px;
+}
+
+.product-preview-tab {
+    appearance: none;
+    min-width: max-content;
+    padding: 7px 10px;
+    border: 1px solid var(--cream-border);
+    border-radius: var(--radius-pill);
+    background: #FFFFFF;
+    color: var(--text-2);
+    font-family: var(--font-body);
+    font-size: 11px;
+    font-weight: 800;
+    cursor: pointer;
+    transition:
+        background .15s ease,
+        border-color .15s ease,
+        color .15s ease;
+}
+
+.product-preview-tab:hover,
+.product-preview-tab:focus-visible {
+    border-color: var(--green);
+    color: var(--green-dark);
+    outline: none;
+}
+
+.product-preview-tab.active {
+    border-color: var(--green);
+    background: var(--green-light);
+    color: var(--green-dark);
+}
+
+.product-preview-stage {
+    position: relative;
+    width: 100%;
+    min-height: 150px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    border: 1px solid var(--cream-border);
+    border-radius: var(--radius-sm);
+    background: #FFFFFF;
+}
+
+.product-preview-canvas {
+    width: 100%;
+    height: auto;
+    display: block;
+}
+
+.product-preview-loading {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    background: rgba(255, 255, 255, .72);
+    color: var(--green-dark);
+    font-size: 11px;
+    font-weight: 800;
+    text-align: center;
+    backdrop-filter: blur(1px);
+}
+
+.product-preview-loading[hidden] {
+    display: none;
+}
+
+.product-preview-help,
+.product-preview-status {
+    margin: 0;
+    color: var(--text-3);
+    font-size: 11px;
+    line-height: 1.45;
+}
+
+.product-preview-status {
+    min-height: 16px;
+    color: var(--green-dark);
+    font-weight: 700;
+}
+
+.product-preview-status.is-error {
+    color: var(--danger, #C0392B);
+}
+
+.upload-preview-column {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.upload-preview-column .product-preview-panel {
+    overflow: hidden;
+    border: 1px solid var(--cream-border);
+    border-radius: var(--radius-card);
+    box-shadow: var(--shadow-card);
+}
+
+.upload-preview-column .product-preview-stage {
+    min-height: 250px;
+}
+
+.btn-upload-source {
+    align-self: center;
+}
+
+@media (max-width: 900px) {
+    #layer-panel {
+        width: 100%;
+        flex-basis: auto;
+    }
+
+    .product-preview-panel-compact {
+        max-height: none;
+    }
+
+    .product-preview-stage {
+        min-height: 240px;
+    }
+}
+
+@media (max-width: 640px) {
+
+    .product-preview-stage,
+    .upload-preview-column .product-preview-stage {
+        min-height: 190px;
+    }
+
+    .product-preview-panel {
+        padding: 10px;
+    }
+}
