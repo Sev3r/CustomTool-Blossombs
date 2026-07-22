@@ -1,0 +1,409 @@
+/* ─────────────────────────────────────────────────────────────────────────────
+   admin/product-preview.css
+   Beheer en calibratie van klantvriendelijke productpreviews
+───────────────────────────────────────────────────────────────────────────── */
+
+.preview-section-title {
+    margin-top: 16px;
+}
+
+/* Hoofdcontainer */
+
+.preview-calibration-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin: 10px 0 12px;
+    padding: 12px;
+    border: 1px solid rgba(92, 122, 92, 0.22);
+    border-radius: var(--radius-lg);
+    background: rgba(237, 242, 237, 0.52);
+}
+
+.preview-calibration-intro {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 11px;
+    border: 1px solid rgba(92, 122, 92, 0.18);
+    border-radius: var(--radius);
+    background: rgba(255, 255, 255, 0.74);
+}
+
+.preview-calibration-intro strong {
+    color: var(--accent-dark);
+    font-size: 13px;
+}
+
+.preview-calibration-intro span {
+    color: var(--text-2);
+    font-size: 12px;
+    line-height: 1.45;
+}
+
+/* Aan- en uitschakelen */
+
+.preview-toggle-row {
+    min-height: 58px;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 11px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+    box-shadow: var(--shadow);
+}
+
+.preview-toggle-row>span:first-child {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.preview-toggle-row strong {
+    display: block;
+    color: var(--text);
+    font-size: 13px;
+}
+
+.preview-calibration-content {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    transition: opacity 0.16s ease;
+}
+
+.preview-calibration-content.is-disabled {
+    opacity: 0.52;
+}
+
+.preview-calibration-content.is-disabled .preview-view-list,
+.preview-calibration-content.is-disabled .btn-add-preview-view,
+.preview-calibration-content.is-disabled .preview-fold-row,
+.preview-calibration-content.is-disabled>.form-row,
+.preview-calibration-content.is-disabled>.preview-subtitle {
+    pointer-events: none;
+}
+
+/* Invoerrijen */
+
+.form-row-4 {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.preview-coordinate-hint {
+    margin-top: -4px;
+}
+
+/* Tussenkoppen */
+
+.preview-subtitle {
+    margin-top: 2px;
+    color: var(--text-3);
+    font-size: 10.5px;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+/* Previewzijden */
+
+.preview-view-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.preview-view-row,
+.preview-fold-row {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: var(--surface);
+    box-shadow: var(--shadow);
+}
+
+.preview-view-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+}
+
+.preview-view-header>div {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.preview-view-header strong {
+    color: var(--accent-dark);
+    font-size: 13px;
+    overflow-wrap: anywhere;
+}
+
+.preview-view-header div>span {
+    color: var(--text-3);
+    font-size: 11.5px;
+    line-height: 1.4;
+}
+
+.preview-view-title {
+    color: inherit;
+    font-size: inherit;
+}
+
+.preview-view-id[readonly] {
+    background: var(--surface-2);
+    color: var(--text-3);
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+}
+
+/* Checkboxvelden */
+
+.preview-check-row,
+.preview-guide-toggle {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    min-height: 42px;
+    padding: 9px 11px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface-3);
+    color: var(--text-2);
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.preview-check-row:hover,
+.preview-guide-toggle:hover {
+    border-color: rgba(92, 122, 92, 0.48);
+}
+
+.preview-check-row:focus-within,
+.preview-guide-toggle:focus-within {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(92, 122, 92, 0.12);
+}
+
+.preview-check-row input,
+.preview-guide-toggle input {
+    width: 16px;
+    height: 16px;
+    flex: 0 0 auto;
+    accent-color: var(--accent);
+}
+
+.preview-guide-toggle {
+    align-items: flex-start;
+    background: rgba(237, 242, 237, 0.62);
+    border-color: rgba(92, 122, 92, 0.24);
+}
+
+.preview-guide-toggle span {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.preview-guide-toggle strong {
+    color: var(--accent-dark);
+    font-size: 12.5px;
+}
+
+.preview-guide-toggle small {
+    color: var(--text-3);
+    font-size: 11px;
+    font-weight: 500;
+    line-height: 1.35;
+}
+
+/* Mockupuploads */
+
+.preview-view-row .file-upload-field {
+    height: 100%;
+}
+
+.preview-view-row .file-preview-box {
+    width: 160px;
+    height: 112px;
+}
+
+.preview-view-row .file-preview-box img {
+    object-fit: contain;
+    background: repeating-conic-gradient(#f2f0eb 0% 25%,
+            #ffffff 0% 50%) 50% / 16px 16px;
+}
+
+.preview-view-row .file-upload-actions {
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.preview-view-row .file-upload-actions input[type="file"] {
+    min-width: 220px;
+}
+
+.preview-view-row input[type="number"] {
+    min-width: 0;
+}
+
+/* Vouwlijn */
+
+.preview-fold-toggle {
+    justify-content: space-between;
+    gap: 16px;
+}
+
+.preview-fold-toggle>span:first-child {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.preview-fold-fields {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    transition: opacity 0.16s ease;
+}
+
+.preview-fold-fields.is-disabled {
+    opacity: 0.45;
+    pointer-events: none;
+}
+
+/* Calibratiecanvas */
+
+.preview-calibration-result {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface-3);
+}
+
+.preview-calibration-result-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.preview-calibration-result-header strong {
+    color: var(--accent-dark);
+    font-size: 12.5px;
+}
+
+.preview-calibration-status {
+    color: var(--text-3);
+    font-size: 11px;
+    text-align: right;
+}
+
+.preview-calibration-canvas {
+    width: 100%;
+    height: auto;
+    max-height: 430px;
+    display: block;
+    object-fit: contain;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background:
+        repeating-conic-gradient(#f5f3ee 0% 25%,
+            #ffffff 0% 50%) 50% / 20px 20px;
+}
+
+/* Interactiestatussen */
+
+.preview-view-row input:focus-visible,
+.preview-view-row select:focus-visible,
+.preview-fold-row input:focus-visible,
+.preview-fold-row select:focus-visible {
+    border-color: var(--accent);
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(92, 122, 92, 0.12);
+}
+
+.preview-view-row .icon-btn.danger {
+    flex: 0 0 auto;
+}
+
+.preview-view-row .btn,
+.preview-fold-row .btn {
+    align-self: flex-start;
+}
+
+/* Tablet */
+
+@media (max-width: 900px) {
+    .form-row-4 {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .preview-view-header {
+        flex-direction: column;
+    }
+
+    .preview-view-header .icon-btn {
+        align-self: flex-end;
+    }
+}
+
+/* Mobiel */
+
+@media (max-width: 640px) {
+    .form-row-4 {
+        grid-template-columns: 1fr;
+    }
+
+    .preview-calibration-panel,
+    .preview-view-row,
+    .preview-fold-row {
+        padding: 10px;
+    }
+
+    .preview-toggle-row,
+    .preview-fold-toggle {
+        align-items: flex-start;
+    }
+
+    .preview-calibration-result-header {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .preview-calibration-status {
+        text-align: left;
+    }
+
+    .preview-view-row .file-preview-box {
+        width: 100%;
+        height: 160px;
+    }
+
+    .preview-view-row .file-upload-actions {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .preview-view-row .file-upload-actions input[type="file"],
+    .preview-view-row .file-upload-actions .btn {
+        width: 100%;
+        min-width: 0;
+    }
+}
