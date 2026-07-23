@@ -30,7 +30,6 @@ const IMAGE_DPI_RECOMMENDED = 300;
 const IMAGE_DPI_MINIMUM = 150;
 
 const CENTER_SNAP_THRESHOLD_PX = 6;
-const CENTER_GUIDE_COLOR = '#5C7A5C';
 const CENTER_GUIDE_STROKE_WIDTH = 1.25;
 const CENTER_GUIDE_DASH = [6, 4];
 
@@ -1683,6 +1682,7 @@ function drawMarginRect(
   margin,
   canvasWidth,
   canvasHeight,
+  palette,
   isWarning = false
 ) {
   canvas
@@ -1695,13 +1695,6 @@ function drawMarginRect(
     .forEach(object => {
       canvas.remove(object);
     });
-
-  const marginColor =
-    isWarning
-      ? '#C0392B'
-      : getContrastingGuideColor(
-        fabricBackgroundColor
-      );
 
   const marginRect =
     new fabric.Rect({
@@ -1720,14 +1713,19 @@ function drawMarginRect(
           margin * 2
         ),
       fill: 'transparent',
-      stroke: marginColor,
+      stroke:
+        isWarning
+          ? palette.warning
+          : palette.margin,
       strokeWidth:
         isWarning
-          ? 2.5
+          ? 2.75
           : 1.75,
       strokeDashArray: [6, 4],
+      strokeUniform: true,
       selectable: false,
       evented: false,
+      objectCaching: false,
       excludeFromExport: true,
       _isMargin: true,
       _isGuide: true,
@@ -1746,7 +1744,8 @@ function drawBlockedZones(
   activePers,
   product,
   canvasWidth,
-  canvasHeight
+  canvasHeight,
+  palette
 ) {
   const zones =
     Array.isArray(activePers?.blockedZones)
@@ -1764,7 +1763,6 @@ function drawBlockedZones(
     });
 
   if (!zones.length) {
-    canvas.renderAll();
     return;
   }
 
@@ -1794,10 +1792,12 @@ function drawBlockedZones(
           radius:
             circleData.safeRadius,
           fill:
-            'rgba(232, 134, 10, 0.14)',
-          stroke: '#E8860A',
+            palette.safeFill,
+          stroke:
+            palette.safe,
           strokeWidth: 2,
           strokeDashArray: [8, 5],
+          strokeUniform: true,
           selectable: false,
           evented: false,
           objectCaching: false,
@@ -1818,10 +1818,12 @@ function drawBlockedZones(
           radius:
             circleData.holeRadius,
           fill:
-            'rgba(192, 57, 43, 0.24)',
-          stroke: '#C0392B',
+            palette.blockedFill,
+          stroke:
+            palette.blocked,
           strokeWidth: 2,
           strokeDashArray: [4, 3],
+          strokeUniform: true,
           selectable: false,
           evented: false,
           objectCaching: false,
@@ -1857,10 +1859,12 @@ function drawBlockedZones(
           width: rectData.safeWidth,
           height: rectData.safeHeight,
           fill:
-            'rgba(232, 134, 10, 0.14)',
-          stroke: '#E8860A',
+            palette.safeFill,
+          stroke:
+            palette.safe,
           strokeWidth: 2,
           strokeDashArray: [8, 5],
+          strokeUniform: true,
           selectable: false,
           evented: false,
           objectCaching: false,
@@ -1877,10 +1881,12 @@ function drawBlockedZones(
           width: rectData.width,
           height: rectData.height,
           fill:
-            'rgba(192, 57, 43, 0.18)',
-          stroke: '#C0392B',
+            palette.blockedFill,
+          stroke:
+            palette.blocked,
           strokeWidth: 2,
           strokeDashArray: [4, 3],
+          strokeUniform: true,
           selectable: false,
           evented: false,
           objectCaching: false,
@@ -1911,7 +1917,8 @@ function drawBlockedZones(
 
       const safeZone =
         createCenteredLineSafeZone(
-          lineData
+          lineData,
+          palette
         );
 
       if (safeZone) {
@@ -1927,13 +1934,14 @@ function drawBlockedZones(
             lineData.y2,
           ],
           {
-            stroke: '#C0392B',
+            stroke: palette.fold,
             strokeWidth:
               Math.max(
-                1.5,
+                1.75,
                 lineData.lineWidth
               ),
-            strokeDashArray: [2, 1.5],
+            strokeDashArray: [3, 2],
+            strokeUniform: true,
             selectable: false,
             evented: false,
             objectCaching: false,
@@ -1947,12 +1955,12 @@ function drawBlockedZones(
       canvas.add(foldLine);
     }
   });
-
-  bringGuidesToFront(canvas);
-  canvas.renderAll();
 }
 
-function createCenteredLineSafeZone(lineData) {
+function createCenteredLineSafeZone(
+  lineData,
+  palette
+) {
   const deltaX =
     lineData.x2 -
     lineData.x1;
@@ -1999,16 +2007,15 @@ function createCenteredLineSafeZone(lineData) {
     originX: 'center',
     originY: 'center',
     angle,
-    fill:
-      'rgba(232, 134, 10, 0.18)',
-    stroke: '#E8860A',
-    strokeWidth: 1,
+    fill: palette.safeFill,
+    stroke: palette.safe,
+    strokeWidth: 1.25,
     strokeDashArray: [8, 5],
+    strokeUniform: true,
     selectable: false,
     evented: false,
     objectCaching: false,
     excludeFromExport: true,
-    opacity: 0.75,
     _isMargin: true,
     _isGuide: true,
     _isBlockedZone: true,
@@ -2020,7 +2027,8 @@ function drawProductPreviewGuides(
   activePers,
   product,
   canvasWidth,
-  canvasHeight
+  canvasHeight,
+  palette
 ) {
   if (!window.ProductPreview) {
     return;
@@ -2044,10 +2052,6 @@ function drawProductPreviewGuides(
       activePers || {},
       product || {}
     );
-
-  const guideColor = '#2F6F62';
-  const guideFill =
-    'rgba(47, 111, 98, 0.08)';
 
   const fontSize =
     Math.max(
@@ -2133,9 +2137,10 @@ function drawProductPreviewGuides(
         new fabric.Line(
           [x1, y1, x2, y2],
           {
-            stroke: guideColor,
+            stroke: palette.fold,
             strokeWidth: 2,
             strokeDashArray: [10, 6],
+            strokeUniform: true,
             selectable: false,
             evented: false,
             objectCaching: false,
@@ -2151,17 +2156,22 @@ function drawProductPreviewGuides(
           guide.label ||
           'Vouwlijn',
           {
-            left: (x1 + x2) / 2,
-            top: (y1 + y2) / 2,
+            left:
+              (x1 + x2) / 2,
+
+            top:
+              (y1 + y2) / 2,
+
             originX: 'center',
             originY: 'bottom',
             fontSize,
             fontFamily:
               'DM Sans, sans-serif',
             fontWeight: 700,
-            fill: guideColor,
+            fill:
+              palette.labelText,
             backgroundColor:
-              'rgba(255, 255, 255, 0.88)',
+              palette.labelBackground,
             selectable: false,
             evented: false,
             objectCaching: false,
@@ -2206,10 +2216,13 @@ function drawProductPreviewGuides(
         top,
         width,
         height,
-        fill: guideFill,
-        stroke: guideColor,
-        strokeWidth: 1.5,
+        fill:
+          palette.previewFill,
+        stroke:
+          palette.preview,
+        strokeWidth: 1.75,
         strokeDashArray: [7, 5],
+        strokeUniform: true,
         selectable: false,
         evented: false,
         objectCaching: false,
@@ -2237,12 +2250,14 @@ function drawProductPreviewGuides(
               8,
               width * 0.04
             ),
+
           top:
             top +
             Math.min(
               8,
               height * 0.04
             ),
+
           width:
             Math.max(
               36,
@@ -2252,14 +2267,16 @@ function drawProductPreviewGuides(
                 width * 0.08
               )
             ),
+
           fontSize,
           fontFamily:
             'DM Sans, sans-serif',
           fontWeight: 700,
           lineHeight: 1.2,
-          fill: guideColor,
+          fill:
+            palette.labelText,
           backgroundColor:
-            'rgba(255, 255, 255, 0.82)',
+            palette.labelBackground,
           selectable: false,
           evented: false,
           objectCaching: false,
@@ -2289,6 +2306,12 @@ function redrawGuides(
     return;
   }
 
+  const palette =
+    getCanvasGuidePalette(
+      canvas.backgroundColor ||
+      fabricBackgroundColor
+    );
+
   removeGuideObjects(canvas);
 
   drawMarginRect(
@@ -2296,6 +2319,7 @@ function redrawGuides(
     margin,
     canvasWidth,
     canvasHeight,
+    palette,
     isWarning
   );
 
@@ -2304,7 +2328,8 @@ function redrawGuides(
     activePers,
     product,
     canvasWidth,
-    canvasHeight
+    canvasHeight,
+    palette
   );
 
   drawProductPreviewGuides(
@@ -2312,7 +2337,8 @@ function redrawGuides(
     activePers,
     product,
     canvasWidth,
-    canvasHeight
+    canvasHeight,
+    palette
   );
 
   bringGuidesToFront(canvas);
@@ -2386,73 +2412,205 @@ function isGuideObject(object) {
   );
 }
 
-function getContrastingGuideColor(
+function getCanvasGuidePalette(
   backgroundColor
 ) {
-  const hex =
-    normalizeHexColor(
+  const { r, g, b } =
+    parseCanvasColor(
       backgroundColor
     );
 
-  if (!hex) {
-    return '#2A2A22';
+  const relativeLuminance =
+    getRelativeLuminance(
+      r,
+      g,
+      b
+    );
+
+  if (relativeLuminance < 0.38) {
+    return {
+      margin: '#FFFFFF',
+      safe: '#FFD166',
+      safeFill:
+        'rgba(255, 209, 102, 0.22)',
+      blocked: '#FF8A80',
+      blockedFill:
+        'rgba(255, 138, 128, 0.24)',
+      fold: '#FFB4AB',
+      preview: '#8DE5D5',
+      previewFill:
+        'rgba(141, 229, 213, 0.18)',
+      center: '#FFFFFF',
+      warning: '#FF8A80',
+      labelText: '#FFFFFF',
+      labelBackground:
+        'rgba(20, 20, 18, 0.86)',
+    };
   }
 
-  const r =
-    parseInt(
-      hex.slice(1, 3),
-      16
-    );
-
-  const g =
-    parseInt(
-      hex.slice(3, 5),
-      16
-    );
-
-  const b =
-    parseInt(
-      hex.slice(5, 7),
-      16
-    );
-
-  const brightness =
-    (
-      r * 299 +
-      g * 587 +
-      b * 114
-    ) / 1000;
-
-  return brightness > 170
-    ? '#2A2A22'
-    : '#FFFFFF';
+  return {
+    margin: '#18231D',
+    safe: '#7A4B00',
+    safeFill:
+      'rgba(184, 111, 0, 0.18)',
+    blocked: '#9F1D14',
+    blockedFill:
+      'rgba(159, 29, 20, 0.18)',
+    fold: '#7C2D12',
+    preview: '#075E54',
+    previewFill:
+      'rgba(7, 94, 84, 0.12)',
+    center: '#18231D',
+    warning: '#B42318',
+    labelText: '#12372F',
+    labelBackground:
+      'rgba(255, 255, 255, 0.90)',
+  };
 }
 
-function normalizeHexColor(value) {
-  if (
-    !value ||
-    typeof value !== 'string'
-  ) {
-    return '';
-  }
+function parseCanvasColor(value) {
+  const fallback = {
+    r: 183,
+    g: 189,
+    b: 184,
+  };
 
   if (
-    /^#[0-9A-Fa-f]{6}$/.test(
-      value
-    )
+    typeof value !== 'string' ||
+    !value.trim()
   ) {
-    return value;
+    return fallback;
   }
+
+  const color = value.trim();
+
+  const hexMatch =
+    color.match(
+      /^#([0-9a-f]{3,8})$/i
+    );
+
+  if (hexMatch) {
+    const hex = hexMatch[1];
+
+    if (
+      hex.length === 3 ||
+      hex.length === 4
+    ) {
+      return {
+        r: parseInt(
+          `${hex[0]}${hex[0]}`,
+          16
+        ),
+
+        g: parseInt(
+          `${hex[1]}${hex[1]}`,
+          16
+        ),
+
+        b: parseInt(
+          `${hex[2]}${hex[2]}`,
+          16
+        ),
+      };
+    }
+
+    return {
+      r: parseInt(
+        hex.slice(0, 2),
+        16
+      ),
+
+      g: parseInt(
+        hex.slice(2, 4),
+        16
+      ),
+
+      b: parseInt(
+        hex.slice(4, 6),
+        16
+      ),
+    };
+  }
+
+  const rgbMatch =
+    color.match(
+      /^rgba?\(\s*([\d.]+)\s*[, ]\s*([\d.]+)\s*[, ]\s*([\d.]+)/i
+    );
+
+  if (rgbMatch) {
+    return {
+      r: clamp(
+        Number(rgbMatch[1]),
+        0,
+        255
+      ),
+
+      g: clamp(
+        Number(rgbMatch[2]),
+        0,
+        255
+      ),
+
+      b: clamp(
+        Number(rgbMatch[3]),
+        0,
+        255
+      ),
+    };
+  }
+
+  const context =
+    document
+      .createElement('canvas')
+      .getContext('2d');
+
+  if (!context) {
+    return fallback;
+  }
+
+  context.fillStyle = '#b7bdb8';
+  context.fillStyle = color;
+
+  const normalized =
+    context.fillStyle;
 
   if (
-    /^#[0-9A-Fa-f]{3}$/.test(
-      value
-    )
+    normalized === color ||
+    normalized.toLowerCase() ===
+    color.toLowerCase()
   ) {
-    return `#${value[1]}${value[1]}${value[2]}${value[2]}${value[3]}${value[3]}`;
+    return fallback;
   }
 
-  return '';
+  return parseCanvasColor(normalized);
+}
+
+function getRelativeLuminance(
+  r,
+  g,
+  b
+) {
+  const channels =
+    [r, g, b].map(value => {
+      const normalized =
+        value / 255;
+
+      return normalized <= 0.04045
+        ? normalized / 12.92
+        : Math.pow(
+          (
+            normalized +
+            0.055
+          ) / 1.055,
+          2.4
+        );
+    });
+
+  return (
+    channels[0] * 0.2126 +
+    channels[1] * 0.7152 +
+    channels[2] * 0.0722
+  );
 }
 
 function getBlockedCircleCanvasData(
@@ -3065,12 +3223,19 @@ function renderCenterSnapGuides(
 }
 
 function getCenterGuideObjectOptions() {
+  const palette =
+    getCanvasGuidePalette(
+      fabricCanvas?.backgroundColor ||
+      fabricBackgroundColor
+    );
+
   return {
-    stroke: CENTER_GUIDE_COLOR,
+    stroke: palette.center,
     strokeWidth:
       CENTER_GUIDE_STROKE_WIDTH,
     strokeDashArray:
       CENTER_GUIDE_DASH,
+    strokeUniform: true,
     selectable: false,
     evented: false,
     objectCaching: false,
@@ -4081,10 +4246,13 @@ function isObjectOverlappingBlockedZones(
         {
           left:
             rectData.safeLeft,
+
           top:
             rectData.safeTop,
+
           width:
             rectData.safeWidth,
+
           height:
             rectData.safeHeight,
         }

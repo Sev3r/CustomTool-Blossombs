@@ -2,28 +2,19 @@
  * customer/liveProductPreview.js
  *
  * Koppelt de gedeelde ProductPreview-engine veilig aan de bestaande Fabric-tool.
- * De controller wijzigt het actieve Fabric-canvas niet en rendert pas nadat een
- * bewerking is afgerond. Hierdoor blijven selecteren, slepen, schalen, roteren
- * en tekstbewerking volledig interactief.
+ * De controller wijzigt het actieve Fabric-canvas niet. De preview wordt
+ * bijgewerkt na inhoudswijzigingen, afgeronde transformaties en zodra een
+ * element wordt gedeselecteerd.
  */
 
 (() => {
     'use strict';
 
-    const DESIGN_STATE_KEY =
-        'cot_design_state';
-
-    const RENDER_DELAY_MS =
-        120;
-
-    const FABRIC_CONNECT_RETRY_MS =
-        100;
-
-    const FABRIC_CONNECT_MAX_ATTEMPTS =
-        50;
-
-    const MAX_RENDER_WIDTH =
-        720;
+    const DESIGN_STATE_KEY = 'cot_design_state';
+    const RENDER_DELAY_MS = 120;
+    const FABRIC_CONNECT_RETRY_MS = 100;
+    const FABRIC_CONNECT_MAX_ATTEMPTS = 50;
+    const MAX_RENDER_WIDTH = 720;
 
     let state = null;
     let activeViewId = null;
@@ -124,6 +115,7 @@
         observePreviewStages();
         syncPanels();
         connectFabricCanvas();
+
         scheduleRender(
             'upload',
             true
@@ -735,42 +727,78 @@
 
     function connectFabricCanvas() {
         const canvas =
-            getFabricCanvas();
+            ensureFabricConnection();
 
-        if (!canvas) {
-            if (
-                fabricConnectAttempts >=
-                FABRIC_CONNECT_MAX_ATTEMPTS
-            ) {
-                setStatus(
-                    'tool',
-                    'De ontwerptool kon niet worden gekoppeld.',
-                    true
+        if (canvas) {
+            if (fabricConnectTimer) {
+                clearTimeout(
+                    fabricConnectTimer
                 );
 
-                return;
+                fabricConnectTimer = null;
             }
 
-            fabricConnectAttempts += 1;
+            fabricConnectAttempts = 0;
 
-            fabricConnectTimer =
-                window.setTimeout(
-                    connectFabricCanvas,
-                    FABRIC_CONNECT_RETRY_MS
-                );
+            scheduleRender(
+                'tool',
+                true
+            );
 
             return;
         }
 
-        fabricConnectAttempts = 0;
-        mountedFabricCanvas = canvas;
+        if (
+            fabricConnectAttempts >=
+            FABRIC_CONNECT_MAX_ATTEMPTS
+        ) {
+            setStatus(
+                'tool',
+                'De ontwerptool kon niet worden gekoppeld.',
+                true
+            );
 
-        bindFabricEvents(canvas);
+            return;
+        }
 
-        scheduleRender(
-            'tool',
-            true
-        );
+        if (fabricConnectTimer) {
+            return;
+        }
+
+        fabricConnectAttempts += 1;
+
+        fabricConnectTimer =
+            window.setTimeout(
+                () => {
+                    fabricConnectTimer = null;
+                    connectFabricCanvas();
+                },
+                FABRIC_CONNECT_RETRY_MS
+            );
+    }
+
+    function ensureFabricConnection() {
+        const canvas =
+            getFabricCanvas();
+
+        if (!canvas) {
+            mountedFabricCanvas = null;
+            return null;
+        }
+
+        if (
+            mountedFabricCanvas !==
+            canvas
+        ) {
+            mountedFabricCanvas =
+                canvas;
+
+            bindFabricEvents(
+                canvas
+            );
+        }
+
+        return canvas;
     }
 
     function bindFabricEvents(
@@ -832,18 +860,33 @@
             }
         );
 
+        canvas.on(
+            'selection:cleared',
+            scheduleImmediate
+        );
+
         canvas._productPreviewEventsBound =
             true;
     }
 
     function getFabricCanvas() {
         try {
-            return (
+            const canvas =
                 typeof fabricCanvas !==
-                'undefined'
-            )
-                ? fabricCanvas
-                : null;
+                    'undefined'
+                    ? fabricCanvas
+                    : null;
+
+            if (
+                !canvas ||
+                !canvas.lowerCanvasEl ||
+                !canvas.lowerCanvasEl.isConnected ||
+                canvas.lowerCanvasEl.id !== 'c'
+            ) {
+                return null;
+            }
+
+            return canvas;
         } catch {
             return null;
         }
@@ -921,15 +964,25 @@
                         null;
 
                     if (
-                        context === 'tool' &&
-                        mountedFabricCanvas
-                            ?._currentTransform
+                        context === 'tool'
                     ) {
-                        scheduleRender(
-                            'tool'
-                        );
+                        const canvas =
+                            ensureFabricConnection();
 
-                        return;
+                        if (!canvas) {
+                            connectFabricCanvas();
+                            return;
+                        }
+
+                        if (
+                            canvas._currentTransform
+                        ) {
+                            scheduleRender(
+                                'tool'
+                            );
+
+                            return;
+                        }
                     }
 
                     requestAnimationFrame(
@@ -983,7 +1036,7 @@
 
             if (context === 'tool') {
                 const canvas =
-                    getFabricCanvas();
+                    ensureFabricConnection();
 
                 if (!canvas) {
                     setStatus(
