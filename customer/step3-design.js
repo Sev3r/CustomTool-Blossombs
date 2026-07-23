@@ -69,6 +69,7 @@ function renderDesignPage() {
     options?.persType ||
     persTypes[0] ||
     null;
+
   const stateKey = `${DESIGN_STATE_KEY}_${product.id}_${activePers?.id || 'standaard'}`;
   const savedState = loadDesignState(stateKey);
 
@@ -76,7 +77,10 @@ function renderDesignPage() {
   uploadedFileName = saved.fileName || savedState?.fileName || null;
   uploadedCheck = saved.uploadCheck || savedState?.uploadCheck || null;
   uploadedPdfDataURL = saved.pdfDataURL || savedState?.pdfDataURL || null;
-  uploadedRillinesPdfDataURL = saved.rillinesPdfDataURL || savedState?.rillinesPdfDataURL || null;
+  uploadedRillinesPdfDataURL =
+    saved.rillinesPdfDataURL ||
+    savedState?.rillinesPdfDataURL ||
+    null;
   activeDesignTab = saved.tab || savedState?.tab || 'tool';
 
   el.innerHTML = `
@@ -84,11 +88,27 @@ function renderDesignPage() {
     <p class="page-subtitle">Gebruik de ontwerptool of upload een eigen bestand</p>
 
     <div class="design-tabs" style="margin-bottom:24px">
-      <button class="design-tab ${activeDesignTab === 'tool' ? 'active' : ''}" type="button" data-tab="tool">Ontwerptool</button>
-      <button class="design-tab ${activeDesignTab === 'upload' ? 'active' : ''}" type="button" data-tab="upload">Bestand uploaden</button>
+      <button
+        class="design-tab ${activeDesignTab === 'tool' ? 'active' : ''}"
+        type="button"
+        data-tab="tool"
+      >
+        Ontwerptool
+      </button>
+
+      <button
+        class="design-tab ${activeDesignTab === 'upload' ? 'active' : ''}"
+        type="button"
+        data-tab="upload"
+      >
+        Bestand uploaden
+      </button>
     </div>
 
-    <div id="tab-tool" style="${activeDesignTab === 'tool' ? '' : 'display:none'}">
+    <div
+      id="tab-tool"
+      style="${activeDesignTab === 'tool' ? '' : 'display:none'}"
+    >
       <div id="app">
         <aside id="sidebar">
           <div id="sidebar-header"></div>
@@ -96,26 +116,81 @@ function renderDesignPage() {
           <div class="side-section">
             <div class="side-label">Toevoegen</div>
 
-            <button class="tool-btn" type="button" id="btn-logo">+ Logo uploaden</button>
-            <input type="file" id="file-input" accept="image/*" style="display:none">
+            <button
+              class="tool-btn"
+              type="button"
+              id="btn-logo"
+            >
+              + Logo uploaden
+            </button>
 
-            <button class="tool-btn" type="button" id="btn-text">+ Tekst toevoegen</button>
+            <input
+              type="file"
+              id="file-input"
+              accept="image/*"
+              style="display:none"
+            >
+
+            <button
+              class="tool-btn"
+              type="button"
+              id="btn-text"
+            >
+              + Tekst toevoegen
+            </button>
           </div>
 
           <div class="side-section">
             <div class="side-label">Lettertype</div>
-            <select id="font-select" class="font-select">
+
+            <select
+              id="font-select"
+              class="font-select"
+            >
               ${AVAILABLE_FONTS.map(font => `
-                <option value="${font.value}" style="font-family:${font.value}">${font.label}</option>
+                <option
+                  value="${font.value}"
+                  style="font-family:${font.value}"
+                >
+                  ${font.label}
+                </option>
               `).join('')}
             </select>
           </div>
 
           <div class="side-section">
             <div class="side-label">Lettergrootte</div>
-            <select id="font-size" class="font-select">
-              ${[8, 10, 12, 14, 16, 18, 20, 24, 28, 32, 36, 42, 48, 56, 64, 72, 84, 96].map(size => `
-                <option value="${size}" ${size === 20 ? 'selected' : ''}>${size} px</option>
+
+            <select
+              id="font-size"
+              class="font-select"
+            >
+              ${[
+      8,
+      10,
+      12,
+      14,
+      16,
+      18,
+      20,
+      24,
+      28,
+      32,
+      36,
+      42,
+      48,
+      56,
+      64,
+      72,
+      84,
+      96,
+    ].map(size => `
+                <option
+                  value="${size}"
+                  ${size === 20 ? 'selected' : ''}
+                >
+                  ${size} px
+                </option>
               `).join('')}
             </select>
           </div>
@@ -125,11 +200,16 @@ function renderDesignPage() {
             <div class="color-row" id="color-swatches"></div>
 
             <div class="custom-color-row">
-              <label for="custom-element-color">Eigen kleur</label>
-              <input type="color"
-                     id="custom-element-color"
-                     class="custom-color-input"
-                     value="${fabricActiveColor}">
+              <label for="custom-element-color">
+                Eigen kleur
+              </label>
+
+              <input
+                type="color"
+                id="custom-element-color"
+                class="custom-color-input"
+                value="${fabricActiveColor}"
+              >
             </div>
           </div>
 
@@ -139,11 +219,16 @@ function renderDesignPage() {
               <div class="color-row" id="background-color-swatches"></div>
 
               <div class="custom-color-row">
-                <label for="custom-background-color">Eigen kleur</label>
-                <input type="color"
-                       id="custom-background-color"
-                       class="custom-color-input"
-                       value="${fabricBackgroundColor}">
+                <label for="custom-background-color">
+                  Eigen kleur
+                </label>
+
+                <input
+                  type="color"
+                  id="custom-background-color"
+                  class="custom-color-input"
+                  value="${fabricBackgroundColor}"
+                >
               </div>
             </div>
           ` : ''}
@@ -151,40 +236,128 @@ function renderDesignPage() {
 
         <section id="canvas-area">
           <div id="canvas-toolbar">
-            <button class="tb-btn" type="button" id="btn-delete">Verwijder</button>
-            <button class="tb-btn" type="button" id="btn-front">Voorgrond</button>
-            <button class="tb-btn" type="button" id="btn-back">Achtergrond</button>
+            <button class="tb-btn" type="button" id="btn-delete">
+              Verwijder
+            </button>
+
+            <button class="tb-btn" type="button" id="btn-front">
+              Voorgrond
+            </button>
+
+            <button class="tb-btn" type="button" id="btn-back">
+              Achtergrond
+            </button>
+
             <div class="tb-sep"></div>
-            <button class="tb-btn" type="button" id="btn-undo">Ongedaan</button>
-            <button class="tb-btn" type="button" id="btn-clear">Reset</button>
+
+            <button class="tb-btn" type="button" id="btn-undo">
+              Ongedaan
+            </button>
+
+            <button class="tb-btn" type="button" id="btn-clear">
+              Reset
+            </button>
           </div>
 
-
           <div id="canvas-wrap">
-            <div id="margin-warning">Object buiten marge</div>
+            <div id="margin-warning">
+              Object buiten marge
+            </div>
+
             <canvas id="c"></canvas>
 
-            <div class="canvas-zoom-controls" aria-label="Canvas zoom controls">
-              <button class="canvas-zoom-btn" type="button" id="btn-canvas-zoom-out" aria-label="Uitzoomen">
-                <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-                  <circle cx="7.5" cy="7.5" r="5.25" stroke="currentColor" stroke-width="1.8"/>
-                  <path d="M11.5 11.5L15 15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
-                  <path d="M5.25 7.5H9.75" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+            <div
+              class="canvas-zoom-controls"
+              aria-label="Canvas zoom controls"
+            >
+              <button
+                class="canvas-zoom-btn"
+                type="button"
+                id="btn-canvas-zoom-out"
+                aria-label="Uitzoomen"
+              >
+                <svg
+                  width="18"
+                  height="18"
+                  viewBox="0 0 18 18"
+                  fill="none"
+                  xmlns="http://www.w3.org/2000/svg"
+                  aria-hidden="true"
+                >
+                  <circle
+                    cx="7.5"
+                    cy="7.5"
+                    r="5.25"
+                    stroke="currentColor"
+                    stroke-width="1.8"
+                  />
+
+                  <path
+                    d="M11.5 11.5L15 15"
+                    stroke="currentColor"
+                    stroke-width="1.8"
+                    stroke-linecap="round"
+                  />
+
+                  <path
+                    d="M5.25 7.5H9.75"
+                    stroke="currentColor"
+                    stroke-width="1.8"
+                    stroke-linecap="round"
+                  />
                 </svg>
               </button>
 
-              <button class="canvas-zoom-btn" type="button" id="btn-canvas-zoom-in" aria-label="Inzoomen">
-                <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-                  <circle cx="7.5" cy="7.5" r="5.25" stroke="currentColor" stroke-width="1.8"/>
-                  <path d="M11.5 11.5L15 15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
-                  <path d="M5.25 7.5H9.75" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
-                  <path d="M7.5 5.25V9.75" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+              <button
+                class="canvas-zoom-btn"
+                type="button"
+                id="btn-canvas-zoom-in"
+                aria-label="Inzoomen"
+              >
+                <svg
+                  width="18"
+                  height="18"
+                  viewBox="0 0 18 18"
+                  fill="none"
+                  xmlns="http://www.w3.org/2000/svg"
+                  aria-hidden="true"
+                >
+                  <circle
+                    cx="7.5"
+                    cy="7.5"
+                    r="5.25"
+                    stroke="currentColor"
+                    stroke-width="1.8"
+                  />
+
+                  <path
+                    d="M11.5 11.5L15 15"
+                    stroke="currentColor"
+                    stroke-width="1.8"
+                    stroke-linecap="round"
+                  />
+
+                  <path
+                    d="M5.25 7.5H9.75"
+                    stroke="currentColor"
+                    stroke-width="1.8"
+                    stroke-linecap="round"
+                  />
+
+                  <path
+                    d="M7.5 5.25V9.75"
+                    stroke="currentColor"
+                    stroke-width="1.8"
+                    stroke-linecap="round"
+                  />
                 </svg>
               </button>
             </div>
           </div>
 
-          <div id="status">Selecteer een element om te bewerken. Klik en sleep om te verplaatsen.</div>
+          <div id="status">
+            Selecteer een element om te bewerken. Klik en sleep om te verplaatsen.
+          </div>
         </section>
 
         <aside id="layer-panel">
@@ -195,103 +368,275 @@ function renderDesignPage() {
 
       <div
         id="fabric-image-dpi-warning"
-        style="display:none;position:fixed;right:24px;top:160px;z-index:1000;width:min(320px,calc(100vw - 48px));padding:12px 14px;border-radius:10px;font-size:12px;line-height:1.45;box-shadow:0 10px 30px rgba(0,0,0,.12)"
+        style="
+          display:none;
+          position:fixed;
+          right:24px;
+          top:160px;
+          z-index:1000;
+          width:min(320px,calc(100vw - 48px));
+          padding:12px 14px;
+          border-radius:10px;
+          font-size:12px;
+          line-height:1.45;
+          box-shadow:0 10px 30px rgba(0,0,0,.12);
+        "
       ></div>
     </div>
 
-    <div id="tab-upload" style="${activeDesignTab === 'upload' ? '' : 'display:none'}">
+    <div
+      id="tab-upload"
+      style="${activeDesignTab === 'upload' ? '' : 'display:none'}"
+    >
       <div class="design-layout">
         <div>
           <div class="upload-zone" id="upload-zone">
-            <input type="file" id="upload-input" accept=".png,.jpg,.jpeg,.pdf,.ai,.eps">
+            <input
+              type="file"
+              id="upload-input"
+              accept=".png,.jpg,.jpeg,.pdf,.ai,.eps"
+            >
+
             <div class="upload-icon">📁</div>
             <div class="upload-title">Sleep uw bestand hierheen</div>
             <div class="upload-sub">of klik om te bladeren</div>
-            <div class="upload-sub" style="margin-top:8px">PNG, JPG, PDF, AI, EPS. Minimaal 300 DPI aanbevolen.</div>
+
+            <div
+              class="upload-sub"
+              style="margin-top:8px"
+            >
+              PNG, JPG, PDF, AI, EPS. Minimaal 300 DPI aanbevolen.
+            </div>
           </div>
 
           ${uploadedDataURL ? `
-            <div style="margin-top:12px;padding:10px 14px;background:var(--green-light);border-radius:8px;
-                        font-size:13px;color:var(--green-dark);display:flex;justify-content:space-between;align-items:center">
-              <span>${escHtml(uploadedFileName || 'Bestand geüpload')}</span>
-              <button onclick="clearUpload()" type="button" style="background:none;border:none;cursor:pointer;color:#C0392B;font-size:18px">×</button>
+            <div
+              style="
+                margin-top:12px;
+                padding:10px 14px;
+                background:var(--green-light);
+                border-radius:8px;
+                font-size:13px;
+                color:var(--green-dark);
+                display:flex;
+                justify-content:space-between;
+                align-items:center;
+              "
+            >
+              <span>
+                ${escHtml(uploadedFileName || 'Bestand geüpload')}
+              </span>
+
+              <button
+                onclick="clearUpload()"
+                type="button"
+                style="
+                  background:none;
+                  border:none;
+                  cursor:pointer;
+                  color:#C0392B;
+                  font-size:18px;
+                "
+              >
+                ×
+              </button>
             </div>
           ` : ''}
 
           ${uploadedCheck ? `
-            <div style="margin-top:10px;padding:10px 14px;background:${getUploadCheckBackground(uploadedCheck.status)};border-radius:8px;
-                        font-size:12px;color:${getUploadCheckTextColor(uploadedCheck.status)}">
+            <div
+              style="
+                margin-top:10px;
+                padding:10px 14px;
+                background:${getUploadCheckBackground(uploadedCheck.status)};
+                border-radius:8px;
+                font-size:12px;
+                color:${getUploadCheckTextColor(uploadedCheck.status)};
+              "
+            >
               ${escHtml(uploadedCheck.message || 'Upload gecontroleerd.')}
             </div>
           ` : ''}
         </div>
 
         <div>
-          <div class="preview-box" id="preview-box">
-            ${uploadedDataURL && uploadedDataURL.startsWith('data:image')
-      ? `<img src="${uploadedDataURL}" alt="Preview">`
-      : `<div class="preview-placeholder">${uploadedDataURL ? escHtml(uploadedFileName || 'Bestand') : 'Preview'}</div>`}
-            <div class="preview-zoom" id="btn-zoom" ${!uploadedDataURL ? 'style="display:none"' : ''}>🔍</div>
+          <div
+            class="preview-box"
+            id="preview-box"
+          >
+            ${uploadedDataURL &&
+      uploadedDataURL.startsWith('data:image')
+      ? `
+                  <img
+                    src="${uploadedDataURL}"
+                    alt="Preview"
+                  >
+                `
+      : `
+                  <div class="preview-placeholder">
+                    ${uploadedDataURL
+        ? escHtml(uploadedFileName || 'Bestand')
+        : 'Preview'
+      }
+                  </div>
+                `
+    }
+
+            <div
+              class="preview-zoom"
+              id="btn-zoom"
+              ${!uploadedDataURL ? 'style="display:none"' : ''}
+            >
+              🔍
+            </div>
           </div>
-          <p style="font-size:12px;color:var(--text-3);margin-top:8px;text-align:center">Preview van uw bestand</p>
+
+          <p
+            style="
+              font-size:12px;
+              color:var(--text-3);
+              margin-top:8px;
+              text-align:center;
+            "
+          >
+            Preview van uw bestand
+          </p>
         </div>
       </div>
     </div>
 
-    <div id="design-error" style="color:#C0392B;font-size:13px;display:none;margin-top:16px">
+    <div
+      id="design-error"
+      style="
+        color:#C0392B;
+        font-size:13px;
+        display:none;
+        margin-top:16px;
+      "
+    >
       Maak een ontwerp of upload een bestand om verder te gaan.
     </div>
 
     <div class="flow-nav">
-      <button class="btn btn-outline" type="button" onclick="navigateTo('options')">← Terug</button>
-      <button class="btn btn-green" type="button" id="btn-design-next">Verder →</button>
+      <button
+        class="btn btn-outline"
+        type="button"
+        onclick="navigateTo('options')"
+      >
+        ← Terug
+      </button>
+
+      <button
+        class="btn btn-green"
+        type="button"
+        id="btn-design-next"
+      >
+        Verder →
+      </button>
     </div>
   `;
 
-  bindDesignTabs(product, activePers, savedState, stateKey);
-  bindUploadZone(stateKey, activePers, product);
-  bindDesignNextButton(product, activePers, stateKey);
+  bindDesignTabs(
+    product,
+    activePers,
+    savedState,
+    stateKey
+  );
 
-  document.getElementById('btn-zoom')?.addEventListener('click', () => {
-    if (uploadedDataURL) {
-      window.open(uploadedDataURL, '_blank');
-    }
-  });
+  bindUploadZone(
+    stateKey,
+    activePers,
+    product
+  );
+
+  bindDesignNextButton(
+    product,
+    activePers,
+    stateKey
+  );
+
+  document
+    .getElementById('btn-zoom')
+    ?.addEventListener('click', () => {
+      if (uploadedDataURL) {
+        window.open(
+          uploadedDataURL,
+          '_blank'
+        );
+      }
+    });
 
   if (activeDesignTab === 'tool') {
-    scheduleFabricInit(product, activePers, savedState, stateKey);
+    scheduleFabricInit(
+      product,
+      activePers,
+      savedState,
+      stateKey
+    );
   }
 }
 
-function bindDesignTabs(product, activePers, savedState, stateKey) {
-  document.querySelectorAll('.design-tab').forEach(tab => {
-    tab.addEventListener('click', () => {
-      activeDesignTab = tab.dataset.tab;
+function bindDesignTabs(
+  product,
+  activePers,
+  savedState,
+  stateKey
+) {
+  document
+    .querySelectorAll('.design-tab')
+    .forEach(tab => {
+      tab.addEventListener('click', () => {
+        activeDesignTab = tab.dataset.tab;
 
-      document.querySelectorAll('.design-tab').forEach(item => item.classList.remove('active'));
-      tab.classList.add('active');
+        document
+          .querySelectorAll('.design-tab')
+          .forEach(item => {
+            item.classList.remove('active');
+          });
 
-      const toolTab = document.getElementById('tab-tool');
-      const uploadTab = document.getElementById('tab-upload');
+        tab.classList.add('active');
 
-      if (toolTab) {
-        toolTab.style.display = activeDesignTab === 'tool' ? '' : 'none';
-      }
+        const toolTab = document.getElementById('tab-tool');
+        const uploadTab = document.getElementById('tab-upload');
 
-      if (uploadTab) {
-        uploadTab.style.display = activeDesignTab === 'upload' ? '' : 'none';
-      }
+        if (toolTab) {
+          toolTab.style.display =
+            activeDesignTab === 'tool'
+              ? ''
+              : 'none';
+        }
 
-      persistDesignState(stateKey, { tab: activeDesignTab });
+        if (uploadTab) {
+          uploadTab.style.display =
+            activeDesignTab === 'upload'
+              ? ''
+              : 'none';
+        }
 
-      if (activeDesignTab === 'tool') {
-        scheduleFabricInit(product, activePers, savedState, stateKey);
-      }
+        persistDesignState(
+          stateKey,
+          {
+            tab: activeDesignTab,
+          }
+        );
+
+        if (activeDesignTab === 'tool') {
+          scheduleFabricInit(
+            product,
+            activePers,
+            savedState,
+            stateKey
+          );
+        }
+      });
     });
-  });
 }
 
-function bindUploadZone(stateKey, activePers, product) {
+function bindUploadZone(
+  stateKey,
+  activePers,
+  product
+) {
   const zone = document.getElementById('upload-zone');
   const input = document.getElementById('upload-input');
 
@@ -299,7 +644,9 @@ function bindUploadZone(stateKey, activePers, product) {
     return;
   }
 
-  zone.addEventListener('click', () => input.click());
+  zone.addEventListener('click', () => {
+    input.click();
+  });
 
   zone.addEventListener('dragover', event => {
     event.preventDefault();
@@ -317,7 +664,12 @@ function bindUploadZone(stateKey, activePers, product) {
     const file = event.dataTransfer.files?.[0];
 
     if (file) {
-      handleUpload(file, stateKey, activePers, product);
+      handleUpload(
+        file,
+        stateKey,
+        activePers,
+        product
+      );
     }
   });
 
@@ -325,85 +677,128 @@ function bindUploadZone(stateKey, activePers, product) {
     const file = event.target.files?.[0];
 
     if (file) {
-      handleUpload(file, stateKey, activePers, product);
+      handleUpload(
+        file,
+        stateKey,
+        activePers,
+        product
+      );
     }
   });
 }
 
-function bindDesignNextButton(product, activePers, stateKey) {
-  document.getElementById('btn-design-next')?.addEventListener('click', () => {
-    const error = document.getElementById('design-error');
+function bindDesignNextButton(
+  product,
+  activePers,
+  stateKey
+) {
+  document
+    .getElementById('btn-design-next')
+    ?.addEventListener('click', () => {
+      const error = document.getElementById('design-error');
 
-    if (activeDesignTab === 'upload') {
-      if (!uploadedDataURL) {
-        if (error) {
-          error.style.display = 'block';
+      if (activeDesignTab === 'upload') {
+        if (!uploadedDataURL) {
+          if (error) {
+            error.style.display = 'block';
+          }
+
+          return;
         }
 
-        return;
-      }
+        const designData = {
+          dataURL: uploadedDataURL,
 
-      const designData = {
-        dataURL: uploadedDataURL,
-        pdfDataURL: uploadedPdfDataURL || (uploadedDataURL.startsWith('data:application/pdf') ? uploadedDataURL : ''),
-        rillinesPdfDataURL: uploadedRillinesPdfDataURL || '',
-        fileName: uploadedFileName,
-        tab: 'upload',
-        source: 'upload',
-        uploadCheck: uploadedCheck,
-        prepressWarnings: getUploadPrepressWarnings(uploadedCheck),
-      };
+          pdfDataURL:
+            uploadedPdfDataURL ||
+            (
+              uploadedDataURL.startsWith('data:application/pdf')
+                ? uploadedDataURL
+                : ''
+            ),
 
-      Session.setDesign(designData);
-      persistDesignState(stateKey, designData);
-    } else {
-      if (!fabricCanvas) {
-        if (error) {
-          error.textContent = 'De ontwerptool is nog niet geladen. Probeer het opnieuw.';
-          error.style.display = 'block';
+          rillinesPdfDataURL:
+            uploadedRillinesPdfDataURL ||
+            '',
+
+          fileName: uploadedFileName,
+          tab: 'upload',
+          source: 'upload',
+          uploadCheck: uploadedCheck,
+
+          prepressWarnings:
+            getUploadPrepressWarnings(
+              uploadedCheck
+            ),
+        };
+
+        Session.setDesign(designData);
+        persistDesignState(stateKey, designData);
+      } else {
+        if (!fabricCanvas) {
+          if (error) {
+            error.textContent =
+              'De ontwerptool is nog niet geladen. Probeer het opnieuw.';
+
+            error.style.display = 'block';
+          }
+
+          return;
         }
 
-        return;
+        const snapshot = snapshotCanvas(
+          fabricCanvas,
+          product,
+          activePers
+        );
+
+        const prepressWarnings =
+          collectCanvasPrepressWarnings(
+            fabricCanvas,
+            activePers,
+            product
+          );
+
+        Session.setDesign({
+          dataURL: snapshot.dataURL,
+          pdfDataURL: snapshot.pdfDataURL,
+          rillinesPdfDataURL: snapshot.rillinesPdfDataURL,
+          tab: 'tool',
+          source: 'fabric',
+          fabricJSON: snapshot.json,
+          backgroundColor: snapshot.backgroundColor,
+          prepressWarnings,
+          uploadCheck: null,
+        });
+
+        persistDesignState(
+          stateKey,
+          {
+            dataURL: snapshot.dataURL,
+            pdfDataURL: snapshot.pdfDataURL,
+            rillinesPdfDataURL: snapshot.rillinesPdfDataURL,
+            fabricJSON: snapshot.json,
+            backgroundColor: snapshot.backgroundColor,
+            tab: 'tool',
+            prepressWarnings,
+            uploadCheck: null,
+          }
+        );
       }
 
-      const snapshot = snapshotCanvas(fabricCanvas, product, activePers);
-      const prepressWarnings = collectCanvasPrepressWarnings(fabricCanvas, activePers, product);
+      if (error) {
+        error.style.display = 'none';
+      }
 
-      Session.setDesign({
-        dataURL: snapshot.dataURL,
-        pdfDataURL: snapshot.pdfDataURL,
-        rillinesPdfDataURL: snapshot.rillinesPdfDataURL,
-        tab: 'tool',
-        source: 'fabric',
-        fabricJSON: snapshot.json,
-        backgroundColor: snapshot.backgroundColor,
-        prepressWarnings,
-        uploadCheck: null,
-      });
-
-      persistDesignState(stateKey, {
-        dataURL: snapshot.dataURL,
-        pdfDataURL: snapshot.pdfDataURL,
-        rillinesPdfDataURL: snapshot.rillinesPdfDataURL,
-        fabricJSON: snapshot.json,
-        backgroundColor: snapshot.backgroundColor,
-        tab: 'tool',
-        prepressWarnings,
-        uploadCheck: null,
-      });
-    }
-
-    if (error) {
-      error.style.display = 'none';
-    }
-
-    navigateTo('review');
-  });
+      navigateTo('review');
+    });
 }
 
-function bindFontSelector(canvas, stateKey) {
+function bindFontSelector(
+  canvas,
+  stateKey
+) {
   const select = document.getElementById('font-select');
-  const preview = document.getElementById('font-preview');
 
   if (!select) {
     return;
@@ -411,37 +806,52 @@ function bindFontSelector(canvas, stateKey) {
 
   select.addEventListener('change', () => {
     const fontValue = select.value;
-
-    if (preview) {
-      preview.style.fontFamily = fontValue;
-    }
-
     const object = canvas.getActiveObject();
 
-    if (object && object.type === 'i-text') {
-      object.set('fontFamily', fontValue);
+    if (
+      object &&
+      object.type === 'i-text'
+    ) {
+      object.set(
+        'fontFamily',
+        fontValue
+      );
+
       canvas.renderAll();
       fabricSaveHistory();
       autoSaveCanvasState(stateKey);
     }
   });
 
-  canvas.on('selection:created', syncFontControls);
-  canvas.on('selection:updated', syncFontControls);
+  canvas.on(
+    'selection:created',
+    syncFontControls
+  );
+
+  canvas.on(
+    'selection:updated',
+    syncFontControls
+  );
 
   function syncFontControls() {
     const object = canvas.getActiveObject();
 
-    if (object && object.type === 'i-text') {
-      const currentFont = object.fontFamily || 'Georgia';
-      const match = AVAILABLE_FONTS.find(font => font.value === currentFont);
+    if (
+      object &&
+      object.type === 'i-text'
+    ) {
+      const currentFont =
+        object.fontFamily ||
+        'Georgia';
+
+      const match =
+        AVAILABLE_FONTS.find(
+          font =>
+            font.value === currentFont
+        );
 
       if (match) {
         select.value = match.value;
-      }
-
-      if (preview) {
-        preview.style.fontFamily = currentFont;
       }
 
       syncFontSizeControls(object);
@@ -449,7 +859,10 @@ function bindFontSelector(canvas, stateKey) {
   }
 }
 
-function bindFontSizeControl(canvas, stateKey) {
+function bindFontSizeControl(
+  canvas,
+  stateKey
+) {
   const select = document.getElementById('font-size');
 
   if (!select) {
@@ -457,11 +870,23 @@ function bindFontSizeControl(canvas, stateKey) {
   }
 
   select.addEventListener('change', event => {
-    const value = parseInt(event.target.value, 10);
+    const value = parseInt(
+      event.target.value,
+      10
+    );
+
     const object = canvas.getActiveObject();
 
-    if (object && object.type === 'i-text' && !isGuideObject(object)) {
-      object.set('fontSize', value);
+    if (
+      object &&
+      object.type === 'i-text' &&
+      !isGuideObject(object)
+    ) {
+      object.set(
+        'fontSize',
+        value
+      );
+
       canvas.renderAll();
       fabricSaveHistory();
       updateLayerPanel();
@@ -469,84 +894,189 @@ function bindFontSizeControl(canvas, stateKey) {
     }
   });
 
-  canvas.on('selection:created', event => syncFontSizeControls(event.selected?.[0]));
-  canvas.on('selection:updated', event => syncFontSizeControls(event.selected?.[0]));
+  canvas.on(
+    'selection:created',
+    event => {
+      syncFontSizeControls(
+        event.selected?.[0]
+      );
+    }
+  );
+
+  canvas.on(
+    'selection:updated',
+    event => {
+      syncFontSizeControls(
+        event.selected?.[0]
+      );
+    }
+  );
 }
 
 function syncFontSizeControls(object) {
   const select = document.getElementById('font-size');
 
-  if (!select || !object || object.type !== 'i-text') {
+  if (
+    !select ||
+    !object ||
+    object.type !== 'i-text'
+  ) {
     return;
   }
 
-  const fontSize = Math.round(object.fontSize || 20);
-  const availableSizes = [...select.options].map(option => Number(option.value));
-  const closestSize = availableSizes.reduce((closest, size) => {
-    return Math.abs(size - fontSize) < Math.abs(closest - fontSize) ? size : closest;
-  }, availableSizes[0]);
+  const fontSize = Math.round(
+    object.fontSize ||
+    20
+  );
+
+  const availableSizes =
+    [...select.options].map(
+      option =>
+        Number(option.value)
+    );
+
+  const closestSize =
+    availableSizes.reduce(
+      (closest, size) => (
+        Math.abs(size - fontSize) <
+          Math.abs(closest - fontSize)
+          ? size
+          : closest
+      ),
+      availableSizes[0]
+    );
 
   select.value = String(closestSize);
 }
 
-function getResponsiveCanvasSize(activePers, product) {
-  const printWidthPx = activePers?.width_px || product.width_px || 1181;
-  const printHeightPx = activePers?.height_px || product.height_px || 827;
-  const canvasWrap = document.getElementById('canvas-wrap');
+function getResponsiveCanvasSize(
+  activePers,
+  product
+) {
+  const printWidthPx =
+    activePers?.width_px ||
+    product.width_px ||
+    1181;
 
-  const fallbackWidth = Math.max(280, window.innerWidth - 560);
-  const fallbackHeight = Math.max(240, window.innerHeight - 360);
+  const printHeightPx =
+    activePers?.height_px ||
+    product.height_px ||
+    827;
 
-  const availableWidth = canvasWrap
-    ? Math.max(280, canvasWrap.clientWidth - 32)
-    : fallbackWidth;
+  const canvasWrap =
+    document.getElementById('canvas-wrap');
 
-  const availableHeight = canvasWrap
-    ? Math.max(240, canvasWrap.clientHeight - 32)
-    : fallbackHeight;
+  const fallbackWidth =
+    Math.max(
+      280,
+      window.innerWidth - 560
+    );
 
-  const scale = Math.min(
-    1,
-    availableWidth / printWidthPx,
-    availableHeight / printHeightPx
-  );
+  const fallbackHeight =
+    Math.max(
+      240,
+      window.innerHeight - 360
+    );
+
+  const availableWidth =
+    canvasWrap
+      ? Math.max(
+        280,
+        canvasWrap.clientWidth - 32
+      )
+      : fallbackWidth;
+
+  const availableHeight =
+    canvasWrap
+      ? Math.max(
+        240,
+        canvasWrap.clientHeight - 32
+      )
+      : fallbackHeight;
+
+  const scale =
+    Math.min(
+      1,
+      availableWidth / printWidthPx,
+      availableHeight / printHeightPx
+    );
 
   return {
-    width: Math.max(1, Math.floor(printWidthPx * scale)),
-    height: Math.max(1, Math.floor(printHeightPx * scale)),
+    width:
+      Math.max(
+        1,
+        Math.floor(
+          printWidthPx * scale
+        )
+      ),
+
+    height:
+      Math.max(
+        1,
+        Math.floor(
+          printHeightPx * scale
+        )
+      ),
+
     scale,
-    printWidthPx,
-    printHeightPx,
   };
 }
 
 function applyCanvasZoom() {
-  const container = document.querySelector('#canvas-wrap .canvas-container');
+  const container =
+    document.querySelector(
+      '#canvas-wrap .canvas-container'
+    );
 
   if (!container) {
     return;
   }
 
-  container.style.transform = `scale(${canvasZoom})`;
-  container.style.transformOrigin = 'center center';
+  container.style.transform =
+    `scale(${canvasZoom})`;
+
+  container.style.transformOrigin =
+    'center center';
 }
 
 function setCanvasZoom(nextZoom) {
-  canvasZoom = Math.min(CANVAS_ZOOM_MAX, Math.max(CANVAS_ZOOM_MIN, nextZoom));
+  canvasZoom = Math.min(
+    CANVAS_ZOOM_MAX,
+    Math.max(
+      CANVAS_ZOOM_MIN,
+      nextZoom
+    )
+  );
+
   applyCanvasZoom();
 }
 
 function bindCanvasZoomControls() {
-  document.getElementById('btn-canvas-zoom-in')?.addEventListener('click', () => {
-    setCanvasZoom(canvasZoom + CANVAS_ZOOM_STEP);
-  });
+  document
+    .getElementById('btn-canvas-zoom-in')
+    ?.addEventListener('click', () => {
+      setCanvasZoom(
+        canvasZoom +
+        CANVAS_ZOOM_STEP
+      );
+    });
 
-  document.getElementById('btn-canvas-zoom-out')?.addEventListener('click', () => {
-    setCanvasZoom(canvasZoom - CANVAS_ZOOM_STEP);
-  });
+  document
+    .getElementById('btn-canvas-zoom-out')
+    ?.addEventListener('click', () => {
+      setCanvasZoom(
+        canvasZoom -
+        CANVAS_ZOOM_STEP
+      );
+    });
 }
 
-function scheduleFabricInit(product, activePers, savedState, stateKey) {
+function scheduleFabricInit(
+  product,
+  activePers,
+  savedState,
+  stateKey
+) {
   fabricInitToken += 1;
   const token = fabricInitToken;
 
@@ -554,29 +1084,51 @@ function scheduleFabricInit(product, activePers, savedState, stateKey) {
     clearTimeout(fabricInitTimer);
   }
 
-  fabricInitTimer = setTimeout(() => {
-    requestAnimationFrame(() => {
+  fabricInitTimer =
+    setTimeout(() => {
       requestAnimationFrame(() => {
-        if (token !== fabricInitToken) {
-          return;
-        }
+        requestAnimationFrame(() => {
+          if (token !== fabricInitToken) {
+            return;
+          }
 
-        const canvasWrap = document.getElementById('canvas-wrap');
-        const canvasElement = document.getElementById('c');
+          const canvasWrap =
+            document.getElementById('canvas-wrap');
 
-        if (!canvasWrap || !canvasElement) {
-          return;
-        }
+          const canvasElement =
+            document.getElementById('c');
 
-        if (canvasWrap.clientWidth <= 0 || canvasWrap.clientHeight <= 0) {
-          scheduleFabricInit(product, activePers, savedState, stateKey);
-          return;
-        }
+          if (
+            !canvasWrap ||
+            !canvasElement
+          ) {
+            return;
+          }
 
-        initFabricTool(product, activePers, savedState, stateKey, token);
+          if (
+            canvasWrap.clientWidth <= 0 ||
+            canvasWrap.clientHeight <= 0
+          ) {
+            scheduleFabricInit(
+              product,
+              activePers,
+              savedState,
+              stateKey
+            );
+
+            return;
+          }
+
+          initFabricTool(
+            product,
+            activePers,
+            savedState,
+            stateKey,
+            token
+          );
+        });
       });
-    });
-  }, 60);
+    }, 60);
 }
 
 function destroyFabricCanvas() {
@@ -585,27 +1137,34 @@ function destroyFabricCanvas() {
       fabricCanvas.off();
       fabricCanvas.dispose();
     } catch (error) {
-      console.warn('Fabric canvas opruimen mislukt', error);
+      console.warn(
+        'Fabric canvas opruimen mislukt',
+        error
+      );
     }
 
     fabricCanvas = null;
   }
 
-  const canvasWrap = document.getElementById('canvas-wrap');
+  const canvasWrap =
+    document.getElementById('canvas-wrap');
 
   if (!canvasWrap) {
     return;
   }
 
-  canvasWrap.querySelectorAll('.canvas-container').forEach(container => {
-    const nestedCanvas = container.querySelector('canvas#c');
+  canvasWrap
+    .querySelectorAll('.canvas-container')
+    .forEach(container => {
+      const nestedCanvas =
+        container.querySelector('canvas#c');
 
-    if (nestedCanvas) {
-      canvasWrap.appendChild(nestedCanvas);
-    }
+      if (nestedCanvas) {
+        canvasWrap.appendChild(nestedCanvas);
+      }
 
-    container.remove();
-  });
+      container.remove();
+    });
 
   const canvas = document.getElementById('c');
 
@@ -617,16 +1176,28 @@ function destroyFabricCanvas() {
   }
 }
 
-function initFabricTool(product, activePers, savedState, stateKey, token = fabricInitToken) {
+function initFabricTool(
+  product,
+  activePers,
+  savedState,
+  stateKey,
+  token = fabricInitToken
+) {
   if (!window.fabric) {
     console.warn('Fabric.js niet geladen.');
     return;
   }
 
-  const canvasElement = document.getElementById('c');
-  const canvasWrap = document.getElementById('canvas-wrap');
+  const canvasElement =
+    document.getElementById('c');
 
-  if (!canvasElement || !canvasWrap) {
+  const canvasWrap =
+    document.getElementById('canvas-wrap');
+
+  if (
+    !canvasElement ||
+    !canvasWrap
+  ) {
     return;
   }
 
@@ -639,31 +1210,60 @@ function initFabricTool(product, activePers, savedState, stateKey, token = fabri
   fabricHistory = [];
   canvasZoom = 1;
   fabricActiveColor = '#1D9E75';
-  fabricBackgroundColor = savedState?.backgroundColor || activePers?.backgroundColor || '#b7bdb8';
 
-  const display = getResponsiveCanvasSize(activePers, product);
+  fabricBackgroundColor =
+    savedState?.backgroundColor ||
+    activePers?.backgroundColor ||
+    '#b7bdb8';
+
+  const display =
+    getResponsiveCanvasSize(
+      activePers,
+      product
+    );
+
   const canvasWidth = display.width;
   const canvasHeight = display.height;
-  const marginPx = activePers?.margin_px || product.margin_px || 20;
-  const margin = marginPx * display.scale;
-  const clipShape = activePers?.clipShape || null;
 
-  fabricCanvas = new fabric.Canvas('c', {
-    width: canvasWidth,
-    height: canvasHeight,
-    selection: true,
-    backgroundColor: fabricBackgroundColor,
-    preserveObjectStacking: true,
-  });
+  const marginPx =
+    activePers?.margin_px ||
+    product.margin_px ||
+    20;
 
-  window._currentDesignStateKey = stateKey;
+  const margin =
+    marginPx *
+    display.scale;
+
+  const clipShape =
+    activePers?.clipShape ||
+    null;
+
+  fabricCanvas =
+    new fabric.Canvas('c', {
+      width: canvasWidth,
+      height: canvasHeight,
+      selection: true,
+      backgroundColor: fabricBackgroundColor,
+      preserveObjectStacking: true,
+    });
+
+  window._currentDesignStateKey =
+    stateKey;
 
   bindFabricDocumentHandlers();
-  applyCanvasClipPath(clipShape, canvasWidth, canvasHeight);
-  renderColorSwatches();
-  renderBackgroundColorSwatches(activePers, stateKey);
 
-  loadBackgroundImage(fabricCanvas, activePers, product, canvasWidth, canvasHeight);
+  applyCanvasClipPath(
+    clipShape,
+    canvasWidth,
+    canvasHeight
+  );
+
+  renderColorSwatches();
+
+  renderBackgroundColorSwatches(
+    activePers,
+    stateKey
+  );
 
   restoreCanvasStateOrDefault(
     fabricCanvas,
@@ -676,20 +1276,58 @@ function initFabricTool(product, activePers, savedState, stateKey, token = fabri
     product
   );
 
-  bindFabricEvents(fabricCanvas, margin, canvasWidth, canvasHeight, stateKey, activePers, product);
-  bindFabricButtons(fabricCanvas, margin, canvasWidth, canvasHeight, stateKey, activePers, product);
+  bindFabricEvents(
+    fabricCanvas,
+    margin,
+    canvasWidth,
+    canvasHeight,
+    stateKey,
+    activePers,
+    product
+  );
+
+  bindFabricButtons(
+    fabricCanvas,
+    margin,
+    canvasWidth,
+    canvasHeight,
+    stateKey,
+    activePers,
+    product
+  );
 
   fabricSaveHistory();
   updateLayerPanel();
-  updateFabricImageDpiWarning(fabricCanvas, activePers, product);
+
+  updateFabricImageDpiWarning(
+    fabricCanvas,
+    activePers,
+    product
+  );
 
   bindCanvasZoomControls();
   applyCanvasZoom();
 
   setTimeout(() => {
-    if (fabricCanvas && token === fabricInitToken) {
-      redrawGuides(fabricCanvas, activePers, product, margin, canvasWidth, canvasHeight);
-      updateFabricImageDpiWarning(fabricCanvas, activePers, product);
+    if (
+      fabricCanvas &&
+      token === fabricInitToken
+    ) {
+      redrawGuides(
+        fabricCanvas,
+        activePers,
+        product,
+        margin,
+        canvasWidth,
+        canvasHeight
+      );
+
+      updateFabricImageDpiWarning(
+        fabricCanvas,
+        activePers,
+        product
+      );
+
       applyCanvasZoom();
     }
   }, 120);
@@ -697,7 +1335,10 @@ function initFabricTool(product, activePers, savedState, stateKey, token = fabri
 
 function bindFabricDocumentHandlers() {
   if (window._fabricMouseUpHandler) {
-    document.removeEventListener('mouseup', window._fabricMouseUpHandler);
+    document.removeEventListener(
+      'mouseup',
+      window._fabricMouseUpHandler
+    );
   }
 
   window._fabricMouseUpHandler = () => {
@@ -705,46 +1346,83 @@ function bindFabricDocumentHandlers() {
       return;
     }
 
-    const transform = fabricCanvas._currentTransform;
+    const transform =
+      fabricCanvas._currentTransform;
 
     if (transform) {
       fabricCanvas._currentTransform = null;
-      fabricCanvas.setCursor(fabricCanvas.defaultCursor);
+
+      fabricCanvas.setCursor(
+        fabricCanvas.defaultCursor
+      );
+
       fabricCanvas.renderAll();
     }
   };
 
-  document.addEventListener('mouseup', window._fabricMouseUpHandler);
+  document.addEventListener(
+    'mouseup',
+    window._fabricMouseUpHandler
+  );
 
   if (window._fabricKeyHandler) {
-    document.removeEventListener('keydown', window._fabricKeyHandler);
+    document.removeEventListener(
+      'keydown',
+      window._fabricKeyHandler
+    );
   }
 
   window._fabricKeyHandler = event => {
-    if (event.key !== 'Backspace' && event.key !== 'Delete') {
+    if (
+      event.key !== 'Backspace' &&
+      event.key !== 'Delete'
+    ) {
       return;
     }
 
-    const object = fabricCanvas?.getActiveObject();
+    const object =
+      fabricCanvas?.getActiveObject();
 
-    if (object && !isGuideObject(object) && !(object.type === 'i-text' && object.isEditing)) {
+    if (
+      object &&
+      !isGuideObject(object) &&
+      !(
+        object.type === 'i-text' &&
+        object.isEditing
+      )
+    ) {
       fabricCanvas.remove(object);
+
       updateFabricImageDpiWarning(
         fabricCanvas,
         window._currentDesignGuideState?.activePers,
         window._currentDesignGuideState?.product
       );
+
       fabricSaveHistory();
       updateLayerPanel();
-      autoSaveCanvasState(window._currentDesignStateKey);
+
+      autoSaveCanvasState(
+        window._currentDesignStateKey
+      );
     }
   };
 
-  document.addEventListener('keydown', window._fabricKeyHandler);
+  document.addEventListener(
+    'keydown',
+    window._fabricKeyHandler
+  );
 }
 
-function applyCanvasClipPath(clipShape, canvasWidth, canvasHeight) {
-  const canvasEl = document.querySelector('#canvas-wrap canvas');
+function applyCanvasClipPath(
+  clipShape,
+  canvasWidth,
+  canvasHeight
+) {
+  const canvasEl =
+    document.querySelector(
+      '#canvas-wrap canvas'
+    );
 
   if (!canvasEl) {
     return;
@@ -758,23 +1436,49 @@ function applyCanvasClipPath(clipShape, canvasWidth, canvasHeight) {
   }
 
   canvasEl.style.clipPath = clipShape;
-  canvasEl.style.borderRadius = clipShape.startsWith('circle') ? '50%' : '4px';
+
+  canvasEl.style.borderRadius =
+    clipShape.startsWith('circle')
+      ? '50%'
+      : '4px';
 
   if (clipShape.startsWith('circle')) {
-    const radius = Math.min(canvasWidth, canvasHeight) / 2;
+    const radius =
+      Math.min(
+        canvasWidth,
+        canvasHeight
+      ) / 2;
 
-    fabricCanvas.clipPath = new fabric.Circle({
-      radius,
-      left: canvasWidth / 2 - radius,
-      top: canvasHeight / 2 - radius,
-      absolutePositioned: true,
-    });
+    fabricCanvas.clipPath =
+      new fabric.Circle({
+        radius,
+        left:
+          canvasWidth / 2 -
+          radius,
+        top:
+          canvasHeight / 2 -
+          radius,
+        absolutePositioned: true,
+      });
   }
 }
 
 function renderColorSwatches() {
-  const colors = ['#1D9E75', '#ffffff', '#2c2c2a', '#e63946', '#f4a261', '#457b9d', '#f1c453', '#9d4edd'];
-  const swatchContainer = document.getElementById('color-swatches');
+  const colors = [
+    '#1D9E75',
+    '#ffffff',
+    '#2c2c2a',
+    '#e63946',
+    '#f4a261',
+    '#457b9d',
+    '#f1c453',
+    '#9d4edd',
+  ];
+
+  const swatchContainer =
+    document.getElementById(
+      'color-swatches'
+    );
 
   if (!swatchContainer) {
     return;
@@ -783,44 +1487,76 @@ function renderColorSwatches() {
   swatchContainer.innerHTML = '';
 
   colors.forEach((color, index) => {
-    const swatch = document.createElement('div');
-    swatch.className = `color-swatch${index === 0 ? ' active' : ''}`;
+    const swatch =
+      document.createElement('div');
+
+    swatch.className =
+      `color-swatch${index === 0 ? ' active' : ''}`;
+
     swatch.style.background = color;
 
     swatch.addEventListener('click', () => {
-      swatchContainer.querySelectorAll('.color-swatch').forEach(item => item.classList.remove('active'));
+      swatchContainer
+        .querySelectorAll('.color-swatch')
+        .forEach(item => {
+          item.classList.remove('active');
+        });
+
       swatch.classList.add('active');
       fabricActiveColor = color;
-      applyToSelected('fill', color);
+
+      applyToSelected(
+        'fill',
+        color
+      );
     });
 
     swatchContainer.appendChild(swatch);
   });
 
-  const customColorInput = document.getElementById('custom-element-color');
+  const customColorInput =
+    document.getElementById(
+      'custom-element-color'
+    );
 
   if (customColorInput) {
-    customColorInput.value = fabricActiveColor;
+    customColorInput.value =
+      fabricActiveColor;
 
-    customColorInput.addEventListener('input', event => {
-      const color = event.target.value;
-      fabricActiveColor = color;
+    customColorInput.addEventListener(
+      'input',
+      event => {
+        const color = event.target.value;
 
-      swatchContainer.querySelectorAll('.color-swatch').forEach(item => {
-        item.classList.remove('active');
-      });
+        fabricActiveColor = color;
 
-      applyToSelected('fill', color);
-    });
+        swatchContainer
+          .querySelectorAll('.color-swatch')
+          .forEach(item => {
+            item.classList.remove('active');
+          });
+
+        applyToSelected(
+          'fill',
+          color
+        );
+      }
+    );
   }
 }
 
-function renderBackgroundColorSwatches(activePers, stateKey) {
+function renderBackgroundColorSwatches(
+  activePers,
+  stateKey
+) {
   if (!activePers?.allowBackgroundColor) {
     return;
   }
 
-  const swatchContainer = document.getElementById('background-color-swatches');
+  const swatchContainer =
+    document.getElementById(
+      'background-color-swatches'
+    );
 
   if (!swatchContainer) {
     return;
@@ -840,20 +1576,36 @@ function renderBackgroundColorSwatches(activePers, stateKey) {
   swatchContainer.innerHTML = '';
 
   colors.forEach(color => {
-    const swatch = document.createElement('div');
-    swatch.className = `color-swatch${color.toLowerCase() === fabricBackgroundColor.toLowerCase() ? ' active' : ''}`;
+    const swatch =
+      document.createElement('div');
+
+    swatch.className =
+      `color-swatch${color.toLowerCase() ===
+        fabricBackgroundColor.toLowerCase()
+        ? ' active'
+        : ''
+      }`;
+
     swatch.style.background = color;
 
     swatch.addEventListener('click', () => {
-      setCanvasBackgroundColor(color, stateKey);
+      setCanvasBackgroundColor(
+        color,
+        stateKey
+      );
 
-      swatchContainer.querySelectorAll('.color-swatch').forEach(item => {
-        item.classList.remove('active');
-      });
+      swatchContainer
+        .querySelectorAll('.color-swatch')
+        .forEach(item => {
+          item.classList.remove('active');
+        });
 
       swatch.classList.add('active');
 
-      const customBackgroundInput = document.getElementById('custom-background-color');
+      const customBackgroundInput =
+        document.getElementById(
+          'custom-background-color'
+        );
 
       if (customBackgroundInput) {
         customBackgroundInput.value = color;
@@ -863,30 +1615,53 @@ function renderBackgroundColorSwatches(activePers, stateKey) {
     swatchContainer.appendChild(swatch);
   });
 
-  const customBackgroundInput = document.getElementById('custom-background-color');
+  const customBackgroundInput =
+    document.getElementById(
+      'custom-background-color'
+    );
 
   if (customBackgroundInput) {
-    customBackgroundInput.value = fabricBackgroundColor;
+    customBackgroundInput.value =
+      fabricBackgroundColor;
 
-    customBackgroundInput.addEventListener('input', event => {
-      setCanvasBackgroundColor(event.target.value, stateKey);
+    customBackgroundInput.addEventListener(
+      'input',
+      event => {
+        setCanvasBackgroundColor(
+          event.target.value,
+          stateKey
+        );
 
-      swatchContainer.querySelectorAll('.color-swatch').forEach(item => {
-        item.classList.remove('active');
-      });
-    });
+        swatchContainer
+          .querySelectorAll('.color-swatch')
+          .forEach(item => {
+            item.classList.remove('active');
+          });
+      }
+    );
   }
 }
 
-function setCanvasBackgroundColor(color, stateKey) {
+function setCanvasBackgroundColor(
+  color,
+  stateKey
+) {
   fabricBackgroundColor = color;
 
   if (!fabricCanvas) {
     return;
   }
 
-  if (typeof fabricCanvas.setBackgroundColor === 'function') {
-    fabricCanvas.setBackgroundColor(color, fabricCanvas.renderAll.bind(fabricCanvas));
+  if (
+    typeof fabricCanvas.setBackgroundColor ===
+    'function'
+  ) {
+    fabricCanvas.setBackgroundColor(
+      color,
+      fabricCanvas.renderAll.bind(
+        fabricCanvas
+      )
+    );
   } else {
     fabricCanvas.backgroundColor = color;
     fabricCanvas.renderAll();
@@ -895,50 +1670,98 @@ function setCanvasBackgroundColor(color, stateKey) {
   redrawGuidesFromCurrentState();
   autoSaveCanvasState(stateKey);
 
-  persistDesignState(stateKey, {
-    backgroundColor: color,
-  });
+  persistDesignState(
+    stateKey,
+    {
+      backgroundColor: color,
+    }
+  );
 }
 
-function drawMarginRect(canvas, margin, canvasWidth, canvasHeight, isWarning = false) {
-  canvas.getObjects()
-    .filter(object => object._isMargin && !object._isBlockedZone)
-    .forEach(object => canvas.remove(object));
+function drawMarginRect(
+  canvas,
+  margin,
+  canvasWidth,
+  canvasHeight,
+  isWarning = false
+) {
+  canvas
+    .getObjects()
+    .filter(
+      object =>
+        object._isMargin &&
+        !object._isBlockedZone
+    )
+    .forEach(object => {
+      canvas.remove(object);
+    });
 
-  const marginColor = isWarning
-    ? '#C0392B'
-    : getContrastingGuideColor(fabricBackgroundColor);
+  const marginColor =
+    isWarning
+      ? '#C0392B'
+      : getContrastingGuideColor(
+        fabricBackgroundColor
+      );
 
-  const marginRect = new fabric.Rect({
-    left: margin,
-    top: margin,
-    width: Math.max(1, canvasWidth - margin * 2),
-    height: Math.max(1, canvasHeight - margin * 2),
-    fill: 'transparent',
-    stroke: marginColor,
-    strokeWidth: isWarning ? 2.5 : 1.75,
-    strokeDashArray: [6, 4],
-    selectable: false,
-    evented: false,
-    excludeFromExport: true,
-    _isMargin: true,
-    _isGuide: true,
-    _guideMeta: {
-      margin,
-      canvasWidth,
-      canvasHeight,
-    },
-  });
+  const marginRect =
+    new fabric.Rect({
+      left: margin,
+      top: margin,
+      width:
+        Math.max(
+          1,
+          canvasWidth -
+          margin * 2
+        ),
+      height:
+        Math.max(
+          1,
+          canvasHeight -
+          margin * 2
+        ),
+      fill: 'transparent',
+      stroke: marginColor,
+      strokeWidth:
+        isWarning
+          ? 2.5
+          : 1.75,
+      strokeDashArray: [6, 4],
+      selectable: false,
+      evented: false,
+      excludeFromExport: true,
+      _isMargin: true,
+      _isGuide: true,
+      _guideMeta: {
+        margin,
+        canvasWidth,
+        canvasHeight,
+      },
+    });
 
   canvas.add(marginRect);
 }
 
-function drawBlockedZones(canvas, activePers, product, canvasWidth, canvasHeight) {
-  const zones = Array.isArray(activePers?.blockedZones) ? activePers.blockedZones : [];
+function drawBlockedZones(
+  canvas,
+  activePers,
+  product,
+  canvasWidth,
+  canvasHeight
+) {
+  const zones =
+    Array.isArray(activePers?.blockedZones)
+      ? activePers.blockedZones
+      : [];
 
-  canvas.getObjects()
-    .filter(object => object._isBlockedZone)
-    .forEach(object => canvas.remove(object));
+  canvas
+    .getObjects()
+    .filter(
+      object =>
+        object._isBlockedZone
+    )
+    .forEach(object => {
+      canvas.remove(object);
+    });
 
   if (!zones.length) {
     canvas.renderAll();
@@ -947,118 +1770,34 @@ function drawBlockedZones(canvas, activePers, product, canvasWidth, canvasHeight
 
   zones.forEach(zone => {
     if (zone.type === 'circle') {
-      const circleData = getBlockedCircleCanvasData(zone, activePers, product, canvasWidth, canvasHeight);
+      const circleData =
+        getBlockedCircleCanvasData(
+          zone,
+          activePers,
+          product,
+          canvasWidth,
+          canvasHeight
+        );
 
       if (!circleData) {
         return;
       }
 
-      const safeCircle = new fabric.Circle({
-        left: circleData.cx - circleData.safeRadius,
-        top: circleData.cy - circleData.safeRadius,
-        radius: circleData.safeRadius,
-        fill: 'rgba(232, 134, 10, 0.14)',
-        stroke: '#E8860A',
-        strokeWidth: 2,
-        strokeDashArray: [8, 5],
-        selectable: false,
-        evented: false,
-        objectCaching: false,
-        excludeFromExport: true,
-        _isMargin: true,
-        _isGuide: true,
-        _isBlockedZone: true,
-      });
-
-      const holeCircle = new fabric.Circle({
-        left: circleData.cx - circleData.holeRadius,
-        top: circleData.cy - circleData.holeRadius,
-        radius: circleData.holeRadius,
-        fill: 'rgba(192, 57, 43, 0.24)',
-        stroke: '#C0392B',
-        strokeWidth: 2,
-        strokeDashArray: [4, 3],
-        selectable: false,
-        evented: false,
-        objectCaching: false,
-        excludeFromExport: true,
-        _isMargin: true,
-        _isGuide: true,
-        _isBlockedZone: true,
-      });
-
-      canvas.add(safeCircle);
-      canvas.add(holeCircle);
-      return;
-    }
-
-    if (zone.type === 'rect') {
-      const rectData = getBlockedRectCanvasData(zone, activePers, product, canvasWidth, canvasHeight);
-
-      if (!rectData) {
-        return;
-      }
-
-      const safeRect = new fabric.Rect({
-        left: rectData.safeLeft,
-        top: rectData.safeTop,
-        width: rectData.safeWidth,
-        height: rectData.safeHeight,
-        fill: 'rgba(232, 134, 10, 0.14)',
-        stroke: '#E8860A',
-        strokeWidth: 2,
-        strokeDashArray: [8, 5],
-        selectable: false,
-        evented: false,
-        objectCaching: false,
-        excludeFromExport: true,
-        _isMargin: true,
-        _isGuide: true,
-        _isBlockedZone: true,
-      });
-
-      const blockedRect = new fabric.Rect({
-        left: rectData.left,
-        top: rectData.top,
-        width: rectData.width,
-        height: rectData.height,
-        fill: 'rgba(192, 57, 43, 0.18)',
-        stroke: '#C0392B',
-        strokeWidth: 2,
-        strokeDashArray: [4, 3],
-        selectable: false,
-        evented: false,
-        objectCaching: false,
-        excludeFromExport: true,
-        _isMargin: true,
-        _isGuide: true,
-        _isBlockedZone: true,
-      });
-
-      canvas.add(safeRect);
-      canvas.add(blockedRect);
-      return;
-    }
-
-    if (zone.type === 'line') {
-      const lineData = getBlockedLineCanvasData(zone, activePers, product, canvasWidth, canvasHeight);
-
-      if (!lineData) {
-        return;
-      }
-
-      const safeZone = createCenteredLineSafeZone(lineData);
-
-      if (safeZone) {
-        canvas.add(safeZone);
-      }
-
-      const foldLine = new fabric.Line(
-        [lineData.x1, lineData.y1, lineData.x2, lineData.y2],
-        {
-          stroke: '#C0392B',
-          strokeWidth: Math.max(1.5, lineData.lineWidth),
-          strokeDashArray: [2, 1.5],
+      const safeCircle =
+        new fabric.Circle({
+          left:
+            circleData.cx -
+            circleData.safeRadius,
+          top:
+            circleData.cy -
+            circleData.safeRadius,
+          radius:
+            circleData.safeRadius,
+          fill:
+            'rgba(232, 134, 10, 0.14)',
+          stroke: '#E8860A',
+          strokeWidth: 2,
+          strokeDashArray: [8, 5],
           selectable: false,
           evented: false,
           objectCaching: false,
@@ -1066,8 +1805,144 @@ function drawBlockedZones(canvas, activePers, product, canvasWidth, canvasHeight
           _isMargin: true,
           _isGuide: true,
           _isBlockedZone: true,
-        }
-      );
+        });
+
+      const holeCircle =
+        new fabric.Circle({
+          left:
+            circleData.cx -
+            circleData.holeRadius,
+          top:
+            circleData.cy -
+            circleData.holeRadius,
+          radius:
+            circleData.holeRadius,
+          fill:
+            'rgba(192, 57, 43, 0.24)',
+          stroke: '#C0392B',
+          strokeWidth: 2,
+          strokeDashArray: [4, 3],
+          selectable: false,
+          evented: false,
+          objectCaching: false,
+          excludeFromExport: true,
+          _isMargin: true,
+          _isGuide: true,
+          _isBlockedZone: true,
+        });
+
+      canvas.add(safeCircle);
+      canvas.add(holeCircle);
+      return;
+    }
+
+    if (zone.type === 'rect') {
+      const rectData =
+        getBlockedRectCanvasData(
+          zone,
+          activePers,
+          product,
+          canvasWidth,
+          canvasHeight
+        );
+
+      if (!rectData) {
+        return;
+      }
+
+      const safeRect =
+        new fabric.Rect({
+          left: rectData.safeLeft,
+          top: rectData.safeTop,
+          width: rectData.safeWidth,
+          height: rectData.safeHeight,
+          fill:
+            'rgba(232, 134, 10, 0.14)',
+          stroke: '#E8860A',
+          strokeWidth: 2,
+          strokeDashArray: [8, 5],
+          selectable: false,
+          evented: false,
+          objectCaching: false,
+          excludeFromExport: true,
+          _isMargin: true,
+          _isGuide: true,
+          _isBlockedZone: true,
+        });
+
+      const blockedRect =
+        new fabric.Rect({
+          left: rectData.left,
+          top: rectData.top,
+          width: rectData.width,
+          height: rectData.height,
+          fill:
+            'rgba(192, 57, 43, 0.18)',
+          stroke: '#C0392B',
+          strokeWidth: 2,
+          strokeDashArray: [4, 3],
+          selectable: false,
+          evented: false,
+          objectCaching: false,
+          excludeFromExport: true,
+          _isMargin: true,
+          _isGuide: true,
+          _isBlockedZone: true,
+        });
+
+      canvas.add(safeRect);
+      canvas.add(blockedRect);
+      return;
+    }
+
+    if (zone.type === 'line') {
+      const lineData =
+        getBlockedLineCanvasData(
+          zone,
+          activePers,
+          product,
+          canvasWidth,
+          canvasHeight
+        );
+
+      if (!lineData) {
+        return;
+      }
+
+      const safeZone =
+        createCenteredLineSafeZone(
+          lineData
+        );
+
+      if (safeZone) {
+        canvas.add(safeZone);
+      }
+
+      const foldLine =
+        new fabric.Line(
+          [
+            lineData.x1,
+            lineData.y1,
+            lineData.x2,
+            lineData.y2,
+          ],
+          {
+            stroke: '#C0392B',
+            strokeWidth:
+              Math.max(
+                1.5,
+                lineData.lineWidth
+              ),
+            strokeDashArray: [2, 1.5],
+            selectable: false,
+            evented: false,
+            objectCaching: false,
+            excludeFromExport: true,
+            _isMargin: true,
+            _isGuide: true,
+            _isBlockedZone: true,
+          }
+        );
 
       canvas.add(foldLine);
     }
@@ -1078,17 +1953,43 @@ function drawBlockedZones(canvas, activePers, product, canvasWidth, canvasHeight
 }
 
 function createCenteredLineSafeZone(lineData) {
-  const deltaX = lineData.x2 - lineData.x1;
-  const deltaY = lineData.y2 - lineData.y1;
-  const lineLength = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+  const deltaX =
+    lineData.x2 -
+    lineData.x1;
+
+  const deltaY =
+    lineData.y2 -
+    lineData.y1;
+
+  const lineLength =
+    Math.sqrt(
+      deltaX * deltaX +
+      deltaY * deltaY
+    );
 
   if (!lineLength) {
     return null;
   }
 
-  const centerX = (lineData.x1 + lineData.x2) / 2;
-  const centerY = (lineData.y1 + lineData.y2) / 2;
-  const angle = Math.atan2(deltaY, deltaX) * 180 / Math.PI;
+  const centerX =
+    (
+      lineData.x1 +
+      lineData.x2
+    ) / 2;
+
+  const centerY =
+    (
+      lineData.y1 +
+      lineData.y2
+    ) / 2;
+
+  const angle =
+    Math.atan2(
+      deltaY,
+      deltaX
+    ) *
+    180 /
+    Math.PI;
 
   return new fabric.Rect({
     left: centerX,
@@ -1098,7 +1999,8 @@ function createCenteredLineSafeZone(lineData) {
     originX: 'center',
     originY: 'center',
     angle,
-    fill: 'rgba(232, 134, 10, 0.18)',
+    fill:
+      'rgba(232, 134, 10, 0.18)',
     stroke: '#E8860A',
     strokeWidth: 1,
     strokeDashArray: [8, 5],
@@ -1113,14 +2015,306 @@ function createCenteredLineSafeZone(lineData) {
   });
 }
 
-function redrawGuides(canvas, activePers, product, margin, canvasWidth, canvasHeight, isWarning = false) {
+function drawProductPreviewGuides(
+  canvas,
+  activePers,
+  product,
+  canvasWidth,
+  canvasHeight
+) {
+  if (!window.ProductPreview) {
+    return;
+  }
+
+  const config =
+    ProductPreview.normalizeConfig(
+      activePers || {},
+      product || {}
+    );
+
+  if (
+    !config.enabled ||
+    !config.canvasGuides.length
+  ) {
+    return;
+  }
+
+  const spec =
+    ProductPreview.getPrintSpec(
+      activePers || {},
+      product || {}
+    );
+
+  const guideColor = '#2F6F62';
+  const guideFill =
+    'rgba(47, 111, 98, 0.08)';
+
+  const fontSize =
+    Math.max(
+      10,
+      Math.min(
+        15,
+        Math.round(
+          Math.min(
+            canvasWidth,
+            canvasHeight
+          ) / 34
+        )
+      )
+    );
+
+  const toCanvasX = value => {
+    if (
+      window.PrintSpecs
+        ?.finishMmToCanvasX
+    ) {
+      return PrintSpecs.finishMmToCanvasX(
+        value,
+        spec,
+        canvasWidth
+      );
+    }
+
+    return (
+      (
+        spec.trimXmm +
+        Number(value || 0)
+      ) /
+      spec.exportWidthMm
+    ) * canvasWidth;
+  };
+
+  const toCanvasY = value => {
+    if (
+      window.PrintSpecs
+        ?.finishMmToCanvasY
+    ) {
+      return PrintSpecs.finishMmToCanvasY(
+        value,
+        spec,
+        canvasHeight
+      );
+    }
+
+    return (
+      (
+        spec.trimYmm +
+        Number(value || 0)
+      ) /
+      spec.exportHeightMm
+    ) * canvasHeight;
+  };
+
+  const widthToCanvas = value => (
+    Number(value || 0) /
+    spec.exportWidthMm
+  ) * canvasWidth;
+
+  const heightToCanvas = value => (
+    Number(value || 0) /
+    spec.exportHeightMm
+  ) * canvasHeight;
+
+  config.canvasGuides.forEach(guide => {
+    if (guide.type === 'line') {
+      const x1 =
+        toCanvasX(guide.x1_mm);
+
+      const y1 =
+        toCanvasY(guide.y1_mm);
+
+      const x2 =
+        toCanvasX(guide.x2_mm);
+
+      const y2 =
+        toCanvasY(guide.y2_mm);
+
+      const line =
+        new fabric.Line(
+          [x1, y1, x2, y2],
+          {
+            stroke: guideColor,
+            strokeWidth: 2,
+            strokeDashArray: [10, 6],
+            selectable: false,
+            evented: false,
+            objectCaching: false,
+            excludeFromExport: true,
+            _isGuide: true,
+            _isPreviewGuide: true,
+            _previewGuideId: guide.id,
+          }
+        );
+
+      const label =
+        new fabric.Text(
+          guide.label ||
+          'Vouwlijn',
+          {
+            left: (x1 + x2) / 2,
+            top: (y1 + y2) / 2,
+            originX: 'center',
+            originY: 'bottom',
+            fontSize,
+            fontFamily:
+              'DM Sans, sans-serif',
+            fontWeight: 700,
+            fill: guideColor,
+            backgroundColor:
+              'rgba(255, 255, 255, 0.88)',
+            selectable: false,
+            evented: false,
+            objectCaching: false,
+            excludeFromExport: true,
+            _isGuide: true,
+            _isPreviewGuide: true,
+            _previewGuideId:
+              `${guide.id}-label`,
+          }
+        );
+
+      canvas.add(line);
+      canvas.add(label);
+      return;
+    }
+
+    const left =
+      toCanvasX(guide.x_mm);
+
+    const top =
+      toCanvasY(guide.y_mm);
+
+    const width =
+      Math.max(
+        1,
+        widthToCanvas(
+          guide.width_mm
+        )
+      );
+
+    const height =
+      Math.max(
+        1,
+        heightToCanvas(
+          guide.height_mm
+        )
+      );
+
+    const zone =
+      new fabric.Rect({
+        left,
+        top,
+        width,
+        height,
+        fill: guideFill,
+        stroke: guideColor,
+        strokeWidth: 1.5,
+        strokeDashArray: [7, 5],
+        selectable: false,
+        evented: false,
+        objectCaching: false,
+        excludeFromExport: true,
+        _isGuide: true,
+        _isPreviewGuide: true,
+        _previewGuideId: guide.id,
+      });
+
+    const labelText =
+      [
+        guide.label,
+        guide.description,
+      ]
+        .filter(Boolean)
+        .join('\n');
+
+    const label =
+      new fabric.Textbox(
+        labelText,
+        {
+          left:
+            left +
+            Math.min(
+              8,
+              width * 0.04
+            ),
+          top:
+            top +
+            Math.min(
+              8,
+              height * 0.04
+            ),
+          width:
+            Math.max(
+              36,
+              width -
+              Math.min(
+                16,
+                width * 0.08
+              )
+            ),
+          fontSize,
+          fontFamily:
+            'DM Sans, sans-serif',
+          fontWeight: 700,
+          lineHeight: 1.2,
+          fill: guideColor,
+          backgroundColor:
+            'rgba(255, 255, 255, 0.82)',
+          selectable: false,
+          evented: false,
+          objectCaching: false,
+          excludeFromExport: true,
+          _isGuide: true,
+          _isPreviewGuide: true,
+          _previewGuideId:
+            `${guide.id}-label`,
+        }
+      );
+
+    canvas.add(zone);
+    canvas.add(label);
+  });
+}
+
+function redrawGuides(
+  canvas,
+  activePers,
+  product,
+  margin,
+  canvasWidth,
+  canvasHeight,
+  isWarning = false
+) {
   if (!canvas) {
     return;
   }
 
   removeGuideObjects(canvas);
-  drawMarginRect(canvas, margin, canvasWidth, canvasHeight, isWarning);
-  drawBlockedZones(canvas, activePers, product, canvasWidth, canvasHeight);
+
+  drawMarginRect(
+    canvas,
+    margin,
+    canvasWidth,
+    canvasHeight,
+    isWarning
+  );
+
+  drawBlockedZones(
+    canvas,
+    activePers,
+    product,
+    canvasWidth,
+    canvasHeight
+  );
+
+  drawProductPreviewGuides(
+    canvas,
+    activePers,
+    product,
+    canvasWidth,
+    canvasHeight
+  );
+
   bringGuidesToFront(canvas);
   canvas.renderAll();
 
@@ -1133,10 +2327,16 @@ function redrawGuides(canvas, activePers, product, margin, canvasWidth, canvasHe
   };
 }
 
-function redrawGuidesFromCurrentState(isWarning = false) {
-  const state = window._currentDesignGuideState;
+function redrawGuidesFromCurrentState(
+  isWarning = false
+) {
+  const state =
+    window._currentDesignGuideState;
 
-  if (!fabricCanvas || !state) {
+  if (
+    !fabricCanvas ||
+    !state
+  ) {
     return;
   }
 
@@ -1152,8 +2352,11 @@ function redrawGuidesFromCurrentState(isWarning = false) {
 }
 
 function bringGuidesToFront(canvas) {
-  canvas.getObjects()
-    .filter(object => isGuideObject(object))
+  canvas
+    .getObjects()
+    .filter(object => {
+      return isGuideObject(object);
+    })
     .forEach(object => {
       object.selectable = false;
       object.evented = false;
@@ -1163,166 +2366,435 @@ function bringGuidesToFront(canvas) {
 }
 
 function removeGuideObjects(canvas) {
-  canvas.getObjects()
-    .filter(object => isGuideObject(object))
-    .forEach(object => canvas.remove(object));
+  canvas
+    .getObjects()
+    .filter(object => {
+      return isGuideObject(object);
+    })
+    .forEach(object => {
+      canvas.remove(object);
+    });
 }
 
 function isGuideObject(object) {
-  return Boolean(object?._isGuide || object?._isBlockedZone || object?._isMargin);
+  return Boolean(
+    object?._isGuide ||
+    object?._isBlockedZone ||
+    object?._isMargin ||
+    object?._isPreviewGuide ||
+    object?._isCenterGuide
+  );
 }
 
-function getContrastingGuideColor(backgroundColor) {
-  const hex = normalizeHexColor(backgroundColor);
+function getContrastingGuideColor(
+  backgroundColor
+) {
+  const hex =
+    normalizeHexColor(
+      backgroundColor
+    );
 
   if (!hex) {
     return '#2A2A22';
   }
 
-  const r = parseInt(hex.slice(1, 3), 16);
-  const g = parseInt(hex.slice(3, 5), 16);
-  const b = parseInt(hex.slice(5, 7), 16);
-  const brightness = (r * 299 + g * 587 + b * 114) / 1000;
+  const r =
+    parseInt(
+      hex.slice(1, 3),
+      16
+    );
 
-  return brightness > 170 ? '#2A2A22' : '#FFFFFF';
+  const g =
+    parseInt(
+      hex.slice(3, 5),
+      16
+    );
+
+  const b =
+    parseInt(
+      hex.slice(5, 7),
+      16
+    );
+
+  const brightness =
+    (
+      r * 299 +
+      g * 587 +
+      b * 114
+    ) / 1000;
+
+  return brightness > 170
+    ? '#2A2A22'
+    : '#FFFFFF';
 }
 
 function normalizeHexColor(value) {
-  if (!value || typeof value !== 'string') {
+  if (
+    !value ||
+    typeof value !== 'string'
+  ) {
     return '';
   }
 
-  if (/^#[0-9A-Fa-f]{6}$/.test(value)) {
+  if (
+    /^#[0-9A-Fa-f]{6}$/.test(
+      value
+    )
+  ) {
     return value;
   }
 
-  if (/^#[0-9A-Fa-f]{3}$/.test(value)) {
+  if (
+    /^#[0-9A-Fa-f]{3}$/.test(
+      value
+    )
+  ) {
     return `#${value[1]}${value[1]}${value[2]}${value[2]}${value[3]}${value[3]}`;
   }
 
   return '';
 }
 
-function getBlockedCircleCanvasData(zone, activePers, product, canvasWidth, canvasHeight) {
-  const widthMm = Number(activePers?.width_mm || product?.width_mm || 0);
-  const heightMm = Number(activePers?.height_mm || product?.height_mm || 0);
+function getBlockedCircleCanvasData(
+  zone,
+  activePers,
+  product,
+  canvasWidth,
+  canvasHeight
+) {
+  const widthMm =
+    Number(
+      activePers?.width_mm ||
+      product?.width_mm ||
+      0
+    );
 
-  if (!widthMm || !heightMm) {
+  const heightMm =
+    Number(
+      activePers?.height_mm ||
+      product?.height_mm ||
+      0
+    );
+
+  if (
+    !widthMm ||
+    !heightMm
+  ) {
     return null;
   }
 
-  const xMm = Number(zone.x_mm || 0);
-  const yMm = Number(zone.y_mm || 0);
-  const diameterMm = Number(zone.diameter_mm || 0);
-  const marginMm = Number(zone.margin_mm || 0);
+  const xMm =
+    Number(zone.x_mm || 0);
+
+  const yMm =
+    Number(zone.y_mm || 0);
+
+  const diameterMm =
+    Number(zone.diameter_mm || 0);
+
+  const marginMm =
+    Number(zone.margin_mm || 0);
 
   if (!diameterMm) {
     return null;
   }
 
-  const pxPerMmX = canvasWidth / widthMm;
-  const pxPerMmY = canvasHeight / heightMm;
-  const averagePxPerMm = (pxPerMmX + pxPerMmY) / 2;
+  const pxPerMmX =
+    canvasWidth /
+    widthMm;
 
-  const holeRadius = (diameterMm / 2) * averagePxPerMm;
-  const safeRadius = holeRadius + marginMm * averagePxPerMm;
+  const pxPerMmY =
+    canvasHeight /
+    heightMm;
+
+  const averagePxPerMm =
+    (
+      pxPerMmX +
+      pxPerMmY
+    ) / 2;
+
+  const holeRadius =
+    (
+      diameterMm /
+      2
+    ) *
+    averagePxPerMm;
+
+  const safeRadius =
+    holeRadius +
+    marginMm *
+    averagePxPerMm;
 
   return {
-    cx: xMm * pxPerMmX,
-    cy: yMm * pxPerMmY,
+    cx:
+      xMm *
+      pxPerMmX,
+
+    cy:
+      yMm *
+      pxPerMmY,
+
     holeRadius,
     safeRadius,
   };
 }
 
-function getBlockedRectCanvasData(zone, activePers, product, canvasWidth, canvasHeight) {
-  const widthMm = Number(activePers?.width_mm || product?.width_mm || 0);
-  const heightMm = Number(activePers?.height_mm || product?.height_mm || 0);
+function getBlockedRectCanvasData(
+  zone,
+  activePers,
+  product,
+  canvasWidth,
+  canvasHeight
+) {
+  const widthMm =
+    Number(
+      activePers?.width_mm ||
+      product?.width_mm ||
+      0
+    );
 
-  if (!widthMm || !heightMm) {
+  const heightMm =
+    Number(
+      activePers?.height_mm ||
+      product?.height_mm ||
+      0
+    );
+
+  if (
+    !widthMm ||
+    !heightMm
+  ) {
     return null;
   }
 
-  const xMm = Number(zone.x_mm || 0);
-  const yMm = Number(zone.y_mm || 0);
-  const rectWidthMm = Number(zone.width_mm || 0);
-  const rectHeightMm = Number(zone.height_mm || 0);
-  const marginMm = Number(zone.margin_mm || 0);
+  const xMm =
+    Number(zone.x_mm || 0);
 
-  if (!rectWidthMm || !rectHeightMm) {
+  const yMm =
+    Number(zone.y_mm || 0);
+
+  const rectWidthMm =
+    Number(zone.width_mm || 0);
+
+  const rectHeightMm =
+    Number(zone.height_mm || 0);
+
+  const marginMm =
+    Number(zone.margin_mm || 0);
+
+  if (
+    !rectWidthMm ||
+    !rectHeightMm
+  ) {
     return null;
   }
 
-  const pxPerMmX = canvasWidth / widthMm;
-  const pxPerMmY = canvasHeight / heightMm;
+  const pxPerMmX =
+    canvasWidth /
+    widthMm;
 
-  const left = xMm * pxPerMmX;
-  const top = yMm * pxPerMmY;
-  const width = rectWidthMm * pxPerMmX;
-  const height = rectHeightMm * pxPerMmY;
-  const marginX = marginMm * pxPerMmX;
-  const marginY = marginMm * pxPerMmY;
+  const pxPerMmY =
+    canvasHeight /
+    heightMm;
+
+  const left =
+    xMm *
+    pxPerMmX;
+
+  const top =
+    yMm *
+    pxPerMmY;
+
+  const width =
+    rectWidthMm *
+    pxPerMmX;
+
+  const height =
+    rectHeightMm *
+    pxPerMmY;
+
+  const marginX =
+    marginMm *
+    pxPerMmX;
+
+  const marginY =
+    marginMm *
+    pxPerMmY;
 
   return {
     left,
     top,
     width,
     height,
-    safeLeft: left - marginX,
-    safeTop: top - marginY,
-    safeWidth: width + marginX * 2,
-    safeHeight: height + marginY * 2,
+
+    safeLeft:
+      left -
+      marginX,
+
+    safeTop:
+      top -
+      marginY,
+
+    safeWidth:
+      width +
+      marginX * 2,
+
+    safeHeight:
+      height +
+      marginY * 2,
   };
 }
 
-function getBlockedLineCanvasData(zone, activePers, product, canvasWidth, canvasHeight) {
-  const widthMm = Number(activePers?.width_mm || product?.width_mm || 0);
-  const heightMm = Number(activePers?.height_mm || product?.height_mm || 0);
+function getBlockedLineCanvasData(
+  zone,
+  activePers,
+  product,
+  canvasWidth,
+  canvasHeight
+) {
+  const widthMm =
+    Number(
+      activePers?.width_mm ||
+      product?.width_mm ||
+      0
+    );
 
-  if (!widthMm || !heightMm) {
+  const heightMm =
+    Number(
+      activePers?.height_mm ||
+      product?.height_mm ||
+      0
+    );
+
+  if (
+    !widthMm ||
+    !heightMm
+  ) {
     return null;
   }
 
-  let x1Mm = Number(zone.x1_mm || 0);
-  let y1Mm = Number(zone.y1_mm || 0);
-  let x2Mm = Number(zone.x2_mm || 0);
-  let y2Mm = Number(zone.y2_mm || 0);
-  const lineWidthMm = Number(zone.line_width_mm || 0.3);
-  const marginMm = Number(zone.margin_mm || 0);
+  let x1Mm =
+    Number(zone.x1_mm || 0);
 
-  if (x1Mm === x2Mm && y1Mm === y2Mm) {
+  let y1Mm =
+    Number(zone.y1_mm || 0);
+
+  let x2Mm =
+    Number(zone.x2_mm || 0);
+
+  let y2Mm =
+    Number(zone.y2_mm || 0);
+
+  const lineWidthMm =
+    Number(
+      zone.line_width_mm ||
+      0.3
+    );
+
+  const marginMm =
+    Number(zone.margin_mm || 0);
+
+  if (
+    x1Mm === x2Mm &&
+    y1Mm === y2Mm
+  ) {
     return null;
   }
 
-  const deltaXmm = Math.abs(x2Mm - x1Mm);
-  const deltaYmm = Math.abs(y2Mm - y1Mm);
+  const deltaXmm =
+    Math.abs(
+      x2Mm -
+      x1Mm
+    );
+
+  const deltaYmm =
+    Math.abs(
+      y2Mm -
+      y1Mm
+    );
 
   if (deltaYmm <= 0.01) {
-    const centerYmm = (y1Mm + y2Mm) / 2;
+    const centerYmm =
+      (
+        y1Mm +
+        y2Mm
+      ) / 2;
+
     x1Mm = 0;
     x2Mm = widthMm;
     y1Mm = centerYmm;
     y2Mm = centerYmm;
   } else if (deltaXmm <= 0.01) {
-    const centerXmm = (x1Mm + x2Mm) / 2;
+    const centerXmm =
+      (
+        x1Mm +
+        x2Mm
+      ) / 2;
+
     x1Mm = centerXmm;
     x2Mm = centerXmm;
     y1Mm = 0;
     y2Mm = heightMm;
   }
 
-  const pxPerMmX = canvasWidth / widthMm;
-  const pxPerMmY = canvasHeight / heightMm;
-  const averagePxPerMm = (pxPerMmX + pxPerMmY) / 2;
+  const pxPerMmX =
+    canvasWidth /
+    widthMm;
+
+  const pxPerMmY =
+    canvasHeight /
+    heightMm;
+
+  const averagePxPerMm =
+    (
+      pxPerMmX +
+      pxPerMmY
+    ) / 2;
 
   return {
-    x1: x1Mm * pxPerMmX,
-    y1: y1Mm * pxPerMmY,
-    x2: x2Mm * pxPerMmX,
-    y2: y2Mm * pxPerMmY,
-    lineWidth: Math.max(1, lineWidthMm * averagePxPerMm),
-    safeWidth: Math.max(3, (lineWidthMm + marginMm * 2) * averagePxPerMm),
-    safeRadius: Math.max(1.5, ((lineWidthMm / 2) + marginMm) * averagePxPerMm),
+    x1:
+      x1Mm *
+      pxPerMmX,
+
+    y1:
+      y1Mm *
+      pxPerMmY,
+
+    x2:
+      x2Mm *
+      pxPerMmX,
+
+    y2:
+      y2Mm *
+      pxPerMmY,
+
+    lineWidth:
+      Math.max(
+        1,
+        lineWidthMm *
+        averagePxPerMm
+      ),
+
+    safeWidth:
+      Math.max(
+        3,
+        (
+          lineWidthMm +
+          marginMm * 2
+        ) *
+        averagePxPerMm
+      ),
+
+    safeRadius:
+      Math.max(
+        1.5,
+        (
+          lineWidthMm /
+          2 +
+          marginMm
+        ) *
+        averagePxPerMm
+      ),
   };
 }
 
@@ -1338,7 +2810,8 @@ function restoreCanvasStateOrDefault(
 ) {
   const redrawAfterRestore = () => {
     canvas.backgroundImage = null;
-    canvas.backgroundColor = fabricBackgroundColor;
+    canvas.backgroundColor =
+      fabricBackgroundColor;
 
     redrawGuides(
       canvas,
@@ -1350,47 +2823,84 @@ function restoreCanvasStateOrDefault(
     );
 
     restoreFabricImageUploadMeta(canvas);
-    updateFabricImageDpiWarning(canvas, activePers, product);
+
+    updateFabricImageDpiWarning(
+      canvas,
+      activePers,
+      product
+    );
+
     updateLayerPanel();
     canvas.renderAll();
   };
 
   if (savedState?.fabricJSON) {
     try {
-      const fabricState = typeof savedState.fabricJSON === 'string'
-        ? JSON.parse(savedState.fabricJSON)
-        : { ...savedState.fabricJSON };
+      const fabricState =
+        typeof savedState.fabricJSON === 'string'
+          ? JSON.parse(
+            savedState.fabricJSON
+          )
+          : {
+            ...savedState.fabricJSON,
+          };
 
       delete fabricState.backgroundImage;
-      fabricState.background = fabricBackgroundColor;
 
-      canvas.loadFromJSON(fabricState, () => {
-        removeGuideObjects(canvas);
-        redrawAfterRestore();
-      });
+      fabricState.background =
+        fabricBackgroundColor;
+
+      canvas.loadFromJSON(
+        fabricState,
+        () => {
+          removeGuideObjects(canvas);
+          redrawAfterRestore();
+        }
+      );
 
       return;
     } catch (error) {
-      console.warn('Canvas state herstellen mislukt', error);
+      console.warn(
+        'Canvas state herstellen mislukt',
+        error
+      );
     }
   }
 
-  addDefaultText(canvas, canvasHeight);
+  addDefaultText(
+    canvas,
+    canvasHeight
+  );
+
   redrawAfterRestore();
 }
 
-function addDefaultText(canvas, canvasHeight) {
-  const selectedFont = document.getElementById('font-select')?.value || 'Georgia';
+function addDefaultText(
+  canvas,
+  canvasHeight
+) {
+  const selectedFont =
+    document
+      .getElementById('font-select')
+      ?.value ||
+    'Georgia';
 
-  const demo = new fabric.IText('Jouw bedrijfsnaam', {
-    left: 60,
-    top: Math.round(canvasHeight * 0.65),
-    fontSize: 18,
-    fill: '#ffffff',
-    fontFamily: selectedFont,
-    editable: true,
-    opacity: 0.9,
-  });
+  const demo =
+    new fabric.IText(
+      'Jouw bedrijfsnaam',
+      {
+        left: 60,
+        top:
+          Math.round(
+            canvasHeight * 0.65
+          ),
+        fontSize: 18,
+        fill: '#ffffff',
+        fontFamily: selectedFont,
+        editable: true,
+        opacity: 0.9,
+      }
+    );
 
   canvas.add(demo);
   canvas.renderAll();
@@ -1399,9 +2909,11 @@ function addDefaultText(canvas, canvasHeight) {
 }
 
 function isCenterSnappableObject(object) {
-  return object &&
+  return Boolean(
+    object &&
     object.type === 'image' &&
-    !isGuideObject(object);
+    !isGuideObject(object)
+  );
 }
 
 function getCanvasCenterPoint(canvas) {
@@ -1412,66 +2924,133 @@ function getCanvasCenterPoint(canvas) {
 }
 
 function getCenterSnapThreshold(canvas) {
-  const zoom = typeof canvas.getZoom === 'function' ? canvas.getZoom() || 1 : 1;
+  const zoom =
+    typeof canvas.getZoom === 'function'
+      ? canvas.getZoom() || 1
+      : 1;
 
-  return CENTER_SNAP_THRESHOLD_PX / zoom;
+  return (
+    CENTER_SNAP_THRESHOLD_PX /
+    zoom
+  );
 }
 
-function applyCenterSnap(canvas, object) {
-  if (!canvas || !isCenterSnappableObject(object)) {
+function applyCenterSnap(
+  canvas,
+  object
+) {
+  if (
+    !canvas ||
+    !isCenterSnappableObject(object)
+  ) {
     removeCenterSnapGuides(canvas);
     return;
   }
 
-  const canvasCenter = getCanvasCenterPoint(canvas);
-  const objectCenter = object.getCenterPoint();
-  const threshold = getCenterSnapThreshold(canvas);
+  const canvasCenter =
+    getCanvasCenterPoint(canvas);
 
-  const shouldSnapX = Math.abs(objectCenter.x - canvasCenter.x) <= threshold;
-  const shouldSnapY = Math.abs(objectCenter.y - canvasCenter.y) <= threshold;
+  const objectCenter =
+    object.getCenterPoint();
 
-  if (!shouldSnapX && !shouldSnapY) {
+  const threshold =
+    getCenterSnapThreshold(canvas);
+
+  const shouldSnapX =
+    Math.abs(
+      objectCenter.x -
+      canvasCenter.x
+    ) <= threshold;
+
+  const shouldSnapY =
+    Math.abs(
+      objectCenter.y -
+      canvasCenter.y
+    ) <= threshold;
+
+  if (
+    !shouldSnapX &&
+    !shouldSnapY
+  ) {
     removeCenterSnapGuides(canvas);
     return;
   }
 
-  const snappedCenter = new fabric.Point(
-    shouldSnapX ? canvasCenter.x : objectCenter.x,
-    shouldSnapY ? canvasCenter.y : objectCenter.y
+  const snappedCenter =
+    new fabric.Point(
+      shouldSnapX
+        ? canvasCenter.x
+        : objectCenter.x,
+
+      shouldSnapY
+        ? canvasCenter.y
+        : objectCenter.y
+    );
+
+  object.setPositionByOrigin(
+    snappedCenter,
+    'center',
+    'center'
   );
 
-  object.setPositionByOrigin(snappedCenter, 'center', 'center');
   object.setCoords();
 
-  renderCenterSnapGuides(canvas, {
-    showVertical: shouldSnapX,
-    showHorizontal: shouldSnapY,
-  });
+  renderCenterSnapGuides(
+    canvas,
+    {
+      showVertical: shouldSnapX,
+      showHorizontal: shouldSnapY,
+    }
+  );
 }
 
-function renderCenterSnapGuides(canvas, { showVertical, showHorizontal }) {
+function renderCenterSnapGuides(
+  canvas,
+  {
+    showVertical,
+    showHorizontal,
+  }
+) {
   if (!canvas) {
     return;
   }
 
   removeCenterSnapGuides(canvas);
 
-  const centerX = canvas.getWidth() / 2;
-  const centerY = canvas.getHeight() / 2;
+  const centerX =
+    canvas.getWidth() / 2;
+
+  const centerY =
+    canvas.getHeight() / 2;
+
   const guideObjects = [];
 
   if (showVertical) {
-    guideObjects.push(new fabric.Line(
-      [centerX, 0, centerX, canvas.getHeight()],
-      getCenterGuideObjectOptions()
-    ));
+    guideObjects.push(
+      new fabric.Line(
+        [
+          centerX,
+          0,
+          centerX,
+          canvas.getHeight(),
+        ],
+        getCenterGuideObjectOptions()
+      )
+    );
   }
 
   if (showHorizontal) {
-    guideObjects.push(new fabric.Line(
-      [0, centerY, canvas.getWidth(), centerY],
-      getCenterGuideObjectOptions()
-    ));
+    guideObjects.push(
+      new fabric.Line(
+        [
+          0,
+          centerY,
+          canvas.getWidth(),
+          centerY,
+        ],
+        getCenterGuideObjectOptions()
+      )
+    );
   }
 
   guideObjects.forEach(guide => {
@@ -1479,15 +3058,19 @@ function renderCenterSnapGuides(canvas, { showVertical, showHorizontal }) {
     guide.bringToFront();
   });
 
-  canvas._centerSnapGuides = guideObjects;
+  canvas._centerSnapGuides =
+    guideObjects;
+
   canvas.requestRenderAll();
 }
 
 function getCenterGuideObjectOptions() {
   return {
     stroke: CENTER_GUIDE_COLOR,
-    strokeWidth: CENTER_GUIDE_STROKE_WIDTH,
-    strokeDashArray: CENTER_GUIDE_DASH,
+    strokeWidth:
+      CENTER_GUIDE_STROKE_WIDTH,
+    strokeDashArray:
+      CENTER_GUIDE_DASH,
     selectable: false,
     evented: false,
     objectCaching: false,
@@ -1498,289 +3081,627 @@ function getCenterGuideObjectOptions() {
 }
 
 function removeCenterSnapGuides(canvas) {
-  if (!canvas || !Array.isArray(canvas._centerSnapGuides)) {
+  if (
+    !canvas ||
+    !Array.isArray(
+      canvas._centerSnapGuides
+    )
+  ) {
     return;
   }
 
-  canvas._centerSnapGuides.forEach(guide => {
-    if (canvas.getObjects().includes(guide)) {
-      canvas.remove(guide);
-    }
-  });
+  canvas
+    ._centerSnapGuides
+    .forEach(guide => {
+      if (
+        canvas
+          .getObjects()
+          .includes(guide)
+      ) {
+        canvas.remove(guide);
+      }
+    });
 
   canvas._centerSnapGuides = [];
   canvas.requestRenderAll();
 }
 
-function bindFabricEvents(canvas, margin, canvasWidth, canvasHeight, stateKey, activePers, product) {
+function bindFabricEvents(
+  canvas,
+  margin,
+  canvasWidth,
+  canvasHeight,
+  stateKey,
+  activePers,
+  product
+) {
   const checkMargin = object => {
-    if (!object || isGuideObject(object)) {
+    if (
+      !object ||
+      isGuideObject(object)
+    ) {
       return;
     }
 
-    const warning = document.getElementById('margin-warning');
+    const warning =
+      document.getElementById(
+        'margin-warning'
+      );
 
     if (!warning) {
       return;
     }
 
-    const outsideOuterMargin = isOutsideMargin(object, margin, canvasWidth, canvasHeight);
-    const overlapsBlockedZone = isObjectOverlappingBlockedZones(object, activePers, product, canvasWidth, canvasHeight);
-    const hasWarning = outsideOuterMargin || overlapsBlockedZone;
+    const outsideOuterMargin =
+      isOutsideMargin(
+        object,
+        margin,
+        canvasWidth,
+        canvasHeight
+      );
 
-    warning.textContent = overlapsBlockedZone
-      ? 'Object valt over uitsparing'
-      : 'Object buiten marge';
+    const overlapsBlockedZone =
+      isObjectOverlappingBlockedZones(
+        object,
+        activePers,
+        product,
+        canvasWidth,
+        canvasHeight
+      );
 
-    warning.style.display = hasWarning ? 'flex' : 'none';
-    redrawGuides(canvas, activePers, product, margin, canvasWidth, canvasHeight, hasWarning);
+    const hasWarning =
+      outsideOuterMargin ||
+      overlapsBlockedZone;
+
+    warning.textContent =
+      overlapsBlockedZone
+        ? 'Object valt over uitsparing'
+        : 'Object buiten marge';
+
+    warning.style.display =
+      hasWarning
+        ? 'flex'
+        : 'none';
+
+    redrawGuides(
+      canvas,
+      activePers,
+      product,
+      margin,
+      canvasWidth,
+      canvasHeight,
+      hasWarning
+    );
   };
 
-  canvas.on('object:moving', event => {
-    checkMargin(event.target);
-    applyCenterSnap(canvas, event.target);
-    bringGuidesToFront(canvas);
-  });
-
-  canvas.on('object:rotating', event => {
-    checkMargin(event.target);
-    removeCenterSnapGuides(canvas);
-    bringGuidesToFront(canvas);
-  });
-
-  canvas.on('object:scaling', event => {
-    checkMargin(event.target);
-    applyCenterSnap(canvas, event.target);
-    updateFabricImageDpiWarning(canvas, activePers, product);
-    bringGuidesToFront(canvas);
-  });
-
-  canvas.on('object:modified', event => {
-    removeCenterSnapGuides(canvas);
-    checkMargin(event.target);
-    updateFabricImageDpiWarning(canvas, activePers, product);
-    bringGuidesToFront(canvas);
-  });
-
-  canvas.on('text:changed', event => {
-    checkMargin(event.target);
-    fabricSaveHistory();
-    updateLayerPanel();
-    autoSaveCanvasState(stateKey);
-  });
-
-  canvas.on('object:moved', () => {
-    removeCenterSnapGuides(canvas);
-
-    const warning = document.getElementById('margin-warning');
-
-    if (warning) {
-      warning.style.display = 'none';
+  canvas.on(
+    'object:moving',
+    event => {
+      checkMargin(event.target);
+      applyCenterSnap(canvas, event.target);
+      bringGuidesToFront(canvas);
     }
+  );
 
-    redrawGuides(canvas, activePers, product, margin, canvasWidth, canvasHeight);
-    fabricSaveHistory();
-    autoSaveCanvasState(stateKey);
-  });
-
-  canvas.on('object:modified', () => {
-    removeCenterSnapGuides(canvas);
-    redrawGuides(canvas, activePers, product, margin, canvasWidth, canvasHeight);
-    fabricSaveHistory();
-    autoSaveCanvasState(stateKey);
-  });
-
-  canvas.on('selection:created', () => {
-    updateFabricStatus();
-    updateLayerPanel();
-    updateFabricImageDpiWarning(canvas, activePers, product);
-  });
-
-  canvas.on('selection:updated', () => {
-    updateFabricStatus();
-    updateLayerPanel();
-    updateFabricImageDpiWarning(canvas, activePers, product);
-  });
-
-  canvas.on('selection:cleared', () => {
-    removeCenterSnapGuides(canvas);
-
-    const status = document.getElementById('status');
-
-    if (status) {
-      status.textContent = 'Selecteer een element om te bewerken. Klik en sleep om te verplaatsen.';
+  canvas.on(
+    'object:rotating',
+    event => {
+      checkMargin(event.target);
+      removeCenterSnapGuides(canvas);
+      bringGuidesToFront(canvas);
     }
+  );
 
-    updateLayerPanel();
-    updateFabricImageDpiWarning(canvas, activePers, product);
-  });
+  canvas.on(
+    'object:scaling',
+    event => {
+      checkMargin(event.target);
+      applyCenterSnap(canvas, event.target);
 
-  canvas.on('mouse:up', () => {
-    removeCenterSnapGuides(canvas);
-  });
+      updateFabricImageDpiWarning(
+        canvas,
+        activePers,
+        product
+      );
 
-  canvas.on('object:scaling', updateLayerPanel);
+      bringGuidesToFront(canvas);
+    }
+  );
+
+  canvas.on(
+    'object:modified',
+    event => {
+      removeCenterSnapGuides(canvas);
+      checkMargin(event.target);
+
+      updateFabricImageDpiWarning(
+        canvas,
+        activePers,
+        product
+      );
+
+      bringGuidesToFront(canvas);
+    }
+  );
+
+  canvas.on(
+    'text:changed',
+    event => {
+      checkMargin(event.target);
+      fabricSaveHistory();
+      updateLayerPanel();
+      autoSaveCanvasState(stateKey);
+    }
+  );
+
+  canvas.on(
+    'object:moved',
+    () => {
+      removeCenterSnapGuides(canvas);
+
+      const warning =
+        document.getElementById(
+          'margin-warning'
+        );
+
+      if (warning) {
+        warning.style.display = 'none';
+      }
+
+      redrawGuides(
+        canvas,
+        activePers,
+        product,
+        margin,
+        canvasWidth,
+        canvasHeight
+      );
+
+      fabricSaveHistory();
+      autoSaveCanvasState(stateKey);
+    }
+  );
+
+  canvas.on(
+    'object:modified',
+    () => {
+      removeCenterSnapGuides(canvas);
+
+      redrawGuides(
+        canvas,
+        activePers,
+        product,
+        margin,
+        canvasWidth,
+        canvasHeight
+      );
+
+      fabricSaveHistory();
+      autoSaveCanvasState(stateKey);
+    }
+  );
+
+  canvas.on(
+    'selection:created',
+    () => {
+      updateFabricStatus();
+      updateLayerPanel();
+
+      updateFabricImageDpiWarning(
+        canvas,
+        activePers,
+        product
+      );
+    }
+  );
+
+  canvas.on(
+    'selection:updated',
+    () => {
+      updateFabricStatus();
+      updateLayerPanel();
+
+      updateFabricImageDpiWarning(
+        canvas,
+        activePers,
+        product
+      );
+    }
+  );
+
+  canvas.on(
+    'selection:cleared',
+    () => {
+      removeCenterSnapGuides(canvas);
+
+      const status =
+        document.getElementById(
+          'status'
+        );
+
+      if (status) {
+        status.textContent =
+          'Selecteer een element om te bewerken. Klik en sleep om te verplaatsen.';
+      }
+
+      updateLayerPanel();
+
+      updateFabricImageDpiWarning(
+        canvas,
+        activePers,
+        product
+      );
+    }
+  );
+
+  canvas.on(
+    'mouse:up',
+    () => {
+      removeCenterSnapGuides(canvas);
+    }
+  );
+
+  canvas.on(
+    'object:scaling',
+    updateLayerPanel
+  );
 }
 
-function bindFabricButtons(canvas, margin, canvasWidth, canvasHeight, stateKey, activePers, product) {
-  document.getElementById('btn-logo')?.addEventListener('click', () => {
-    document.getElementById('file-input')?.click();
-  });
+function bindFabricButtons(
+  canvas,
+  margin,
+  canvasWidth,
+  canvasHeight,
+  stateKey,
+  activePers,
+  product
+) {
+  document
+    .getElementById('btn-logo')
+    ?.addEventListener('click', () => {
+      document
+        .getElementById('file-input')
+        ?.click();
+    });
 
-  document.getElementById('file-input')?.addEventListener('change', event => {
-    const file = event.target.files?.[0];
+  document
+    .getElementById('file-input')
+    ?.addEventListener(
+      'change',
+      event => {
+        const file =
+          event.target.files?.[0];
 
-    if (!file) {
-      return;
-    }
+        if (!file) {
+          return;
+        }
 
-    const reader = new FileReader();
+        const reader =
+          new FileReader();
 
-    reader.onload = readerEvent => {
-      fabric.Image.fromURL(readerEvent.target.result, image => {
-        const uploadMeta = createFabricImageUploadMeta(file, image);
+        reader.onload =
+          readerEvent => {
+            fabric.Image.fromURL(
+              readerEvent.target.result,
+              image => {
+                const uploadMeta =
+                  createFabricImageUploadMeta(
+                    file,
+                    image
+                  );
 
-        image.scaleToWidth(120);
-        image.set({
-          left: 140,
-          top: 140,
-          _uploadMeta: uploadMeta,
-        });
+                image.scaleToWidth(120);
 
-        canvas.add(image);
-        canvas.setActiveObject(image);
-        canvas.renderAll();
+                image.set({
+                  left: 140,
+                  top: 140,
+                  _uploadMeta: uploadMeta,
+                });
 
-        updateFabricImageDpiWarning(canvas, activePers, product, image);
+                canvas.add(image);
+                canvas.setActiveObject(image);
+                canvas.renderAll();
+
+                updateFabricImageDpiWarning(
+                  canvas,
+                  activePers,
+                  product,
+                  image
+                );
+
+                fabricSaveHistory();
+                updateLayerPanel();
+                autoSaveCanvasState(stateKey);
+              }
+            );
+          };
+
+        reader.readAsDataURL(file);
+        event.target.value = '';
+      }
+    );
+
+  document
+    .getElementById('btn-text')
+    ?.addEventListener('click', () => {
+      const text =
+        new fabric.IText(
+          'Dubbelklik om tekst te bewerken',
+          {
+            left: 100,
+            top: 160,
+            fontSize: 20,
+            fill: fabricActiveColor,
+            fontFamily:
+              document
+                .getElementById('font-select')
+                ?.value ||
+              'Georgia',
+            editable: true,
+          }
+        );
+
+      canvas.add(text);
+      canvas.setActiveObject(text);
+      canvas.renderAll();
+
+      syncFontSizeControls(text);
+      fabricSaveHistory();
+      updateLayerPanel();
+      autoSaveCanvasState(stateKey);
+    });
+
+  document
+    .getElementById('btn-delete')
+    ?.addEventListener('click', () => {
+      const object =
+        canvas.getActiveObject();
+
+      if (
+        object &&
+        !isGuideObject(object)
+      ) {
+        canvas.remove(object);
+
+        updateFabricImageDpiWarning(
+          canvas,
+          activePers,
+          product
+        );
+
         fabricSaveHistory();
         updateLayerPanel();
         autoSaveCanvasState(stateKey);
-      });
-    };
-
-    reader.readAsDataURL(file);
-    event.target.value = '';
-  });
-
-  document.getElementById('btn-text')?.addEventListener('click', () => {
-    const text = new fabric.IText('Dubbelklik om tekst te bewerken', {
-      left: 100,
-      top: 160,
-      fontSize: 20,
-      fill: fabricActiveColor,
-      fontFamily: document.getElementById('font-select')?.value || 'Georgia',
-      editable: true,
+      }
     });
 
-    canvas.add(text);
-    canvas.setActiveObject(text);
-    canvas.renderAll();
+  document
+    .getElementById('btn-front')
+    ?.addEventListener('click', () => {
+      const object =
+        canvas.getActiveObject();
 
-    syncFontSizeControls(text);
-    fabricSaveHistory();
-    updateLayerPanel();
-    autoSaveCanvasState(stateKey);
-  });
+      if (
+        object &&
+        !isGuideObject(object)
+      ) {
+        canvas.bringToFront(object);
 
-  document.getElementById('btn-delete')?.addEventListener('click', () => {
-    const object = canvas.getActiveObject();
+        redrawGuides(
+          canvas,
+          activePers,
+          product,
+          margin,
+          canvasWidth,
+          canvasHeight
+        );
 
-    if (object && !isGuideObject(object)) {
-      canvas.remove(object);
-      updateFabricImageDpiWarning(canvas, activePers, product);
-      fabricSaveHistory();
-      updateLayerPanel();
-      autoSaveCanvasState(stateKey);
-    }
-  });
-
-  document.getElementById('btn-front')?.addEventListener('click', () => {
-    const object = canvas.getActiveObject();
-
-    if (object && !isGuideObject(object)) {
-      canvas.bringToFront(object);
-      redrawGuides(canvas, activePers, product, margin, canvasWidth, canvasHeight);
-      fabricSaveHistory();
-      updateLayerPanel();
-      autoSaveCanvasState(stateKey);
-    }
-  });
-
-  document.getElementById('btn-back')?.addEventListener('click', () => {
-    const object = canvas.getActiveObject();
-
-    if (object && !isGuideObject(object)) {
-      canvas.sendBackwards(object);
-      redrawGuides(canvas, activePers, product, margin, canvasWidth, canvasHeight);
-      fabricSaveHistory();
-      updateLayerPanel();
-      autoSaveCanvasState(stateKey);
-    }
-  });
-
-  document.getElementById('btn-undo')?.addEventListener('click', () => {
-    if (fabricHistory.length <= 1) {
-      return;
-    }
-
-    fabricHistory.pop();
-
-    canvas.loadFromJSON(fabricHistory[fabricHistory.length - 1], () => {
-      restoreFabricImageUploadMeta(canvas);
-      redrawGuides(canvas, activePers, product, margin, canvasWidth, canvasHeight);
-      updateFabricImageDpiWarning(canvas, activePers, product);
-      updateLayerPanel();
-      autoSaveCanvasState(stateKey);
+        fabricSaveHistory();
+        updateLayerPanel();
+        autoSaveCanvasState(stateKey);
+      }
     });
-  });
 
-  document.getElementById('btn-clear')?.addEventListener('click', () => {
-    canvas.clear();
-    canvas.backgroundColor = fabricBackgroundColor;
+  document
+    .getElementById('btn-back')
+    ?.addEventListener('click', () => {
+      const object =
+        canvas.getActiveObject();
 
-    redrawGuides(canvas, activePers, product, margin, canvasWidth, canvasHeight);
-    updateFabricImageDpiWarning(canvas, activePers, product);
+      if (
+        object &&
+        !isGuideObject(object)
+      ) {
+        canvas.sendBackwards(object);
 
-    fabricSaveHistory();
-    updateLayerPanel();
-    clearDesignState(stateKey);
-  });
+        redrawGuides(
+          canvas,
+          activePers,
+          product,
+          margin,
+          canvasWidth,
+          canvasHeight
+        );
 
-  bindFontSelector(canvas, stateKey);
-  bindFontSizeControl(canvas, stateKey);
-  bindLayerDragAndDrop(canvas, stateKey);
+        fabricSaveHistory();
+        updateLayerPanel();
+        autoSaveCanvasState(stateKey);
+      }
+    });
+
+  document
+    .getElementById('btn-undo')
+    ?.addEventListener('click', () => {
+      if (fabricHistory.length <= 1) {
+        return;
+      }
+
+      fabricHistory.pop();
+
+      canvas.loadFromJSON(
+        fabricHistory[
+        fabricHistory.length - 1
+        ],
+        () => {
+          restoreFabricImageUploadMeta(
+            canvas
+          );
+
+          redrawGuides(
+            canvas,
+            activePers,
+            product,
+            margin,
+            canvasWidth,
+            canvasHeight
+          );
+
+          updateFabricImageDpiWarning(
+            canvas,
+            activePers,
+            product
+          );
+
+          updateLayerPanel();
+          autoSaveCanvasState(stateKey);
+        }
+      );
+    });
+
+  document
+    .getElementById('btn-clear')
+    ?.addEventListener('click', () => {
+      canvas.clear();
+      canvas.backgroundColor =
+        fabricBackgroundColor;
+
+      redrawGuides(
+        canvas,
+        activePers,
+        product,
+        margin,
+        canvasWidth,
+        canvasHeight
+      );
+
+      updateFabricImageDpiWarning(
+        canvas,
+        activePers,
+        product
+      );
+
+      fabricSaveHistory();
+      updateLayerPanel();
+      clearDesignState(stateKey);
+    });
+
+  bindFontSelector(
+    canvas,
+    stateKey
+  );
+
+  bindFontSizeControl(
+    canvas,
+    stateKey
+  );
+
+  bindLayerDragAndDrop(
+    canvas,
+    stateKey
+  );
 }
 
-function createFabricImageUploadMeta(file, image) {
+function createFabricImageUploadMeta(
+  file,
+  image
+) {
   return {
-    fileName: file?.name || 'Afbeelding',
-    fileType: file?.type || getFileTypeFromName(file?.name || ''),
-    widthPx: Number(image?.width || image?._element?.naturalWidth || 0),
-    heightPx: Number(image?.height || image?._element?.naturalHeight || 0),
+    fileName:
+      file?.name ||
+      'Afbeelding',
+
+    fileType:
+      file?.type ||
+      getFileTypeFromName(
+        file?.name ||
+        ''
+      ),
+
+    widthPx:
+      Number(
+        image?.width ||
+        image?._element?.naturalWidth ||
+        0
+      ),
+
+    heightPx:
+      Number(
+        image?.height ||
+        image?._element?.naturalHeight ||
+        0
+      ),
   };
 }
 
 function restoreFabricImageUploadMeta(canvas) {
-  canvas.getObjects()
-    .filter(object => object.type === 'image' && object._uploadMeta)
+  canvas
+    .getObjects()
+    .filter(object => {
+      return (
+        object.type === 'image' &&
+        object._uploadMeta
+      );
+    })
     .forEach(object => {
       object._uploadMeta = {
-        fileName: object._uploadMeta.fileName || 'Afbeelding',
-        fileType: object._uploadMeta.fileType || '',
-        widthPx: Number(object._uploadMeta.widthPx || object.width || 0),
-        heightPx: Number(object._uploadMeta.heightPx || object.height || 0),
+        fileName:
+          object._uploadMeta.fileName ||
+          'Afbeelding',
+
+        fileType:
+          object._uploadMeta.fileType ||
+          '',
+
+        widthPx:
+          Number(
+            object._uploadMeta.widthPx ||
+            object.width ||
+            0
+          ),
+
+        heightPx:
+          Number(
+            object._uploadMeta.heightPx ||
+            object.height ||
+            0
+          ),
       };
     });
 }
 
-function updateFabricImageDpiWarning(canvas, activePers, product, preferredObject = null) {
-  const warningElement = document.getElementById('fabric-image-dpi-warning');
+function updateFabricImageDpiWarning(
+  canvas,
+  activePers,
+  product,
+  preferredObject = null
+) {
+  const warningElement =
+    document.getElementById(
+      'fabric-image-dpi-warning'
+    );
 
-  if (!warningElement || !canvas) {
+  if (
+    !warningElement ||
+    !canvas
+  ) {
     return;
   }
 
-  const imageObject = getSelectedFabricImageForDpiWarning(canvas, preferredObject);
+  const imageObject =
+    getSelectedFabricImageForDpiWarning(
+      canvas,
+      preferredObject
+    );
 
   if (!imageObject) {
     warningElement.style.display = 'none';
@@ -1788,7 +3709,13 @@ function updateFabricImageDpiWarning(canvas, activePers, product, preferredObjec
     return;
   }
 
-  const warning = getFabricImageDpiWarningForCanvas(imageObject, canvas, activePers, product);
+  const warning =
+    getFabricImageDpiWarningForCanvas(
+      imageObject,
+      canvas,
+      activePers,
+      product
+    );
 
   if (!warning) {
     warningElement.style.display = 'none';
@@ -1796,255 +3723,728 @@ function updateFabricImageDpiWarning(canvas, activePers, product, preferredObjec
     return;
   }
 
-  const isError = warning.level === 'error';
+  const isError =
+    warning.level === 'error';
 
   warningElement.style.display = 'block';
-  warningElement.style.background = isError ? '#FCE8E3' : '#FFF3D8';
-  warningElement.style.color = isError ? '#C0392B' : '#8A681E';
-  warningElement.style.border = isError ? '1px solid #F3B7A8' : '1px solid #E6C46A';
-  warningElement.textContent = warning.message;
+
+  warningElement.style.background =
+    isError
+      ? '#FCE8E3'
+      : '#FFF3D8';
+
+  warningElement.style.color =
+    isError
+      ? '#C0392B'
+      : '#8A681E';
+
+  warningElement.style.border =
+    isError
+      ? '1px solid #F3B7A8'
+      : '1px solid #E6C46A';
+
+  warningElement.textContent =
+    warning.message;
 }
 
-function getSelectedFabricImageForDpiWarning(canvas, preferredObject = null) {
-  if (preferredObject?.type === 'image' && preferredObject._uploadMeta && !isGuideObject(preferredObject)) {
+function getSelectedFabricImageForDpiWarning(
+  canvas,
+  preferredObject = null
+) {
+  if (
+    preferredObject?.type === 'image' &&
+    preferredObject._uploadMeta &&
+    !isGuideObject(preferredObject)
+  ) {
     return preferredObject;
   }
 
-  const activeObject = canvas.getActiveObject();
+  const activeObject =
+    canvas.getActiveObject();
 
-  if (!activeObject || isGuideObject(activeObject)) {
+  if (
+    !activeObject ||
+    isGuideObject(activeObject)
+  ) {
     return null;
   }
 
-  if (activeObject.type === 'image' && activeObject._uploadMeta) {
+  if (
+    activeObject.type === 'image' &&
+    activeObject._uploadMeta
+  ) {
     return activeObject;
   }
 
-  if (activeObject.type === 'activeSelection' && typeof activeObject.getObjects === 'function') {
-    return activeObject.getObjects()
-      .find(object => object.type === 'image' && object._uploadMeta && !isGuideObject(object)) || null;
+  if (
+    activeObject.type === 'activeSelection' &&
+    typeof activeObject.getObjects === 'function'
+  ) {
+    return (
+      activeObject
+        .getObjects()
+        .find(object => {
+          return (
+            object.type === 'image' &&
+            object._uploadMeta &&
+            !isGuideObject(object)
+          );
+        }) ||
+      null
+    );
   }
 
   return null;
 }
 
-function getFabricImageDpiWarnings(canvas, activePers, product) {
+function getFabricImageDpiWarnings(
+  canvas,
+  activePers,
+  product
+) {
   if (!canvas) {
     return [];
   }
 
-  return canvas.getObjects()
-    .filter(object => object.type === 'image' && !isGuideObject(object) && object._uploadMeta)
-    .map(object => getFabricImageDpiWarningForCanvas(object, canvas, activePers, product))
+  return canvas
+    .getObjects()
+    .filter(object => {
+      return (
+        object.type === 'image' &&
+        !isGuideObject(object) &&
+        object._uploadMeta
+      );
+    })
+    .map(object => {
+      return getFabricImageDpiWarningForCanvas(
+        object,
+        canvas,
+        activePers,
+        product
+      );
+    })
     .filter(Boolean);
 }
 
-function getFabricImageDpiWarningForCanvas(object, canvas, activePers, product) {
-  const canvasWidth = canvas.getWidth();
-  const canvasHeight = canvas.getHeight();
-  const widthMm = Number(activePers?.width_mm || product?.width_mm || 0);
-  const heightMm = Number(activePers?.height_mm || product?.height_mm || 0);
+function getFabricImageDpiWarningForCanvas(
+  object,
+  canvas,
+  activePers,
+  product
+) {
+  const canvasWidth =
+    canvas.getWidth();
 
-  if (!canvasWidth || !canvasHeight || !widthMm || !heightMm) {
+  const canvasHeight =
+    canvas.getHeight();
+
+  const widthMm =
+    Number(
+      activePers?.width_mm ||
+      product?.width_mm ||
+      0
+    );
+
+  const heightMm =
+    Number(
+      activePers?.height_mm ||
+      product?.height_mm ||
+      0
+    );
+
+  if (
+    !canvasWidth ||
+    !canvasHeight ||
+    !widthMm ||
+    !heightMm
+  ) {
     return null;
   }
 
-  return getFabricImageDpiWarning(object, canvasWidth, canvasHeight, widthMm, heightMm);
+  return getFabricImageDpiWarning(
+    object,
+    canvasWidth,
+    canvasHeight,
+    widthMm,
+    heightMm
+  );
 }
 
-function getFabricImageDpiWarning(object, canvasWidth, canvasHeight, widthMm, heightMm) {
-  const meta = object._uploadMeta || {};
-  const sourceWidthPx = Number(meta.widthPx || 0);
-  const sourceHeightPx = Number(meta.heightPx || 0);
+function getFabricImageDpiWarning(
+  object,
+  canvasWidth,
+  canvasHeight,
+  widthMm,
+  heightMm
+) {
+  const meta =
+    object._uploadMeta ||
+    {};
 
-  if (!sourceWidthPx || !sourceHeightPx) {
+  const sourceWidthPx =
+    Number(
+      meta.widthPx ||
+      0
+    );
+
+  const sourceHeightPx =
+    Number(
+      meta.heightPx ||
+      0
+    );
+
+  if (
+    !sourceWidthPx ||
+    !sourceHeightPx
+  ) {
     return null;
   }
 
-  const bounds = object.getBoundingRect(true, true);
-  const placedWidthMm = (bounds.width / canvasWidth) * widthMm;
-  const placedHeightMm = (bounds.height / canvasHeight) * heightMm;
+  const bounds =
+    object.getBoundingRect(
+      true,
+      true
+    );
 
-  if (!placedWidthMm || !placedHeightMm) {
+  const placedWidthMm =
+    (
+      bounds.width /
+      canvasWidth
+    ) *
+    widthMm;
+
+  const placedHeightMm =
+    (
+      bounds.height /
+      canvasHeight
+    ) *
+    heightMm;
+
+  if (
+    !placedWidthMm ||
+    !placedHeightMm
+  ) {
     return null;
   }
 
-  const dpiX = Math.round((sourceWidthPx / placedWidthMm) * 25.4);
-  const dpiY = Math.round((sourceHeightPx / placedHeightMm) * 25.4);
-  const dpi = Math.min(dpiX, dpiY);
-  const fileName = meta.fileName || 'afbeelding';
+  const dpiX =
+    Math.round(
+      (
+        sourceWidthPx /
+        placedWidthMm
+      ) *
+      25.4
+    );
+
+  const dpiY =
+    Math.round(
+      (
+        sourceHeightPx /
+        placedHeightMm
+      ) *
+      25.4
+    );
+
+  const dpi =
+    Math.min(
+      dpiX,
+      dpiY
+    );
+
+  const fileName =
+    meta.fileName ||
+    'afbeelding';
 
   if (dpi < IMAGE_DPI_MINIMUM) {
     return {
-      type: 'fabric-image-resolution-low',
+      type:
+        'fabric-image-resolution-low',
+
       level: 'error',
+
       fileName,
       dpi,
-      message: `Waarschuwing: "${fileName}" lijkt te laag in resolutie voor drukwerk (${dpi} DPI). Gebruik een groter bestand of verklein de afbeelding in het ontwerp.`,
+
+      message:
+        `Waarschuwing: "${fileName}" lijkt te laag in resolutie voor drukwerk (${dpi} DPI). Gebruik een groter bestand of verklein de afbeelding in het ontwerp.`,
     };
   }
 
   if (dpi < IMAGE_DPI_RECOMMENDED) {
     return {
-      type: 'fabric-image-resolution-warning',
+      type:
+        'fabric-image-resolution-warning',
+
       level: 'warning',
+
       fileName,
       dpi,
-      message: `Let op: "${fileName}" is lager dan de aanbevolen 300 DPI (${dpi} DPI). Gebruik bij voorkeur een hogere resolutie of maak de afbeelding kleiner.`,
+
+      message:
+        `Let op: "${fileName}" is lager dan de aanbevolen 300 DPI (${dpi} DPI). Gebruik bij voorkeur een hogere resolutie of maak de afbeelding kleiner.`,
     };
   }
 
   return null;
 }
 
-function isOutsideMargin(object, margin, canvasWidth, canvasHeight) {
-  const bounds = object.getBoundingRect(true, true);
+function isOutsideMargin(
+  object,
+  margin,
+  canvasWidth,
+  canvasHeight
+) {
+  const bounds =
+    object.getBoundingRect(
+      true,
+      true
+    );
 
-  return bounds.left < margin ||
+  return (
+    bounds.left < margin ||
     bounds.top < margin ||
-    bounds.left + bounds.width > canvasWidth - margin ||
-    bounds.top + bounds.height > canvasHeight - margin;
+    bounds.left + bounds.width >
+    canvasWidth - margin ||
+    bounds.top + bounds.height >
+    canvasHeight - margin
+  );
 }
 
-function isObjectOverlappingBlockedZones(object, activePers, product, canvasWidth, canvasHeight) {
-  if (!object || isGuideObject(object)) {
+function isObjectOverlappingBlockedZones(
+  object,
+  activePers,
+  product,
+  canvasWidth,
+  canvasHeight
+) {
+  if (
+    !object ||
+    isGuideObject(object)
+  ) {
     return false;
   }
 
-  const zones = Array.isArray(activePers?.blockedZones) ? activePers.blockedZones : [];
+  const zones =
+    Array.isArray(activePers?.blockedZones)
+      ? activePers.blockedZones
+      : [];
 
   if (!zones.length) {
     return false;
   }
 
-  const bounds = object.getBoundingRect(true, true);
+  const bounds =
+    object.getBoundingRect(
+      true,
+      true
+    );
 
   return zones.some(zone => {
     if (zone.type === 'circle') {
-      const circleData = getBlockedCircleCanvasData(zone, activePers, product, canvasWidth, canvasHeight);
+      const circleData =
+        getBlockedCircleCanvasData(
+          zone,
+          activePers,
+          product,
+          canvasWidth,
+          canvasHeight
+        );
 
       if (!circleData) {
         return false;
       }
 
-      return isRectOverlappingCircle(bounds, circleData.cx, circleData.cy, circleData.safeRadius);
+      return isRectOverlappingCircle(
+        bounds,
+        circleData.cx,
+        circleData.cy,
+        circleData.safeRadius
+      );
     }
 
     if (zone.type === 'rect') {
-      const rectData = getBlockedRectCanvasData(zone, activePers, product, canvasWidth, canvasHeight);
+      const rectData =
+        getBlockedRectCanvasData(
+          zone,
+          activePers,
+          product,
+          canvasWidth,
+          canvasHeight
+        );
 
       if (!rectData) {
         return false;
       }
 
-      return isRectOverlappingRect(bounds, {
-        left: rectData.safeLeft,
-        top: rectData.safeTop,
-        width: rectData.safeWidth,
-        height: rectData.safeHeight,
-      });
+      return isRectOverlappingRect(
+        bounds,
+        {
+          left:
+            rectData.safeLeft,
+          top:
+            rectData.safeTop,
+          width:
+            rectData.safeWidth,
+          height:
+            rectData.safeHeight,
+        }
+      );
     }
 
     if (zone.type === 'line') {
-      const lineData = getBlockedLineCanvasData(zone, activePers, product, canvasWidth, canvasHeight);
+      const lineData =
+        getBlockedLineCanvasData(
+          zone,
+          activePers,
+          product,
+          canvasWidth,
+          canvasHeight
+        );
 
       if (!lineData) {
         return false;
       }
 
-      return isRectNearLine(bounds, lineData.x1, lineData.y1, lineData.x2, lineData.y2, lineData.safeRadius);
+      return isRectNearLine(
+        bounds,
+        lineData.x1,
+        lineData.y1,
+        lineData.x2,
+        lineData.y2,
+        lineData.safeRadius
+      );
     }
 
     return false;
   });
 }
 
-function isRectOverlappingCircle(rect, circleX, circleY, radius) {
-  const closestX = clamp(circleX, rect.left, rect.left + rect.width);
-  const closestY = clamp(circleY, rect.top, rect.top + rect.height);
+function isRectOverlappingCircle(
+  rect,
+  circleX,
+  circleY,
+  radius
+) {
+  const closestX =
+    clamp(
+      circleX,
+      rect.left,
+      rect.left + rect.width
+    );
 
-  const distanceX = circleX - closestX;
-  const distanceY = circleY - closestY;
+  const closestY =
+    clamp(
+      circleY,
+      rect.top,
+      rect.top + rect.height
+    );
 
-  return (distanceX * distanceX + distanceY * distanceY) <= radius * radius;
+  const distanceX =
+    circleX -
+    closestX;
+
+  const distanceY =
+    circleY -
+    closestY;
+
+  return (
+    distanceX * distanceX +
+    distanceY * distanceY
+  ) <= radius * radius;
 }
 
-function isRectOverlappingRect(rectA, rectB) {
-  return rectA.left < rectB.left + rectB.width &&
-    rectA.left + rectA.width > rectB.left &&
-    rectA.top < rectB.top + rectB.height &&
-    rectA.top + rectA.height > rectB.top;
+function isRectOverlappingRect(
+  rectA,
+  rectB
+) {
+  return (
+    rectA.left <
+    rectB.left + rectB.width &&
+    rectA.left + rectA.width >
+    rectB.left &&
+    rectA.top <
+    rectB.top + rectB.height &&
+    rectA.top + rectA.height >
+    rectB.top
+  );
 }
 
-function isRectNearLine(rect, x1, y1, x2, y2, radius) {
+function isRectNearLine(
+  rect,
+  x1,
+  y1,
+  x2,
+  y2,
+  radius
+) {
   const expandedRect = {
-    left: rect.left - radius,
-    top: rect.top - radius,
-    right: rect.left + rect.width + radius,
-    bottom: rect.top + rect.height + radius,
+    left:
+      rect.left -
+      radius,
+
+    top:
+      rect.top -
+      radius,
+
+    right:
+      rect.left +
+      rect.width +
+      radius,
+
+    bottom:
+      rect.top +
+      rect.height +
+      radius,
   };
 
   if (
-    (x1 >= expandedRect.left && x1 <= expandedRect.right && y1 >= expandedRect.top && y1 <= expandedRect.bottom) ||
-    (x2 >= expandedRect.left && x2 <= expandedRect.right && y2 >= expandedRect.top && y2 <= expandedRect.bottom)
+    (
+      x1 >= expandedRect.left &&
+      x1 <= expandedRect.right &&
+      y1 >= expandedRect.top &&
+      y1 <= expandedRect.bottom
+    ) ||
+    (
+      x2 >= expandedRect.left &&
+      x2 <= expandedRect.right &&
+      y2 >= expandedRect.top &&
+      y2 <= expandedRect.bottom
+    )
   ) {
     return true;
   }
 
   const rectLines = [
-    [expandedRect.left, expandedRect.top, expandedRect.right, expandedRect.top],
-    [expandedRect.right, expandedRect.top, expandedRect.right, expandedRect.bottom],
-    [expandedRect.right, expandedRect.bottom, expandedRect.left, expandedRect.bottom],
-    [expandedRect.left, expandedRect.bottom, expandedRect.left, expandedRect.top],
+    [
+      expandedRect.left,
+      expandedRect.top,
+      expandedRect.right,
+      expandedRect.top,
+    ],
+    [
+      expandedRect.right,
+      expandedRect.top,
+      expandedRect.right,
+      expandedRect.bottom,
+    ],
+    [
+      expandedRect.right,
+      expandedRect.bottom,
+      expandedRect.left,
+      expandedRect.bottom,
+    ],
+    [
+      expandedRect.left,
+      expandedRect.bottom,
+      expandedRect.left,
+      expandedRect.top,
+    ],
   ];
 
-  return rectLines.some(([rx1, ry1, rx2, ry2]) =>
-    doLineSegmentsIntersect(x1, y1, x2, y2, rx1, ry1, rx2, ry2)
+  return rectLines.some(
+    ([
+      rectX1,
+      rectY1,
+      rectX2,
+      rectY2,
+    ]) => (
+      doLineSegmentsIntersect(
+        x1,
+        y1,
+        x2,
+        y2,
+        rectX1,
+        rectY1,
+        rectX2,
+        rectY2
+      )
+    )
   );
 }
 
-function doLineSegmentsIntersect(x1, y1, x2, y2, x3, y3, x4, y4) {
-  const direction = (ax, ay, bx, by, cx, cy) => {
-    return (cx - ax) * (by - ay) - (cy - ay) * (bx - ax);
-  };
+function doLineSegmentsIntersect(
+  x1,
+  y1,
+  x2,
+  y2,
+  x3,
+  y3,
+  x4,
+  y4
+) {
+  const direction = (
+    pointAX,
+    pointAY,
+    pointBX,
+    pointBY,
+    pointCX,
+    pointCY
+  ) => (
+    (
+      pointCX -
+      pointAX
+    ) *
+    (
+      pointBY -
+      pointAY
+    ) -
+    (
+      pointCY -
+      pointAY
+    ) *
+    (
+      pointBX -
+      pointAX
+    )
+  );
 
-  const d1 = direction(x3, y3, x4, y4, x1, y1);
-  const d2 = direction(x3, y3, x4, y4, x2, y2);
-  const d3 = direction(x1, y1, x2, y2, x3, y3);
-  const d4 = direction(x1, y1, x2, y2, x4, y4);
+  const direction1 =
+    direction(
+      x3,
+      y3,
+      x4,
+      y4,
+      x1,
+      y1
+    );
 
-  return ((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) &&
-    ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0));
+  const direction2 =
+    direction(
+      x3,
+      y3,
+      x4,
+      y4,
+      x2,
+      y2
+    );
+
+  const direction3 =
+    direction(
+      x1,
+      y1,
+      x2,
+      y2,
+      x3,
+      y3
+    );
+
+  const direction4 =
+    direction(
+      x1,
+      y1,
+      x2,
+      y2,
+      x4,
+      y4
+    );
+
+  return (
+    (
+      (
+        direction1 > 0 &&
+        direction2 < 0
+      ) ||
+      (
+        direction1 < 0 &&
+        direction2 > 0
+      )
+    ) &&
+    (
+      (
+        direction3 > 0 &&
+        direction4 < 0
+      ) ||
+      (
+        direction3 < 0 &&
+        direction4 > 0
+      )
+    )
+  );
 }
 
 function clamp(value, min, max) {
-  return Math.min(Math.max(value, min), max);
+  return Math.min(
+    Math.max(value, min),
+    max
+  );
 }
 
-function collectCanvasPrepressWarnings(canvas, activePers, product) {
+function collectCanvasPrepressWarnings(
+  canvas,
+  activePers,
+  product
+) {
   if (!canvas) {
     return [];
   }
 
-  const state = window._currentDesignGuideState || {};
-  const canvasWidth = state.canvasWidth || canvas.getWidth();
-  const canvasHeight = state.canvasHeight || canvas.getHeight();
-  const margin = state.margin !== undefined
-    ? state.margin
-    : getFallbackCanvasMargin(activePers, product, canvasWidth);
+  const state =
+    window._currentDesignGuideState ||
+    {};
+
+  const canvasWidth =
+    state.canvasWidth ||
+    canvas.getWidth();
+
+  const canvasHeight =
+    state.canvasHeight ||
+    canvas.getHeight();
+
+  const margin =
+    state.margin !== undefined
+      ? state.margin
+      : getFallbackCanvasMargin(
+        activePers,
+        product,
+        canvasWidth
+      );
+
   const warnings = [];
-  const editableObjects = canvas.getObjects().filter(object => !isGuideObject(object));
-  const outsideMarginCount = editableObjects.filter(object => isOutsideMargin(object, margin, canvasWidth, canvasHeight)).length;
-  const blockedZoneCount = editableObjects.filter(object => isObjectOverlappingBlockedZones(object, activePers, product, canvasWidth, canvasHeight)).length;
-  const imageDpiWarnings = getFabricImageDpiWarnings(canvas, activePers, product);
+
+  const editableObjects =
+    canvas
+      .getObjects()
+      .filter(object => {
+        return !isGuideObject(object);
+      });
+
+  const outsideMarginCount =
+    editableObjects.filter(object => {
+      return isOutsideMargin(
+        object,
+        margin,
+        canvasWidth,
+        canvasHeight
+      );
+    }).length;
+
+  const blockedZoneCount =
+    editableObjects.filter(object => {
+      return isObjectOverlappingBlockedZones(
+        object,
+        activePers,
+        product,
+        canvasWidth,
+        canvasHeight
+      );
+    }).length;
+
+  const imageDpiWarnings =
+    getFabricImageDpiWarnings(
+      canvas,
+      activePers,
+      product
+    );
 
   if (outsideMarginCount > 0) {
     warnings.push({
       type: 'safe-margin',
       level: 'warning',
-      message: outsideMarginCount === 1
-        ? 'Een element staat buiten de veilige marge.'
-        : `${outsideMarginCount} elementen staan buiten de veilige marge.`,
+
+      message:
+        outsideMarginCount === 1
+          ? 'Een element staat buiten de veilige marge.'
+          : `${outsideMarginCount} elementen staan buiten de veilige marge.`,
     });
   }
 
@@ -2052,16 +4452,23 @@ function collectCanvasPrepressWarnings(canvas, activePers, product) {
     warnings.push({
       type: 'blocked-zone',
       level: 'warning',
-      message: blockedZoneCount === 1
-        ? 'Een element raakt een rillijn of no-print zone.'
-        : `${blockedZoneCount} elementen raken een rillijn of no-print zone.`,
+
+      message:
+        blockedZoneCount === 1
+          ? 'Een element raakt een rillijn of no-print zone.'
+          : `${blockedZoneCount} elementen raken een rillijn of no-print zone.`,
     });
   }
 
   imageDpiWarnings.forEach(warning => {
     warnings.push({
       type: warning.type,
-      level: warning.level === 'error' ? 'warning' : warning.level,
+
+      level:
+        warning.level === 'error'
+          ? 'warning'
+          : warning.level,
+
       message: warning.message,
       fileName: warning.fileName,
       dpi: warning.dpi,
@@ -2071,50 +4478,99 @@ function collectCanvasPrepressWarnings(canvas, activePers, product) {
   return warnings;
 }
 
-function getFallbackCanvasMargin(activePers, product, canvasWidth) {
-  const sourceMarginPx = Number(activePers?.margin_px || product?.margin_px || 20);
-  const sourceWidthPx = Number(activePers?.width_px || product?.width_px || 1181);
+function getFallbackCanvasMargin(
+  activePers,
+  product,
+  canvasWidth
+) {
+  const sourceMarginPx =
+    Number(
+      activePers?.margin_px ||
+      product?.margin_px ||
+      20
+    );
+
+  const sourceWidthPx =
+    Number(
+      activePers?.width_px ||
+      product?.width_px ||
+      1181
+    );
 
   if (!sourceWidthPx) {
     return sourceMarginPx;
   }
 
-  return sourceMarginPx * (canvasWidth / sourceWidthPx);
+  return (
+    sourceMarginPx *
+    (
+      canvasWidth /
+      sourceWidthPx
+    )
+  );
 }
 
 function updateFabricStatus() {
-  const object = fabricCanvas?.getActiveObject();
-  const status = document.getElementById('status');
+  const object =
+    fabricCanvas?.getActiveObject();
 
-  if (!object || !status) {
+  const status =
+    document.getElementById('status');
+
+  if (
+    !object ||
+    !status
+  ) {
     return;
   }
 
-  status.textContent = `${object.type === 'i-text' ? 'Tekst' : 'Afbeelding'} geselecteerd. Sleep, schaal of roteer.`;
+  status.textContent =
+    `${object.type === 'i-text'
+      ? 'Tekst'
+      : 'Afbeelding'
+    } geselecteerd. Sleep, schaal of roteer.`;
 }
 
 function updateLayerPanel() {
-  const panel = document.getElementById('layer-list');
+  const panel =
+    document.getElementById(
+      'layer-list'
+    );
 
-  if (!panel || !fabricCanvas) {
+  if (
+    !panel ||
+    !fabricCanvas
+  ) {
     return;
   }
 
   panel.innerHTML = '';
 
-  fabricCanvas.getObjects()
-    .filter(object => !isGuideObject(object))
+  fabricCanvas
+    .getObjects()
+    .filter(object => {
+      return !isGuideObject(object);
+    })
     .reverse()
     .forEach((object, index) => {
-      const item = document.createElement('div');
+      const item =
+        document.createElement('div');
+
       item.className = 'layer-item';
       item.draggable = true;
-      item.dataset.objectId = getFabricObjectId(object);
-      item.textContent = object.type === 'i-text'
-        ? `${index + 1}. Tekst: "${object.text}"`
-        : `${index + 1}. Afbeelding`;
 
-      if (fabricCanvas.getActiveObject() === object) {
+      item.dataset.objectId =
+        getFabricObjectId(object);
+
+      item.textContent =
+        object.type === 'i-text'
+          ? `${index + 1}. Tekst: "${object.text}"`
+          : `${index + 1}. Afbeelding`;
+
+      if (
+        fabricCanvas.getActiveObject() ===
+        object
+      ) {
         item.classList.add('active');
       }
 
@@ -2134,99 +4590,198 @@ function updateLayerPanel() {
     });
 }
 
-function bindLayerDragAndDrop(canvas, stateKey) {
-  const panel = document.getElementById('layer-list');
+function bindLayerDragAndDrop(
+  canvas,
+  stateKey
+) {
+  const panel =
+    document.getElementById(
+      'layer-list'
+    );
 
   if (!panel) {
     return;
   }
 
-  panel.addEventListener('dragstart', event => {
-    const item = event.target.closest('.layer-item');
+  panel.addEventListener(
+    'dragstart',
+    event => {
+      const item =
+        event.target.closest(
+          '.layer-item'
+        );
 
-    if (!item) {
-      return;
+      if (!item) {
+        return;
+      }
+
+      event.dataTransfer.setData(
+        'text/plain',
+        item.dataset.objectId
+      );
+
+      item.classList.add('dragging');
     }
+  );
 
-    event.dataTransfer.setData('text/plain', item.dataset.objectId);
-    item.classList.add('dragging');
-  });
-
-  panel.addEventListener('dragend', event => {
-    event.target.closest('.layer-item')?.classList.remove('dragging');
-  });
-
-  panel.addEventListener('dragover', event => {
-    event.preventDefault();
-  });
-
-  panel.addEventListener('drop', event => {
-    event.preventDefault();
-
-    const draggedId = event.dataTransfer.getData('text/plain');
-    const targetItem = event.target.closest('.layer-item');
-
-    if (!draggedId || !targetItem) {
-      return;
+  panel.addEventListener(
+    'dragend',
+    event => {
+      event.target
+        .closest('.layer-item')
+        ?.classList.remove(
+          'dragging'
+        );
     }
+  );
 
-    const targetId = targetItem.dataset.objectId;
-
-    if (draggedId === targetId) {
-      return;
+  panel.addEventListener(
+    'dragover',
+    event => {
+      event.preventDefault();
     }
+  );
 
-    reorderCanvasObjectsFromLayerDrop(canvas, draggedId, targetId);
-    fabricSaveHistory();
-    autoSaveCanvasState(stateKey);
-    updateLayerPanel();
-  });
+  panel.addEventListener(
+    'drop',
+    event => {
+      event.preventDefault();
+
+      const draggedId =
+        event.dataTransfer.getData(
+          'text/plain'
+        );
+
+      const targetItem =
+        event.target.closest(
+          '.layer-item'
+        );
+
+      if (
+        !draggedId ||
+        !targetItem
+      ) {
+        return;
+      }
+
+      const targetId =
+        targetItem.dataset.objectId;
+
+      if (draggedId === targetId) {
+        return;
+      }
+
+      reorderCanvasObjectsFromLayerDrop(
+        canvas,
+        draggedId,
+        targetId
+      );
+
+      fabricSaveHistory();
+      autoSaveCanvasState(stateKey);
+      updateLayerPanel();
+    }
+  );
 }
 
-function reorderCanvasObjectsFromLayerDrop(canvas, draggedId, targetId) {
-  const editableObjects = canvas
-    .getObjects()
-    .filter(object => !isGuideObject(object));
+function reorderCanvasObjectsFromLayerDrop(
+  canvas,
+  draggedId,
+  targetId
+) {
+  const editableObjects =
+    canvas
+      .getObjects()
+      .filter(object => {
+        return !isGuideObject(object);
+      });
 
-  const draggedObject = editableObjects.find(
-    object => getFabricObjectId(object) === draggedId
-  );
+  const draggedObject =
+    editableObjects.find(object => {
+      return (
+        getFabricObjectId(object) ===
+        draggedId
+      );
+    });
 
-  const targetObject = editableObjects.find(
-    object => getFabricObjectId(object) === targetId
-  );
+  const targetObject =
+    editableObjects.find(object => {
+      return (
+        getFabricObjectId(object) ===
+        targetId
+      );
+    });
 
-  if (!draggedObject || !targetObject) {
+  if (
+    !draggedObject ||
+    !targetObject
+  ) {
     return;
   }
 
-  const fromIndex = editableObjects.indexOf(draggedObject);
-  const toIndex = editableObjects.indexOf(targetObject);
+  const fromIndex =
+    editableObjects.indexOf(
+      draggedObject
+    );
 
-  if (fromIndex === -1 || toIndex === -1) {
+  const toIndex =
+    editableObjects.indexOf(
+      targetObject
+    );
+
+  if (
+    fromIndex === -1 ||
+    toIndex === -1
+  ) {
     return;
   }
 
-  editableObjects.splice(fromIndex, 1);
-  editableObjects.splice(toIndex, 0, draggedObject);
+  editableObjects.splice(
+    fromIndex,
+    1
+  );
 
-  const activeObject = canvas.getActiveObject();
+  editableObjects.splice(
+    toIndex,
+    0,
+    draggedObject
+  );
 
-  editableObjects.forEach((object, index) => {
-    if (typeof canvas.moveTo === 'function') {
-      canvas.moveTo(object, index);
-      return;
+  const activeObject =
+    canvas.getActiveObject();
+
+  editableObjects.forEach(
+    (object, index) => {
+      if (
+        typeof canvas.moveTo ===
+        'function'
+      ) {
+        canvas.moveTo(
+          object,
+          index
+        );
+
+        return;
+      }
+
+      if (
+        typeof object.moveTo ===
+        'function'
+      ) {
+        object.moveTo(index);
+      }
     }
-
-    if (typeof object.moveTo === 'function') {
-      object.moveTo(index);
-    }
-  });
+  );
 
   bringGuidesToFront(canvas);
 
-  if (activeObject && !isGuideObject(activeObject)) {
-    canvas.setActiveObject(activeObject);
+  if (
+    activeObject &&
+    !isGuideObject(activeObject)
+  ) {
+    canvas.setActiveObject(
+      activeObject
+    );
   }
 
   canvas.renderAll();
@@ -2234,21 +4789,37 @@ function reorderCanvasObjectsFromLayerDrop(canvas, draggedId, targetId) {
 
 function getFabricObjectId(object) {
   if (!object._layerId) {
-    object._layerId = `layer-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+    object._layerId =
+      `layer-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
   }
 
   return object._layerId;
 }
 
-function applyToSelected(property, value) {
-  const object = fabricCanvas?.getActiveObject();
+function applyToSelected(
+  property,
+  value
+) {
+  const object =
+    fabricCanvas?.getActiveObject();
 
-  if (object && object.type === 'i-text' && !isGuideObject(object)) {
-    object.set(property, value);
+  if (
+    object &&
+    object.type === 'i-text' &&
+    !isGuideObject(object)
+  ) {
+    object.set(
+      property,
+      value
+    );
+
     fabricCanvas.renderAll();
     fabricSaveHistory();
     updateLayerPanel();
-    autoSaveCanvasState(window._currentDesignStateKey);
+
+    autoSaveCanvasState(
+      window._currentDesignStateKey
+    );
   }
 }
 
@@ -2257,13 +4828,20 @@ function fabricSaveHistory() {
     return;
   }
 
-  const guideObjects = getGuideObjects(fabricCanvas);
+  const guideObjects =
+    getGuideObjects(fabricCanvas);
 
   guideObjects.forEach(object => {
     object.visible = false;
   });
 
-  const json = JSON.stringify(fabricCanvas.toJSON(['_layerId', '_uploadMeta']));
+  const json =
+    JSON.stringify(
+      fabricCanvas.toJSON([
+        '_layerId',
+        '_uploadMeta',
+      ])
+    );
 
   guideObjects.forEach(object => {
     object.visible = true;
@@ -2278,8 +4856,13 @@ function fabricSaveHistory() {
   fabricCanvas.renderAll();
 }
 
-function snapshotCanvas(canvas, product, activePers) {
-  const guideObjects = getGuideObjects(canvas);
+function snapshotCanvas(
+  canvas,
+  product,
+  activePers
+) {
+  const guideObjects =
+    getGuideObjects(canvas);
 
   guideObjects.forEach(object => {
     object.visible = false;
@@ -2288,15 +4871,24 @@ function snapshotCanvas(canvas, product, activePers) {
   canvas.discardActiveObject();
   canvas.renderAll();
 
-  const printWidthPx = activePers?.width_px || product.width_px || 1181;
-  const displayWidthPx = canvas.getWidth();
-  const multiplier = printWidthPx / displayWidthPx;
+  const printWidthPx =
+    activePers?.width_px ||
+    product.width_px ||
+    1181;
 
-  const dataURL = canvas.toDataURL({
-    format: 'png',
-    multiplier,
-    enableRetinaScaling: false,
-  });
+  const displayWidthPx =
+    canvas.getWidth();
+
+  const multiplier =
+    printWidthPx /
+    displayWidthPx;
+
+  const dataURL =
+    canvas.toDataURL({
+      format: 'png',
+      multiplier,
+      enableRetinaScaling: false,
+    });
 
   guideObjects.forEach(object => {
     object.visible = true;
@@ -2304,24 +4896,43 @@ function snapshotCanvas(canvas, product, activePers) {
 
   canvas.renderAll();
 
-  const json = JSON.stringify(canvas.toJSON(['_layerId', '_uploadMeta']));
-  const backgroundColor = canvas.backgroundColor || fabricBackgroundColor;
-  const finishWidthMm = activePers?.width_mm || product.width_mm || 100;
-  const finishHeightMm = activePers?.height_mm || product.height_mm || 70;
+  const json =
+    JSON.stringify(
+      canvas.toJSON([
+        '_layerId',
+        '_uploadMeta',
+      ])
+    );
 
-  const pdfDataURL = generatePrintPDF(
-    dataURL,
-    finishWidthMm,
-    finishHeightMm
-  );
+  const backgroundColor =
+    canvas.backgroundColor ||
+    fabricBackgroundColor;
 
-  const rillinesPdfDataURL = generatePrintPDFWithRillines(
-    dataURL,
-    finishWidthMm,
-    finishHeightMm,
-    activePers,
-    product
-  );
+  const finishWidthMm =
+    activePers?.width_mm ||
+    product.width_mm ||
+    100;
+
+  const finishHeightMm =
+    activePers?.height_mm ||
+    product.height_mm ||
+    70;
+
+  const pdfDataURL =
+    generatePrintPDF(
+      dataURL,
+      finishWidthMm,
+      finishHeightMm
+    );
+
+  const rillinesPdfDataURL =
+    generatePrintPDFWithRillines(
+      dataURL,
+      finishWidthMm,
+      finishHeightMm,
+      activePers,
+      product
+    );
 
   return {
     dataURL,
@@ -2332,57 +4943,144 @@ function snapshotCanvas(canvas, product, activePers) {
   };
 }
 
-function generatePrintPDF(pngDataURL, widthMm, heightMm) {
+function generatePrintPDF(
+  pngDataURL,
+  widthMm,
+  heightMm
+) {
   if (!window.jspdf) {
     console.warn('jsPDF niet geladen');
     return null;
   }
 
   const { jsPDF } = window.jspdf;
-  const pdfGeometry = getPrintPdfGeometry(widthMm, heightMm);
 
-  const pdf = new jsPDF({
-    orientation: pdfGeometry.pageW > pdfGeometry.pageH ? 'landscape' : 'portrait',
-    unit: 'mm',
-    format: [pdfGeometry.pageW, pdfGeometry.pageH],
-    compress: true,
-  });
+  const pdfGeometry =
+    getPrintPdfGeometry(
+      widthMm,
+      heightMm
+    );
 
-  pdf.addImage(pngDataURL, 'PNG', 0, 0, pdfGeometry.pageW, pdfGeometry.pageH, '', 'FAST');
-  drawCropMarks(pdf, pdfGeometry);
+  const pdf =
+    new jsPDF({
+      orientation:
+        pdfGeometry.pageW >
+          pdfGeometry.pageH
+          ? 'landscape'
+          : 'portrait',
 
-  return pdf.output('datauristring');
+      unit: 'mm',
+
+      format: [
+        pdfGeometry.pageW,
+        pdfGeometry.pageH,
+      ],
+
+      compress: true,
+    });
+
+  pdf.addImage(
+    pngDataURL,
+    'PNG',
+    0,
+    0,
+    pdfGeometry.pageW,
+    pdfGeometry.pageH,
+    '',
+    'FAST'
+  );
+
+  drawCropMarks(
+    pdf,
+    pdfGeometry
+  );
+
+  return pdf.output(
+    'datauristring'
+  );
 }
 
-function generatePrintPDFWithRillines(pngDataURL, widthMm, heightMm, activePers, product) {
+function generatePrintPDFWithRillines(
+  pngDataURL,
+  widthMm,
+  heightMm,
+  activePers,
+  product
+) {
   if (!window.jspdf) {
     console.warn('jsPDF niet geladen');
     return null;
   }
 
   const { jsPDF } = window.jspdf;
-  const pdfGeometry = getPrintPdfGeometry(widthMm, heightMm);
 
-  const pdf = new jsPDF({
-    orientation: pdfGeometry.pageW > pdfGeometry.pageH ? 'landscape' : 'portrait',
-    unit: 'mm',
-    format: [pdfGeometry.pageW, pdfGeometry.pageH],
-    compress: true,
-  });
+  const pdfGeometry =
+    getPrintPdfGeometry(
+      widthMm,
+      heightMm
+    );
 
-  pdf.addImage(pngDataURL, 'PNG', 0, 0, pdfGeometry.pageW, pdfGeometry.pageH, '', 'FAST');
-  drawCropMarks(pdf, pdfGeometry);
-  drawRillinesOnPdf(pdf, pdfGeometry, activePers, product);
+  const pdf =
+    new jsPDF({
+      orientation:
+        pdfGeometry.pageW >
+          pdfGeometry.pageH
+          ? 'landscape'
+          : 'portrait',
 
-  return pdf.output('datauristring');
+      unit: 'mm',
+
+      format: [
+        pdfGeometry.pageW,
+        pdfGeometry.pageH,
+      ],
+
+      compress: true,
+    });
+
+  pdf.addImage(
+    pngDataURL,
+    'PNG',
+    0,
+    0,
+    pdfGeometry.pageW,
+    pdfGeometry.pageH,
+    '',
+    'FAST'
+  );
+
+  drawCropMarks(
+    pdf,
+    pdfGeometry
+  );
+
+  drawRillinesOnPdf(
+    pdf,
+    pdfGeometry,
+    activePers,
+    product
+  );
+
+  return pdf.output(
+    'datauristring'
+  );
 }
 
-function getPrintPdfGeometry(widthMm, heightMm) {
+function getPrintPdfGeometry(
+  widthMm,
+  heightMm
+) {
   const bleedMm = 3;
   const markMm = 5;
   const gapMm = 2.117;
-  const pageW = Number(widthMm || 100) + bleedMm * 2;
-  const pageH = Number(heightMm || 70) + bleedMm * 2;
+
+  const pageW =
+    Number(widthMm || 100) +
+    bleedMm * 2;
+
+  const pageH =
+    Number(heightMm || 70) +
+    bleedMm * 2;
 
   return {
     bleedMm,
@@ -2392,34 +5090,135 @@ function getPrintPdfGeometry(widthMm, heightMm) {
     pageH,
     trimX1: bleedMm,
     trimY1: bleedMm,
-    trimX2: bleedMm + Number(widthMm || 100),
-    trimY2: bleedMm + Number(heightMm || 70),
+
+    trimX2:
+      bleedMm +
+      Number(widthMm || 100),
+
+    trimY2:
+      bleedMm +
+      Number(heightMm || 70),
   };
 }
 
-function drawCropMarks(pdf, geometry) {
+function drawCropMarks(
+  pdf,
+  geometry
+) {
   pdf.setDrawColor(0, 0, 0);
   pdf.setLineWidth(0.088);
 
-  pdf.line(geometry.trimX1 - geometry.gapMm - geometry.markMm, geometry.trimY1, geometry.trimX1 - geometry.gapMm, geometry.trimY1);
-  pdf.line(geometry.trimX1, geometry.trimY1 - geometry.gapMm - geometry.markMm, geometry.trimX1, geometry.trimY1 - geometry.gapMm);
+  pdf.line(
+    geometry.trimX1 -
+    geometry.gapMm -
+    geometry.markMm,
+    geometry.trimY1,
+    geometry.trimX1 -
+    geometry.gapMm,
+    geometry.trimY1
+  );
 
-  pdf.line(geometry.trimX2 + geometry.gapMm, geometry.trimY1, geometry.trimX2 + geometry.gapMm + geometry.markMm, geometry.trimY1);
-  pdf.line(geometry.trimX2, geometry.trimY1 - geometry.gapMm - geometry.markMm, geometry.trimX2, geometry.trimY1 - geometry.gapMm);
+  pdf.line(
+    geometry.trimX1,
+    geometry.trimY1 -
+    geometry.gapMm -
+    geometry.markMm,
+    geometry.trimX1,
+    geometry.trimY1 -
+    geometry.gapMm
+  );
 
-  pdf.line(geometry.trimX1 - geometry.gapMm - geometry.markMm, geometry.trimY2, geometry.trimX1 - geometry.gapMm, geometry.trimY2);
-  pdf.line(geometry.trimX1, geometry.trimY2 + geometry.gapMm, geometry.trimX1, geometry.trimY2 + geometry.gapMm + geometry.markMm);
+  pdf.line(
+    geometry.trimX2 +
+    geometry.gapMm,
+    geometry.trimY1,
+    geometry.trimX2 +
+    geometry.gapMm +
+    geometry.markMm,
+    geometry.trimY1
+  );
 
-  pdf.line(geometry.trimX2 + geometry.gapMm, geometry.trimY2, geometry.trimX2 + geometry.gapMm + geometry.markMm, geometry.trimY2);
-  pdf.line(geometry.trimX2, geometry.trimY2 + geometry.gapMm, geometry.trimX2, geometry.trimY2 + geometry.gapMm + geometry.markMm);
+  pdf.line(
+    geometry.trimX2,
+    geometry.trimY1 -
+    geometry.gapMm -
+    geometry.markMm,
+    geometry.trimX2,
+    geometry.trimY1 -
+    geometry.gapMm
+  );
+
+  pdf.line(
+    geometry.trimX1 -
+    geometry.gapMm -
+    geometry.markMm,
+    geometry.trimY2,
+    geometry.trimX1 -
+    geometry.gapMm,
+    geometry.trimY2
+  );
+
+  pdf.line(
+    geometry.trimX1,
+    geometry.trimY2 +
+    geometry.gapMm,
+    geometry.trimX1,
+    geometry.trimY2 +
+    geometry.gapMm +
+    geometry.markMm
+  );
+
+  pdf.line(
+    geometry.trimX2 +
+    geometry.gapMm,
+    geometry.trimY2,
+    geometry.trimX2 +
+    geometry.gapMm +
+    geometry.markMm,
+    geometry.trimY2
+  );
+
+  pdf.line(
+    geometry.trimX2,
+    geometry.trimY2 +
+    geometry.gapMm,
+    geometry.trimX2,
+    geometry.trimY2 +
+    geometry.gapMm +
+    geometry.markMm
+  );
 }
 
-function drawRillinesOnPdf(pdf, geometry, activePers, product) {
-  const zones = Array.isArray(activePers?.blockedZones) ? activePers.blockedZones : [];
-  const sourceWidthMm = Number(activePers?.width_mm || product?.width_mm || 0);
-  const sourceHeightMm = Number(activePers?.height_mm || product?.height_mm || 0);
+function drawRillinesOnPdf(
+  pdf,
+  geometry,
+  activePers,
+  product
+) {
+  const zones =
+    Array.isArray(activePers?.blockedZones)
+      ? activePers.blockedZones
+      : [];
 
-  if (!zones.length || !sourceWidthMm || !sourceHeightMm) {
+  const sourceWidthMm =
+    Number(
+      activePers?.width_mm ||
+      product?.width_mm ||
+      0
+    );
+
+  const sourceHeightMm =
+    Number(
+      activePers?.height_mm ||
+      product?.height_mm ||
+      0
+    );
+
+  if (
+    !zones.length ||
+    !sourceWidthMm ||
+    !sourceHeightMm
+  ) {
     return;
   }
 
@@ -2427,106 +5226,236 @@ function drawRillinesOnPdf(pdf, geometry, activePers, product) {
   pdf.setLineWidth(0.25);
 
   zones
-    .filter(zone => zone.type === 'line')
+    .filter(zone => {
+      return zone.type === 'line';
+    })
     .forEach(zone => {
-      let x1Mm = Number(zone.x1_mm || 0);
-      let y1Mm = Number(zone.y1_mm || 0);
-      let x2Mm = Number(zone.x2_mm || 0);
-      let y2Mm = Number(zone.y2_mm || 0);
+      let x1Mm =
+        Number(zone.x1_mm || 0);
 
-      const deltaXmm = Math.abs(x2Mm - x1Mm);
-      const deltaYmm = Math.abs(y2Mm - y1Mm);
+      let y1Mm =
+        Number(zone.y1_mm || 0);
+
+      let x2Mm =
+        Number(zone.x2_mm || 0);
+
+      let y2Mm =
+        Number(zone.y2_mm || 0);
+
+      const deltaXmm =
+        Math.abs(
+          x2Mm -
+          x1Mm
+        );
+
+      const deltaYmm =
+        Math.abs(
+          y2Mm -
+          y1Mm
+        );
 
       if (deltaYmm <= 0.01) {
-        const centerYmm = (y1Mm + y2Mm) / 2;
+        const centerYmm =
+          (
+            y1Mm +
+            y2Mm
+          ) / 2;
+
         x1Mm = 0;
         x2Mm = sourceWidthMm;
         y1Mm = centerYmm;
         y2Mm = centerYmm;
       } else if (deltaXmm <= 0.01) {
-        const centerXmm = (x1Mm + x2Mm) / 2;
+        const centerXmm =
+          (
+            x1Mm +
+            x2Mm
+          ) / 2;
+
         x1Mm = centerXmm;
         x2Mm = centerXmm;
         y1Mm = 0;
         y2Mm = sourceHeightMm;
       }
 
-      const x1 = geometry.trimX1 + (x1Mm / sourceWidthMm) * (geometry.trimX2 - geometry.trimX1);
-      const y1 = geometry.trimY1 + (y1Mm / sourceHeightMm) * (geometry.trimY2 - geometry.trimY1);
-      const x2 = geometry.trimX1 + (x2Mm / sourceWidthMm) * (geometry.trimX2 - geometry.trimX1);
-      const y2 = geometry.trimY1 + (y2Mm / sourceHeightMm) * (geometry.trimY2 - geometry.trimY1);
+      const x1 =
+        geometry.trimX1 +
+        (
+          x1Mm /
+          sourceWidthMm
+        ) *
+        (
+          geometry.trimX2 -
+          geometry.trimX1
+        );
 
-      if (typeof pdf.setLineDashPattern === 'function') {
-        pdf.setLineDashPattern([1, 0.75], 0);
+      const y1 =
+        geometry.trimY1 +
+        (
+          y1Mm /
+          sourceHeightMm
+        ) *
+        (
+          geometry.trimY2 -
+          geometry.trimY1
+        );
+
+      const x2 =
+        geometry.trimX1 +
+        (
+          x2Mm /
+          sourceWidthMm
+        ) *
+        (
+          geometry.trimX2 -
+          geometry.trimX1
+        );
+
+      const y2 =
+        geometry.trimY1 +
+        (
+          y2Mm /
+          sourceHeightMm
+        ) *
+        (
+          geometry.trimY2 -
+          geometry.trimY1
+        );
+
+      if (
+        typeof pdf.setLineDashPattern ===
+        'function'
+      ) {
+        pdf.setLineDashPattern(
+          [1, 0.75],
+          0
+        );
       }
 
-      pdf.line(x1, y1, x2, y2);
+      pdf.line(
+        x1,
+        y1,
+        x2,
+        y2
+      );
 
-      if (typeof pdf.setLineDashPattern === 'function') {
-        pdf.setLineDashPattern([], 0);
+      if (
+        typeof pdf.setLineDashPattern ===
+        'function'
+      ) {
+        pdf.setLineDashPattern(
+          [],
+          0
+        );
       }
     });
 }
 
 function autoSaveCanvasState(stateKey) {
-  if (!fabricCanvas || !stateKey) {
+  if (
+    !fabricCanvas ||
+    !stateKey
+  ) {
     return;
   }
 
-  const guideObjects = getGuideObjects(fabricCanvas);
+  const guideObjects =
+    getGuideObjects(fabricCanvas);
 
   guideObjects.forEach(object => {
     object.visible = false;
   });
 
-  const json = JSON.stringify(fabricCanvas.toJSON(['_layerId', '_uploadMeta']));
+  const json =
+    JSON.stringify(
+      fabricCanvas.toJSON([
+        '_layerId',
+        '_uploadMeta',
+      ])
+    );
 
   guideObjects.forEach(object => {
     object.visible = true;
   });
 
-  persistDesignState(stateKey, {
-    fabricJSON: json,
-    backgroundColor: fabricCanvas.backgroundColor || fabricBackgroundColor,
-  });
+  persistDesignState(
+    stateKey,
+    {
+      fabricJSON: json,
+
+      backgroundColor:
+        fabricCanvas.backgroundColor ||
+        fabricBackgroundColor,
+    }
+  );
 
   fabricCanvas.renderAll();
 }
 
 function getGuideObjects(canvas) {
-  return canvas.getObjects().filter(object => isGuideObject(object));
+  return canvas
+    .getObjects()
+    .filter(object => {
+      return isGuideObject(object);
+    });
 }
 
-function persistDesignState(stateKey, data) {
+function persistDesignState(
+  stateKey,
+  data
+) {
   if (!stateKey) {
     return;
   }
 
   try {
-    const current = JSON.parse(localStorage.getItem(stateKey) || '{}');
+    const current =
+      JSON.parse(
+        localStorage.getItem(
+          stateKey
+        ) ||
+        '{}'
+      );
 
-    localStorage.setItem(stateKey, JSON.stringify({
-      ...current,
-      ...data,
-      savedAt: Date.now(),
-    }));
+    localStorage.setItem(
+      stateKey,
+      JSON.stringify({
+        ...current,
+        ...data,
+        savedAt: Date.now(),
+      })
+    );
   } catch (error) {
-    console.warn('Design state opslaan mislukt', error);
+    console.warn(
+      'Design state opslaan mislukt',
+      error
+    );
   }
 }
 
 function loadDesignState(stateKey) {
   try {
-    const raw = localStorage.getItem(stateKey);
+    const raw =
+      localStorage.getItem(
+        stateKey
+      );
 
     if (!raw) {
       return null;
     }
 
-    const state = JSON.parse(raw);
+    const state =
+      JSON.parse(raw);
 
-    if (Date.now() - (state.savedAt || 0) > 86400000) {
-      localStorage.removeItem(stateKey);
+    if (
+      Date.now() -
+      (state.savedAt || 0) >
+      86400000
+    ) {
+      localStorage.removeItem(
+        stateKey
+      );
+
       return null;
     }
 
@@ -2541,32 +5470,73 @@ function clearDesignState(stateKey) {
     return;
   }
 
-  localStorage.removeItem(stateKey);
+  localStorage.removeItem(
+    stateKey
+  );
 }
 
-async function handleUpload(file, stateKey, activePers, product) {
-  const uploadCheck = await buildUploadCheck(file, activePers, product);
-  const reader = new FileReader();
+async function handleUpload(
+  file,
+  stateKey,
+  activePers,
+  product
+) {
+  const uploadCheck =
+    await buildUploadCheck(
+      file,
+      activePers,
+      product
+    );
+
+  const reader =
+    new FileReader();
 
   reader.onload = event => {
-    uploadedDataURL = event.target.result;
-    uploadedFileName = file.name;
-    uploadedCheck = uploadCheck;
+    uploadedDataURL =
+      event.target.result;
 
-    const generatedUploadPdfs = buildUploadPdfData(uploadedDataURL, activePers, product);
+    uploadedFileName =
+      file.name;
 
-    uploadedPdfDataURL = generatedUploadPdfs.pdfDataURL;
-    uploadedRillinesPdfDataURL = generatedUploadPdfs.rillinesPdfDataURL;
+    uploadedCheck =
+      uploadCheck;
+
+    const generatedUploadPdfs =
+      buildUploadPdfData(
+        uploadedDataURL,
+        activePers,
+        product
+      );
+
+    uploadedPdfDataURL =
+      generatedUploadPdfs.pdfDataURL;
+
+    uploadedRillinesPdfDataURL =
+      generatedUploadPdfs.rillinesPdfDataURL;
 
     const data = {
-      dataURL: uploadedDataURL,
-      pdfDataURL: uploadedPdfDataURL,
-      rillinesPdfDataURL: uploadedRillinesPdfDataURL,
-      fileName: uploadedFileName,
+      dataURL:
+        uploadedDataURL,
+
+      pdfDataURL:
+        uploadedPdfDataURL,
+
+      rillinesPdfDataURL:
+        uploadedRillinesPdfDataURL,
+
+      fileName:
+        uploadedFileName,
+
       tab: 'upload',
       source: 'upload',
-      uploadCheck: uploadedCheck,
-      prepressWarnings: getUploadPrepressWarnings(uploadedCheck),
+
+      uploadCheck:
+        uploadedCheck,
+
+      prepressWarnings:
+        getUploadPrepressWarnings(
+          uploadedCheck
+        ),
     };
 
     Session.setDesign(data);
@@ -2577,18 +5547,37 @@ async function handleUpload(file, stateKey, activePers, product) {
   reader.readAsDataURL(file);
 }
 
-function buildUploadPdfData(dataURL, activePers, product) {
-  const finishWidthMm = activePers?.width_mm || product?.width_mm || 100;
-  const finishHeightMm = activePers?.height_mm || product?.height_mm || 70;
+function buildUploadPdfData(
+  dataURL,
+  activePers,
+  product
+) {
+  const finishWidthMm =
+    activePers?.width_mm ||
+    product?.width_mm ||
+    100;
 
-  if (dataURL?.startsWith('data:application/pdf')) {
+  const finishHeightMm =
+    activePers?.height_mm ||
+    product?.height_mm ||
+    70;
+
+  if (
+    dataURL?.startsWith(
+      'data:application/pdf'
+    )
+  ) {
     return {
       pdfDataURL: dataURL,
       rillinesPdfDataURL: '',
     };
   }
 
-  if (!dataURL?.startsWith('data:image')) {
+  if (
+    !dataURL?.startsWith(
+      'data:image'
+    )
+  ) {
     return {
       pdfDataURL: '',
       rillinesPdfDataURL: '',
@@ -2596,24 +5585,65 @@ function buildUploadPdfData(dataURL, activePers, product) {
   }
 
   return {
-    pdfDataURL: generatePrintPDF(dataURL, finishWidthMm, finishHeightMm) || '',
-    rillinesPdfDataURL: generatePrintPDFWithRillines(dataURL, finishWidthMm, finishHeightMm, activePers, product) || '',
+    pdfDataURL:
+      generatePrintPDF(
+        dataURL,
+        finishWidthMm,
+        finishHeightMm
+      ) ||
+      '',
+
+    rillinesPdfDataURL:
+      generatePrintPDFWithRillines(
+        dataURL,
+        finishWidthMm,
+        finishHeightMm,
+        activePers,
+        product
+      ) ||
+      '',
   };
 }
 
-function buildUploadCheck(file, activePers, product) {
-  const fileName = file?.name || '';
-  const fileType = file?.type || getFileTypeFromName(fileName);
-  const extension = getFileExtension(fileName);
-  const printSpec = getUploadPrintSpec(activePers, product);
-  const requiredWidthPx = printSpec.requiredWidthPx;
-  const requiredHeightPx = printSpec.requiredHeightPx;
+function buildUploadCheck(
+  file,
+  activePers,
+  product
+) {
+  const fileName =
+    file?.name ||
+    '';
+
+  const fileType =
+    file?.type ||
+    getFileTypeFromName(fileName);
+
+  const extension =
+    getFileExtension(fileName);
+
+  const printSpec =
+    getUploadPrintSpec(
+      activePers,
+      product
+    );
+
+  const requiredWidthPx =
+    printSpec.requiredWidthPx;
+
+  const requiredHeightPx =
+    printSpec.requiredHeightPx;
 
   if (!file) {
     return Promise.resolve(null);
   }
 
-  if (['pdf', 'ai', 'eps'].includes(extension)) {
+  if (
+    [
+      'pdf',
+      'ai',
+      'eps',
+    ].includes(extension)
+  ) {
     return Promise.resolve({
       fileName,
       fileType,
@@ -2624,11 +5654,19 @@ function buildUploadCheck(file, activePers, product) {
       estimatedDpiX: null,
       estimatedDpiY: null,
       status: 'manual-check',
-      message: 'Dit bestand wordt technisch gecontroleerd in Adobe.',
+      message:
+        'Dit bestand wordt technisch gecontroleerd in Adobe.',
     });
   }
 
-  if (!fileType.startsWith('image/') && !['png', 'jpg', 'jpeg'].includes(extension)) {
+  if (
+    !fileType.startsWith('image/') &&
+    ![
+      'png',
+      'jpg',
+      'jpeg',
+    ].includes(extension)
+  ) {
     return Promise.resolve({
       fileName,
       fileType,
@@ -2639,36 +5677,65 @@ function buildUploadCheck(file, activePers, product) {
       estimatedDpiX: null,
       estimatedDpiY: null,
       status: 'warning',
-      message: 'Dit bestandstype kan niet automatisch op resolutie worden gecontroleerd.',
+      message:
+        'Dit bestandstype kan niet automatisch op resolutie worden gecontroleerd.',
     });
   }
 
   return getUploadedImageDimensions(file)
     .then(dimensions => {
-      const estimatedDpiX = printSpec.exportWidthMm
-        ? Math.round((dimensions.widthPx / printSpec.exportWidthMm) * 25.4)
-        : null;
-      const estimatedDpiY = printSpec.exportHeightMm
-        ? Math.round((dimensions.heightPx / printSpec.exportHeightMm) * 25.4)
-        : null;
-      const minDpi = Math.min(estimatedDpiX || 0, estimatedDpiY || 0);
+      const estimatedDpiX =
+        printSpec.exportWidthMm
+          ? Math.round(
+            (
+              dimensions.widthPx /
+              printSpec.exportWidthMm
+            ) *
+            25.4
+          )
+          : null;
+
+      const estimatedDpiY =
+        printSpec.exportHeightMm
+          ? Math.round(
+            (
+              dimensions.heightPx /
+              printSpec.exportHeightMm
+            ) *
+            25.4
+          )
+          : null;
+
+      const minDpi =
+        Math.min(
+          estimatedDpiX || 0,
+          estimatedDpiY || 0
+        );
 
       let status = 'good';
-      let message = 'De afbeelding heeft voldoende resolutie voor drukwerk op 300 DPI.';
+
+      let message =
+        'De afbeelding heeft voldoende resolutie voor drukwerk op 300 DPI.';
 
       if (minDpi < 150) {
         status = 'error';
-        message = `De afbeelding lijkt te laag in resolutie. Advies: minimaal ${requiredWidthPx} × ${requiredHeightPx}px voor 300 DPI.`;
+
+        message =
+          `De afbeelding lijkt te laag in resolutie. Advies: minimaal ${requiredWidthPx} × ${requiredHeightPx}px voor 300 DPI.`;
       } else if (minDpi < 300) {
         status = 'warning';
-        message = `De afbeelding is bruikbaar, maar lager dan de aanbevolen 300 DPI. Advies: ${requiredWidthPx} × ${requiredHeightPx}px.`;
+
+        message =
+          `De afbeelding is bruikbaar, maar lager dan de aanbevolen 300 DPI. Advies: ${requiredWidthPx} × ${requiredHeightPx}px.`;
       }
 
       return {
         fileName,
         fileType,
-        widthPx: dimensions.widthPx,
-        heightPx: dimensions.heightPx,
+        widthPx:
+          dimensions.widthPx,
+        heightPx:
+          dimensions.heightPx,
         requiredWidthPx,
         requiredHeightPx,
         estimatedDpiX,
@@ -2687,54 +5754,113 @@ function buildUploadCheck(file, activePers, product) {
       estimatedDpiX: null,
       estimatedDpiY: null,
       status: 'warning',
-      message: 'De resolutie van dit bestand kon niet automatisch worden gecontroleerd.',
+      message:
+        'De resolutie van dit bestand kon niet automatisch worden gecontroleerd.',
     }));
 }
 
-function getUploadPrintSpec(activePers, product) {
-  if (window.PrintSpecs?.normalizePrintSpec) {
-    const spec = PrintSpecs.normalizePrintSpec(activePers || {}, product || {});
+function getUploadPrintSpec(
+  activePers,
+  product
+) {
+  if (
+    window.PrintSpecs
+      ?.normalizePrintSpec
+  ) {
+    const spec =
+      PrintSpecs.normalizePrintSpec(
+        activePers || {},
+        product || {}
+      );
 
     return {
-      exportWidthMm: spec.exportWidthMm,
-      exportHeightMm: spec.exportHeightMm,
-      requiredWidthPx: spec.requiredImageWidthPx300 || spec.exportWidthPx,
-      requiredHeightPx: spec.requiredImageHeightPx300 || spec.exportHeightPx,
+      exportWidthMm:
+        spec.exportWidthMm,
+
+      exportHeightMm:
+        spec.exportHeightMm,
+
+      requiredWidthPx:
+        spec.requiredImageWidthPx300 ||
+        spec.exportWidthPx,
+
+      requiredHeightPx:
+        spec.requiredImageHeightPx300 ||
+        spec.exportHeightPx,
     };
   }
 
-  const widthMm = Number(activePers?.width_mm || product?.width_mm || 100);
-  const heightMm = Number(activePers?.height_mm || product?.height_mm || 70);
+  const widthMm =
+    Number(
+      activePers?.width_mm ||
+      product?.width_mm ||
+      100
+    );
+
+  const heightMm =
+    Number(
+      activePers?.height_mm ||
+      product?.height_mm ||
+      70
+    );
 
   return {
     exportWidthMm: widthMm,
     exportHeightMm: heightMm,
-    requiredWidthPx: Math.round((widthMm / 25.4) * 300),
-    requiredHeightPx: Math.round((heightMm / 25.4) * 300),
+
+    requiredWidthPx:
+      Math.round(
+        (
+          widthMm /
+          25.4
+        ) *
+        300
+      ),
+
+    requiredHeightPx:
+      Math.round(
+        (
+          heightMm /
+          25.4
+        ) *
+        300
+      ),
   };
 }
 
 function getUploadedImageDimensions(file) {
-  return new Promise((resolve, reject) => {
-    const image = new Image();
-    const url = URL.createObjectURL(file);
+  return new Promise(
+    (resolve, reject) => {
+      const image = new Image();
 
-    image.onload = () => {
-      URL.revokeObjectURL(url);
+      const url =
+        URL.createObjectURL(file);
 
-      resolve({
-        widthPx: image.naturalWidth,
-        heightPx: image.naturalHeight,
-      });
-    };
+      image.onload = () => {
+        URL.revokeObjectURL(url);
 
-    image.onerror = () => {
-      URL.revokeObjectURL(url);
-      reject(new Error('Afbeelding kon niet worden gelezen.'));
-    };
+        resolve({
+          widthPx:
+            image.naturalWidth,
 
-    image.src = url;
-  });
+          heightPx:
+            image.naturalHeight,
+        });
+      };
+
+      image.onerror = () => {
+        URL.revokeObjectURL(url);
+
+        reject(
+          new Error(
+            'Afbeelding kon niet worden gelezen.'
+          )
+        );
+      };
+
+      image.src = url;
+    }
+  );
 }
 
 function getUploadPrepressWarnings(uploadCheck) {
@@ -2742,27 +5868,47 @@ function getUploadPrepressWarnings(uploadCheck) {
     return [];
   }
 
-  if (uploadCheck.status === 'manual-check') {
+  if (
+    uploadCheck.status ===
+    'manual-check'
+  ) {
     return [{
       type: 'upload-vector-check',
       level: 'info',
-      message: 'Dit bestand moet technisch worden gecontroleerd in Adobe.',
+      message:
+        'Dit bestand moet technisch worden gecontroleerd in Adobe.',
     }];
   }
 
-  if (uploadCheck.status === 'warning') {
+  if (
+    uploadCheck.status ===
+    'warning'
+  ) {
     return [{
-      type: 'upload-resolution-warning',
+      type:
+        'upload-resolution-warning',
+
       level: 'warning',
-      message: uploadCheck.message || 'De upload heeft mogelijk een te lage resolutie.',
+
+      message:
+        uploadCheck.message ||
+        'De upload heeft mogelijk een te lage resolutie.',
     }];
   }
 
-  if (uploadCheck.status === 'error') {
+  if (
+    uploadCheck.status ===
+    'error'
+  ) {
     return [{
-      type: 'upload-resolution-error',
+      type:
+        'upload-resolution-error',
+
       level: 'warning',
-      message: uploadCheck.message || 'De upload heeft waarschijnlijk een te lage resolutie.',
+
+      message:
+        uploadCheck.message ||
+        'De upload heeft waarschijnlijk een te lage resolutie.',
     }];
   }
 
@@ -2794,11 +5940,18 @@ function getUploadCheckTextColor(status) {
 }
 
 function getFileExtension(fileName) {
-  return String(fileName || '').split('.').pop().toLowerCase();
+  return String(
+    fileName ||
+    ''
+  )
+    .split('.')
+    .pop()
+    .toLowerCase();
 }
 
 function getFileTypeFromName(fileName) {
-  const extension = getFileExtension(fileName);
+  const extension =
+    getFileExtension(fileName);
 
   const map = {
     pdf: 'application/pdf',

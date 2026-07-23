@@ -1,18 +1,9 @@
 /**
  * shared/js/productPreview.js
  *
- * Generieke, niet-bewerkbare productpreview-engine voor de admin- en customerflow.
- *
- * De engine:
- * - leest previewconfiguratie uit een personalisatietype;
- * - haalt één of meerdere brongebieden uit het volledige drukcanvas;
- * - ondersteunt rotatie en spiegeling voor gevouwen drukwerk;
- * - plaatst het geselecteerde brongebied in een configureerbare productmockup;
- * - tekent een optionele overlay boven het ontwerp;
- * - kan een Fabric-canvas uitlezen zonder technische hulplijnen mee te nemen.
- *
- * De productpreview is uitsluitend visueel. De bestaande productie-export wordt
- * door dit bestand niet aangepast.
+ * Gedeelde, niet-bewerkbare productpreview-engine voor admin en customerflow.
+ * De engine verandert het actieve Fabric-canvas nooit en wordt niet gebruikt
+ * voor de productie-export.
  */
 
 const ProductPreview = (() => {
@@ -22,13 +13,23 @@ const ProductPreview = (() => {
     const MIN_CANVAS_HEIGHT = 180;
     const MAX_CANVAS_HEIGHT = 720;
 
-    const SUPPORTED_PREVIEW_TYPES = new Set([
+    const FABRIC_CLONE_PROPERTIES = [
+        '_layerId',
+        '_uploadMeta',
+        '_isGuide',
+        '_isBlockedZone',
+        '_isMargin',
+        '_isPreviewGuide',
+        '_isCenterGuide',
+    ];
+
+    const PREVIEW_TYPES = new Set([
         'single-view',
         'two-sided-toggle',
         'multi-view-toggle',
     ]);
 
-    const SUPPORTED_SLOT_FITS = new Set([
+    const SLOT_FITS = new Set([
         'cover',
         'contain',
         'stretch',
@@ -52,28 +53,6 @@ const ProductPreview = (() => {
             : fallback;
     }
 
-    function toBoolean(value, fallback = false) {
-        if (
-            value === true ||
-            value === 'true' ||
-            value === 1 ||
-            value === '1'
-        ) {
-            return true;
-        }
-
-        if (
-            value === false ||
-            value === 'false' ||
-            value === 0 ||
-            value === '0'
-        ) {
-            return false;
-        }
-
-        return fallback;
-    }
-
     function clamp(value, min, max) {
         return Math.min(max, Math.max(min, value));
     }
@@ -84,17 +63,7 @@ const ProductPreview = (() => {
         return ((rotation % 360) + 360) % 360;
     }
 
-    function normalizeIdentifier(value, fallback) {
-        const normalized = String(value || '')
-            .trim()
-            .toLowerCase()
-            .replace(/[^a-z0-9_-]+/g, '-')
-            .replace(/^-+|-+$/g, '');
-
-        return normalized || fallback;
-    }
-
-    function normalizeImageFile(file) {
+    function normalizeFile(file) {
         if (typeof file === 'string' && file.trim()) {
             return {
                 name: 'Afbeelding',
@@ -124,96 +93,137 @@ const ProductPreview = (() => {
         return {
             name: String(file.name || 'Afbeelding'),
             type: String(file.type || 'image/png'),
-            size: Math.max(0, finiteNumber(file.size, 0)),
+            size: Math.max(
+                0,
+                finiteNumber(file.size, 0)
+            ),
             dataURL,
         };
     }
 
-    function normalizeSourceZone(sourceZone = {}, printSpec = {}) {
-        const finishWidthMm = positiveNumber(
-            printSpec.finishWidthMm,
-            100
-        );
-
-        const finishHeightMm = positiveNumber(
-            printSpec.finishHeightMm,
-            70
-        );
-
+    function normalizeSourceZone(
+        sourceZone = {},
+        spec = {}
+    ) {
         return {
-            x_mm: finiteNumber(sourceZone.x_mm, 0),
-            y_mm: finiteNumber(sourceZone.y_mm, 0),
+            x_mm: finiteNumber(
+                sourceZone.x_mm,
+                0
+            ),
+
+            y_mm: finiteNumber(
+                sourceZone.y_mm,
+                0
+            ),
+
             width_mm: positiveNumber(
                 sourceZone.width_mm,
-                finishWidthMm
+                positiveNumber(
+                    spec.finishWidthMm,
+                    100
+                )
             ),
+
             height_mm: positiveNumber(
                 sourceZone.height_mm,
-                finishHeightMm
+                positiveNumber(
+                    spec.finishHeightMm,
+                    70
+                )
             ),
-            rotation: normalizeRotation(sourceZone.rotation),
-            flipX: toBoolean(sourceZone.flipX, false),
-            flipY: toBoolean(sourceZone.flipY, false),
+
+            rotation: normalizeRotation(
+                sourceZone.rotation
+            ),
+
+            flipX: Boolean(
+                sourceZone.flipX
+            ),
+
+            flipY: Boolean(
+                sourceZone.flipY
+            ),
         };
     }
 
     function normalizeSlot(slot = {}) {
-        const fit = SUPPORTED_SLOT_FITS.has(slot.fit)
-            ? slot.fit
-            : 'cover';
-
         return {
             xPercent: clamp(
                 finiteNumber(slot.xPercent, 20),
                 -200,
                 300
             ),
+
             yPercent: clamp(
                 finiteNumber(slot.yPercent, 10),
                 -200,
                 300
             ),
+
             widthPercent: clamp(
                 positiveNumber(slot.widthPercent, 60),
                 0.1,
                 400
             ),
+
             heightPercent: clamp(
                 positiveNumber(slot.heightPercent, 55),
                 0.1,
                 400
             ),
-            rotation: finiteNumber(slot.rotation, 0),
+
+            rotation: finiteNumber(
+                slot.rotation,
+                0
+            ),
+
             borderRadius: clamp(
                 finiteNumber(slot.borderRadius, 0),
                 0,
                 50
             ),
-            fit,
+
+            fit: SLOT_FITS.has(slot.fit)
+                ? slot.fit
+                : 'cover',
         };
     }
 
-    function normalizeView(view = {}, index = 0, printSpec = {}) {
-        const fallbackId = `view-${index + 1}`;
-
+    function normalizeView(
+        view = {},
+        index = 0,
+        spec = {}
+    ) {
         return {
-            id: normalizeIdentifier(view.id, fallbackId),
+            id: String(
+                view.id ||
+                `view-${index + 1}`
+            ),
+
             label: String(
                 view.label ||
                 `Weergave ${index + 1}`
             ),
-            helpText: String(view.helpText || ''),
+
+            helpText: String(
+                view.helpText ||
+                ''
+            ),
+
             sourceZone: normalizeSourceZone(
                 view.sourceZone,
-                printSpec
+                spec
             ),
+
             mockup: {
-                baseImage: normalizeImageFile(
+                baseImage: normalizeFile(
                     view.mockup?.baseImage
                 ),
-                overlayImage: normalizeImageFile(
+
+                overlayImage: normalizeFile(
                     view.mockup?.overlayImage
                 ),
+
                 slot: normalizeSlot(
                     view.mockup?.slot
                 ),
@@ -221,59 +231,97 @@ const ProductPreview = (() => {
         };
     }
 
-    function normalizeCanvasGuide(guide = {}, index = 0) {
-        const type = guide.type === 'line'
-            ? 'line'
-            : 'label';
-
-        if (type === 'line') {
+    function normalizeCanvasGuide(
+        guide = {},
+        index = 0
+    ) {
+        if (guide.type === 'line') {
             return {
-                id: normalizeIdentifier(
-                    guide.id,
+                id: String(
+                    guide.id ||
                     `guide-line-${index + 1}`
                 ),
+
                 type: 'line',
+
                 label: String(
                     guide.label ||
                     'Vouwlijn'
                 ),
+
                 description: String(
                     guide.description ||
                     ''
                 ),
-                x1_mm: finiteNumber(guide.x1_mm, 0),
-                y1_mm: finiteNumber(guide.y1_mm, 0),
-                x2_mm: finiteNumber(guide.x2_mm, 0),
-                y2_mm: finiteNumber(guide.y2_mm, 0),
+
+                x1_mm: finiteNumber(
+                    guide.x1_mm,
+                    0
+                ),
+
+                y1_mm: finiteNumber(
+                    guide.y1_mm,
+                    0
+                ),
+
+                x2_mm: finiteNumber(
+                    guide.x2_mm,
+                    0
+                ),
+
+                y2_mm: finiteNumber(
+                    guide.y2_mm,
+                    0
+                ),
             };
         }
 
         return {
-            id: normalizeIdentifier(
-                guide.id,
+            id: String(
+                guide.id ||
                 `guide-label-${index + 1}`
             ),
+
             type: 'label',
+
             viewId: guide.viewId
-                ? normalizeIdentifier(guide.viewId, null)
+                ? String(guide.viewId)
                 : null,
+
             label: String(
                 guide.label ||
                 'Gebied'
             ),
+
             description: String(
                 guide.description ||
                 ''
             ),
-            x_mm: finiteNumber(guide.x_mm, 0),
-            y_mm: finiteNumber(guide.y_mm, 0),
+
+            x_mm: finiteNumber(
+                guide.x_mm,
+                0
+            ),
+
+            y_mm: finiteNumber(
+                guide.y_mm,
+                0
+            ),
+
             width_mm: Math.max(
                 0,
-                finiteNumber(guide.width_mm, 0)
+                finiteNumber(
+                    guide.width_mm,
+                    0
+                )
             ),
+
             height_mm: Math.max(
                 0,
-                finiteNumber(guide.height_mm, 0)
+                finiteNumber(
+                    guide.height_mm,
+                    0
+                )
             ),
         };
     }
@@ -282,66 +330,49 @@ const ProductPreview = (() => {
         personalisationType = {},
         product = {}
     ) {
-        if (window.PrintSpecs?.normalizePrintSpec) {
+        if (
+            window.PrintSpecs
+                ?.normalizePrintSpec
+        ) {
             return PrintSpecs.normalizePrintSpec(
                 personalisationType,
                 product
             );
         }
 
-        const bleedMm = positiveNumber(
-            personalisationType.bleed_mm ??
-            product.bleed_mm,
-            3
-        );
-
-        const legacyWidthMm = positiveNumber(
-            personalisationType.width_mm ??
+        const finishWidthMm = positiveNumber(
+            personalisationType.finish_width_mm ||
+            personalisationType.width_mm ||
+            product.finish_width_mm ||
             product.width_mm,
             100
         );
 
-        const legacyHeightMm = positiveNumber(
-            personalisationType.height_mm ??
+        const finishHeightMm = positiveNumber(
+            personalisationType.finish_height_mm ||
+            personalisationType.height_mm ||
+            product.finish_height_mm ||
             product.height_mm,
             70
         );
 
-        const includesBleed = toBoolean(
-            personalisationType.includesBleed,
-            false
-        );
-
-        const finishWidthMm = positiveNumber(
-            personalisationType.finish_width_mm ??
-            product.finish_width_mm,
-            includesBleed
-                ? Math.max(
-                    0.1,
-                    legacyWidthMm - bleedMm * 2
-                )
-                : legacyWidthMm
-        );
-
-        const finishHeightMm = positiveNumber(
-            personalisationType.finish_height_mm ??
-            product.finish_height_mm,
-            includesBleed
-                ? Math.max(
-                    0.1,
-                    legacyHeightMm - bleedMm * 2
-                )
-                : legacyHeightMm
+        const bleedMm = Math.max(
+            0,
+            finiteNumber(
+                personalisationType.bleed_mm ??
+                product.bleed_mm,
+                3
+            )
         );
 
         const exportWidthMm = positiveNumber(
-            personalisationType.export_width_mm ??
+            personalisationType.export_width_mm ||
             product.export_width_mm,
             finishWidthMm + bleedMm * 2
         );
 
         const exportHeightMm = positiveNumber(
-            personalisationType.export_height_mm ??
+            personalisationType.export_height_mm ||
             product.export_height_mm,
             finishHeightMm + bleedMm * 2
         );
@@ -352,13 +383,21 @@ const ProductPreview = (() => {
             exportWidthMm,
             exportHeightMm,
             bleedMm,
+
             trimXmm: Math.max(
                 0,
-                (exportWidthMm - finishWidthMm) / 2
+                (
+                    exportWidthMm -
+                    finishWidthMm
+                ) / 2
             ),
+
             trimYmm: Math.max(
                 0,
-                (exportHeightMm - finishHeightMm) / 2
+                (
+                    exportHeightMm -
+                    finishHeightMm
+                ) / 2
             ),
         };
     }
@@ -367,68 +406,52 @@ const ProductPreview = (() => {
         personalisationType = {},
         product = {}
     ) {
-        const rawPreview = personalisationType.preview || {};
-        const printSpec = getPrintSpec(
+        const rawPreview =
+            personalisationType.preview ||
+            {};
+
+        const spec = getPrintSpec(
             personalisationType,
             product
         );
 
-        const rawViews = Array.isArray(rawPreview.views)
-            ? rawPreview.views
+        const views = Array.isArray(
+            rawPreview.views
+        )
+            ? rawPreview.views.map(
+                (view, index) => normalizeView(
+                    view,
+                    index,
+                    spec
+                )
+            )
             : [];
 
-        const usedViewIds = new Set();
-
-        const views = rawViews.map((view, index) => {
-            const normalizedView = normalizeView(
-                view,
-                index,
-                printSpec
-            );
-
-            let uniqueId = normalizedView.id;
-            let suffix = 2;
-
-            while (usedViewIds.has(uniqueId)) {
-                uniqueId = `${normalizedView.id}-${suffix}`;
-                suffix += 1;
-            }
-
-            usedViewIds.add(uniqueId);
-
-            return {
-                ...normalizedView,
-                id: uniqueId,
-            };
-        });
-
-        const requestedDefaultViewId = normalizeIdentifier(
-            rawPreview.defaultViewId,
-            ''
-        );
-
         const defaultViewId = views.some(
-            view => view.id === requestedDefaultViewId
+            view =>
+                view.id ===
+                rawPreview.defaultViewId
         )
-            ? requestedDefaultViewId
+            ? rawPreview.defaultViewId
             : views[0]?.id || null;
 
-        const previewType = SUPPORTED_PREVIEW_TYPES.has(
-            rawPreview.type
-        )
-            ? rawPreview.type
-            : views.length > 1
-                ? 'two-sided-toggle'
-                : 'single-view';
-
         return {
-            enabled: toBoolean(
-                rawPreview.enabled,
-                false
-            ),
-            type: previewType,
+            enabled:
+                rawPreview.enabled === true &&
+                views.length > 0,
+
+            type: PREVIEW_TYPES.has(
+                rawPreview.type
+            )
+                ? rawPreview.type
+                : views.length > 1
+                    ? 'two-sided-toggle'
+                    : 'single-view',
+
             defaultViewId,
+
             views,
+
             canvasGuides: Array.isArray(
                 rawPreview.canvasGuides
             )
@@ -439,7 +462,10 @@ const ProductPreview = (() => {
         };
     }
 
-    function getView(config, viewId = null) {
+    function getView(
+        config,
+        viewId = null
+    ) {
         if (
             !Array.isArray(config?.views) ||
             !config.views.length
@@ -451,13 +477,20 @@ const ProductPreview = (() => {
             view => view.id === viewId
         ) ||
             config.views.find(
-                view => view.id === config.defaultViewId
+                view =>
+                    view.id ===
+                    config.defaultViewId
             ) ||
             config.views[0];
     }
 
-    function getImageSource(fileOrDataURL) {
-        if (typeof fileOrDataURL === 'string') {
+    function getImageSource(
+        fileOrDataURL
+    ) {
+        if (
+            typeof fileOrDataURL ===
+            'string'
+        ) {
             return fileOrDataURL;
         }
 
@@ -467,8 +500,12 @@ const ProductPreview = (() => {
             '';
     }
 
-    function loadImage(fileOrDataURL) {
-        const src = getImageSource(fileOrDataURL);
+    function loadImage(
+        fileOrDataURL
+    ) {
+        const src = getImageSource(
+            fileOrDataURL
+        );
 
         if (!src) {
             return Promise.resolve(null);
@@ -478,46 +515,53 @@ const ProductPreview = (() => {
             return imageCache.get(src);
         }
 
-        const imagePromise = new Promise(
-            (resolve, reject) => {
-                const image = new Image();
+        const imagePromise =
+            new Promise(
+                (resolve, reject) => {
+                    const image = new Image();
 
-                image.onload = () => {
-                    resolve(image);
-                };
+                    image.onload = () => {
+                        resolve(image);
+                    };
 
-                image.onerror = () => {
-                    imageCache.delete(src);
+                    image.onerror = () => {
+                        imageCache.delete(src);
 
-                    reject(
-                        new Error(
-                            'Previewafbeelding kon niet worden geladen.'
-                        )
-                    );
-                };
+                        reject(
+                            new Error(
+                                'Previewafbeelding kon niet worden geladen.'
+                            )
+                        );
+                    };
 
-                if (
-                    !src.startsWith('data:') &&
-                    !src.startsWith('blob:')
-                ) {
-                    image.crossOrigin = 'anonymous';
+                    if (
+                        !src.startsWith('data:') &&
+                        !src.startsWith('blob:')
+                    ) {
+                        image.crossOrigin =
+                            'anonymous';
+                    }
+
+                    image.src = src;
                 }
+            );
 
-                image.src = src;
-            }
+        imageCache.set(
+            src,
+            imagePromise
         );
-
-        imageCache.set(src, imagePromise);
 
         return imagePromise;
     }
 
-    function clearImageCache() {
-        imageCache.clear();
-    }
-
-    function createCanvas(width, height) {
-        const canvas = document.createElement('canvas');
+    function createCanvas(
+        width,
+        height
+    ) {
+        const canvas =
+            document.createElement(
+                'canvas'
+            );
 
         canvas.width = Math.max(
             1,
@@ -532,13 +576,16 @@ const ProductPreview = (() => {
         return canvas;
     }
 
-    function getSourceDimensions(source) {
+    function getSourceDimensions(
+        source
+    ) {
         return {
             width:
                 source?.naturalWidth ||
                 source?.videoWidth ||
                 source?.width ||
                 0,
+
             height:
                 source?.naturalHeight ||
                 source?.videoHeight ||
@@ -551,37 +598,46 @@ const ProductPreview = (() => {
         sourceCanvas,
         sourceZone
     ) {
-        const rotation = normalizeRotation(
-            sourceZone.rotation
-        );
+        const rotation =
+            normalizeRotation(
+                sourceZone.rotation
+            );
 
         const swapsDimensions =
             rotation === 90 ||
             rotation === 270;
 
-        const transformedCanvas = createCanvas(
-            swapsDimensions
-                ? sourceCanvas.height
-                : sourceCanvas.width,
-            swapsDimensions
-                ? sourceCanvas.width
-                : sourceCanvas.height
-        );
+        const transformed =
+            createCanvas(
+                swapsDimensions
+                    ? sourceCanvas.height
+                    : sourceCanvas.width,
 
-        const context = transformedCanvas.getContext('2d');
+                swapsDimensions
+                    ? sourceCanvas.width
+                    : sourceCanvas.height
+            );
 
-        context.imageSmoothingEnabled = true;
-        context.imageSmoothingQuality = 'high';
+        const context =
+            transformed.getContext('2d');
+
+        context.imageSmoothingEnabled =
+            true;
+
+        context.imageSmoothingQuality =
+            'high';
 
         context.save();
 
         context.translate(
-            transformedCanvas.width / 2,
-            transformedCanvas.height / 2
+            transformed.width / 2,
+            transformed.height / 2
         );
 
         context.rotate(
-            rotation * Math.PI / 180
+            rotation *
+            Math.PI /
+            180
         );
 
         context.scale(
@@ -597,15 +653,16 @@ const ProductPreview = (() => {
 
         context.restore();
 
-        return transformedCanvas;
+        return transformed;
     }
 
     function cropSourceZone(
         source,
         sourceZone,
-        printSpec
+        spec
     ) {
-        const dimensions = getSourceDimensions(source);
+        const dimensions =
+            getSourceDimensions(source);
 
         if (
             !dimensions.width ||
@@ -614,54 +671,40 @@ const ProductPreview = (() => {
             return null;
         }
 
-        const exportWidthMm = positiveNumber(
-            printSpec.exportWidthMm,
+        const exportWidthMm =
             positiveNumber(
-                printSpec.finishWidthMm,
-                100
-            )
-        );
+                spec.exportWidthMm,
+                positiveNumber(
+                    spec.finishWidthMm,
+                    100
+                )
+            );
 
-        const exportHeightMm = positiveNumber(
-            printSpec.exportHeightMm,
+        const exportHeightMm =
             positiveNumber(
-                printSpec.finishHeightMm,
-                70
-            )
-        );
+                spec.exportHeightMm,
+                positiveNumber(
+                    spec.finishHeightMm,
+                    70
+                )
+            );
 
-        const trimXmm = finiteNumber(
-            printSpec.trimXmm,
-            Math.max(
-                0,
-                (
-                    exportWidthMm -
-                    positiveNumber(
-                        printSpec.finishWidthMm,
-                        exportWidthMm
-                    )
-                ) / 2
-            )
-        );
+        const trimXmm =
+            finiteNumber(
+                spec.trimXmm,
+                0
+            );
 
-        const trimYmm = finiteNumber(
-            printSpec.trimYmm,
-            Math.max(
-                0,
-                (
-                    exportHeightMm -
-                    positiveNumber(
-                        printSpec.finishHeightMm,
-                        exportHeightMm
-                    )
-                ) / 2
-            )
-        );
+        const trimYmm =
+            finiteNumber(
+                spec.trimYmm,
+                0
+            );
 
         const sourceX = (
             (
                 trimXmm +
-                finiteNumber(sourceZone.x_mm, 0)
+                sourceZone.x_mm
             ) /
             exportWidthMm
         ) * dimensions.width;
@@ -669,24 +712,18 @@ const ProductPreview = (() => {
         const sourceY = (
             (
                 trimYmm +
-                finiteNumber(sourceZone.y_mm, 0)
+                sourceZone.y_mm
             ) /
             exportHeightMm
         ) * dimensions.height;
 
         const sourceWidth = (
-            positiveNumber(
-                sourceZone.width_mm,
-                printSpec.finishWidthMm
-            ) /
+            sourceZone.width_mm /
             exportWidthMm
         ) * dimensions.width;
 
         const sourceHeight = (
-            positiveNumber(
-                sourceZone.height_mm,
-                printSpec.finishHeightMm
-            ) /
+            sourceZone.height_mm /
             exportHeightMm
         ) * dimensions.height;
 
@@ -721,25 +758,27 @@ const ProductPreview = (() => {
             return null;
         }
 
-        const cropWidth = right - left;
-        const cropHeight = bottom - top;
+        const croppedCanvas =
+            createCanvas(
+                right - left,
+                bottom - top
+            );
 
-        const croppedCanvas = createCanvas(
-            cropWidth,
-            cropHeight
-        );
+        const context =
+            croppedCanvas.getContext('2d');
 
-        const context = croppedCanvas.getContext('2d');
+        context.imageSmoothingEnabled =
+            true;
 
-        context.imageSmoothingEnabled = true;
-        context.imageSmoothingQuality = 'high';
+        context.imageSmoothingQuality =
+            'high';
 
         context.drawImage(
             source,
             left,
             top,
-            cropWidth,
-            cropHeight,
+            right - left,
+            bottom - top,
             0,
             0,
             croppedCanvas.width,
@@ -763,7 +802,10 @@ const ProductPreview = (() => {
         const safeRadius = clamp(
             radius,
             0,
-            Math.min(width, height) / 2
+            Math.min(
+                width,
+                height
+            ) / 2
         );
 
         context.beginPath();
@@ -849,22 +891,42 @@ const ProductPreview = (() => {
             };
         }
 
-        const scale = fit === 'contain'
-            ? Math.min(
-                targetWidth / sourceWidth,
-                targetHeight / sourceHeight
-            )
-            : Math.max(
-                targetWidth / sourceWidth,
-                targetHeight / sourceHeight
-            );
+        const scale =
+            fit === 'contain'
+                ? Math.min(
+                    targetWidth /
+                    sourceWidth,
 
-        const width = sourceWidth * scale;
-        const height = sourceHeight * scale;
+                    targetHeight /
+                    sourceHeight
+                )
+                : Math.max(
+                    targetWidth /
+                    sourceWidth,
+
+                    targetHeight /
+                    sourceHeight
+                );
+
+        const width =
+            sourceWidth * scale;
+
+        const height =
+            sourceHeight * scale;
 
         return {
-            x: (targetWidth - width) / 2,
-            y: (targetHeight - height) / 2,
+            x:
+                (
+                    targetWidth -
+                    width
+                ) / 2,
+
+            y:
+                (
+                    targetHeight -
+                    height
+                ) / 2,
+
             width,
             height,
         };
@@ -909,13 +971,14 @@ const ProductPreview = (() => {
             slot.borderRadius /
             100;
 
-        const fittedRect = getFittedRect(
-            sourceCanvas.width,
-            sourceCanvas.height,
-            slotWidth,
-            slotHeight,
-            slot.fit
-        );
+        const fittedRect =
+            getFittedRect(
+                sourceCanvas.width,
+                sourceCanvas.height,
+                slotWidth,
+                slotHeight,
+                slot.fit
+            );
 
         if (!fittedRect) {
             return false;
@@ -924,8 +987,11 @@ const ProductPreview = (() => {
         context.save();
 
         context.translate(
-            slotX + slotWidth / 2,
-            slotY + slotHeight / 2
+            slotX +
+            slotWidth / 2,
+
+            slotY +
+            slotHeight / 2
         );
 
         context.rotate(
@@ -947,8 +1013,13 @@ const ProductPreview = (() => {
 
         context.drawImage(
             sourceCanvas,
-            -slotWidth / 2 + fittedRect.x,
-            -slotHeight / 2 + fittedRect.y,
+
+            -slotWidth / 2 +
+            fittedRect.x,
+
+            -slotHeight / 2 +
+            fittedRect.y,
+
             fittedRect.width,
             fittedRect.height
         );
@@ -963,7 +1034,8 @@ const ProductPreview = (() => {
         width,
         height
     ) {
-        context.fillStyle = '#F7F4EE';
+        context.fillStyle =
+            '#F7F4EE';
 
         context.fillRect(
             0,
@@ -972,22 +1044,33 @@ const ProductPreview = (() => {
             height
         );
 
-        const inset = Math.round(
-            Math.min(width, height) *
-            0.055
-        );
+        const inset =
+            Math.round(
+                Math.min(
+                    width,
+                    height
+                ) * 0.055
+            );
 
-        const radius = Math.round(
-            Math.min(width, height) *
-            0.04
-        );
+        const radius =
+            Math.round(
+                Math.min(
+                    width,
+                    height
+                ) * 0.04
+            );
 
-        context.fillStyle = '#FFFFFF';
-        context.strokeStyle = '#DDD8CC';
-        context.lineWidth = Math.max(
-            1,
-            width / 500
-        );
+        context.fillStyle =
+            '#FFFFFF';
+
+        context.strokeStyle =
+            '#DDD8CC';
+
+        context.lineWidth =
+            Math.max(
+                1,
+                width / 500
+            );
 
         createRoundedRectPath(
             context,
@@ -1005,10 +1088,11 @@ const ProductPreview = (() => {
     function setTargetCanvasDimensions(
         targetCanvas,
         baseImage,
-        requestedWidth = DEFAULT_CANVAS_WIDTH
+        requestedWidth
     ) {
-        const requestedCanvasWidth = Math.max(
+        let width = Math.max(
             MIN_CANVAS_WIDTH,
+
             Math.round(
                 finiteNumber(
                     requestedWidth,
@@ -1027,159 +1111,162 @@ const ProductPreview = (() => {
             baseImage?.height ||
             0;
 
-        let canvasWidth = requestedCanvasWidth;
-        let canvasHeight = DEFAULT_CANVAS_HEIGHT;
+        let height =
+            DEFAULT_CANVAS_HEIGHT;
 
         if (
             baseWidth > 0 &&
             baseHeight > 0
         ) {
-            canvasHeight = Math.round(
-                canvasWidth *
+            height = Math.round(
+                width *
                 baseHeight /
                 baseWidth
             );
         }
 
-        if (canvasHeight > MAX_CANVAS_HEIGHT) {
+        if (
+            height >
+            MAX_CANVAS_HEIGHT
+        ) {
             const scale =
                 MAX_CANVAS_HEIGHT /
-                canvasHeight;
+                height;
 
-            canvasWidth = Math.max(
+            width = Math.max(
                 MIN_CANVAS_WIDTH,
+
                 Math.round(
-                    canvasWidth * scale
+                    width * scale
                 )
             );
 
-            canvasHeight = MAX_CANVAS_HEIGHT;
+            height =
+                MAX_CANVAS_HEIGHT;
         }
 
-        targetCanvas.width = canvasWidth;
+        targetCanvas.width =
+            width;
 
-        targetCanvas.height = Math.max(
-            MIN_CANVAS_HEIGHT,
-            canvasHeight
-        );
+        targetCanvas.height =
+            Math.max(
+                MIN_CANVAS_HEIGHT,
+                height
+            );
     }
 
-    function defaultGuidePredicate(object) {
+    function isTechnicalGuide(
+        object,
+        customPredicate
+    ) {
         return Boolean(
             object?._isGuide ||
             object?._isBlockedZone ||
             object?._isMargin ||
             object?._isPreviewGuide ||
-            object?._isCenterGuide
+            object?._isCenterGuide ||
+            customPredicate?.(object)
         );
-    }
-
-    function isExcludedFabricObject(
-        object,
-        customPredicate
-    ) {
-        return defaultGuidePredicate(object) ||
-            Boolean(
-                customPredicate?.(object)
-            );
     }
 
     function createSourceCanvasFromFabric(
         fabricCanvas,
         options = {}
     ) {
-        if (!fabricCanvas) {
-            return null;
+        if (
+            !fabricCanvas ||
+            typeof fabricCanvas.clone !==
+            'function'
+        ) {
+            return Promise.resolve(null);
         }
 
-        const customPredicate =
-            typeof options.isGuideObject === 'function'
-                ? options.isGuideObject
-                : null;
+        return new Promise(
+            (resolve, reject) => {
+                try {
+                    fabricCanvas.clone(
+                        clonedCanvas => {
+                            if (!clonedCanvas) {
+                                reject(
+                                    new Error(
+                                        'Fabric-canvas kon niet worden gekloond.'
+                                    )
+                                );
 
-        const objects =
-            typeof fabricCanvas.getObjects === 'function'
-                ? fabricCanvas.getObjects()
-                : [];
+                                return;
+                            }
 
-        const excludedObjects = objects.filter(
-            object => isExcludedFabricObject(
-                object,
-                customPredicate
-            )
-        );
+                            try {
+                                clonedCanvas
+                                    .getObjects()
+                                    .filter(
+                                        object =>
+                                            isTechnicalGuide(
+                                                object,
+                                                options.isGuideObject
+                                            )
+                                    )
+                                    .forEach(
+                                        object =>
+                                            clonedCanvas.remove(
+                                                object
+                                            )
+                                    );
 
-        const originalVisibility = excludedObjects.map(
-            object => ({
-                object,
-                visible: object.visible,
-            })
-        );
+                                clonedCanvas.backgroundImage =
+                                    null;
 
-        excludedObjects.forEach(object => {
-            object.visible = false;
-        });
+                                clonedCanvas.backgroundColor =
+                                    fabricCanvas.backgroundColor ||
+                                    '#FFFFFF';
 
-        try {
-            if (
-                typeof fabricCanvas.toCanvasElement ===
-                'function'
-            ) {
-                return fabricCanvas.toCanvasElement(
-                    1,
-                    {
-                        enableRetinaScaling: false,
-                    }
-                );
-            }
+                                clonedCanvas.setDimensions({
+                                    width:
+                                        fabricCanvas.getWidth(),
 
-            const lowerCanvas =
-                fabricCanvas.lowerCanvasEl;
+                                    height:
+                                        fabricCanvas.getHeight(),
+                                });
 
-            if (!lowerCanvas) {
-                return null;
-            }
+                                clonedCanvas.setViewportTransform(
+                                    [1, 0, 0, 1, 0, 0]
+                                );
 
-            if (
-                typeof fabricCanvas.renderAll ===
-                'function'
-            ) {
-                fabricCanvas.renderAll();
-            }
+                                clonedCanvas.discardActiveObject();
+                                clonedCanvas.renderAll();
 
-            const clonedCanvas = createCanvas(
-                lowerCanvas.width,
-                lowerCanvas.height
-            );
+                                const sourceCanvas =
+                                    createCanvas(
+                                        fabricCanvas.getWidth(),
+                                        fabricCanvas.getHeight()
+                                    );
 
-            clonedCanvas
-                .getContext('2d')
-                .drawImage(
-                    lowerCanvas,
-                    0,
-                    0
-                );
+                                sourceCanvas
+                                    .getContext('2d')
+                                    .drawImage(
+                                        clonedCanvas.lowerCanvasEl,
+                                        0,
+                                        0,
+                                        sourceCanvas.width,
+                                        sourceCanvas.height
+                                    );
 
-            return clonedCanvas;
-        } finally {
-            originalVisibility.forEach(
-                ({ object, visible }) => {
-                    object.visible = visible;
+                                clonedCanvas.dispose();
+
+                                resolve(sourceCanvas);
+                            } catch (error) {
+                                clonedCanvas.dispose();
+                                reject(error);
+                            }
+                        },
+
+                        FABRIC_CLONE_PROPERTIES
+                    );
+                } catch (error) {
+                    reject(error);
                 }
-            );
-
-            if (
-                typeof fabricCanvas.requestRenderAll ===
-                'function'
-            ) {
-                fabricCanvas.requestRenderAll();
-            } else if (
-                typeof fabricCanvas.renderAll ===
-                'function'
-            ) {
-                fabricCanvas.renderAll();
             }
-        }
+        );
     }
 
     async function render({
@@ -1196,15 +1283,17 @@ const ProductPreview = (() => {
             );
         }
 
-        const config = normalizeConfig(
-            personalisationType,
-            product
-        );
+        const config =
+            normalizeConfig(
+                personalisationType,
+                product
+            );
 
-        const view = getView(
-            config,
-            viewId
-        );
+        const view =
+            getView(
+                config,
+                viewId
+            );
 
         const context =
             targetCanvas.getContext('2d');
@@ -1258,8 +1347,11 @@ const ProductPreview = (() => {
             targetCanvas.height
         );
 
-        context.imageSmoothingEnabled = true;
-        context.imageSmoothingQuality = 'high';
+        context.imageSmoothingEnabled =
+            true;
+
+        context.imageSmoothingQuality =
+            'high';
 
         if (baseImage) {
             context.drawImage(
@@ -1277,26 +1369,29 @@ const ProductPreview = (() => {
             );
         }
 
-        const printSpec = getPrintSpec(
-            personalisationType,
-            product
-        );
+        const spec =
+            getPrintSpec(
+                personalisationType,
+                product
+            );
 
-        const croppedSource = source
-            ? cropSourceZone(
-                source,
-                view.sourceZone,
-                printSpec
-            )
-            : null;
+        const croppedSource =
+            source
+                ? cropSourceZone(
+                    source,
+                    view.sourceZone,
+                    spec
+                )
+                : null;
 
-        const hasArtwork = drawSlot(
-            context,
-            croppedSource,
-            view.mockup.slot,
-            targetCanvas.width,
-            targetCanvas.height
-        );
+        const hasArtwork =
+            drawSlot(
+                context,
+                croppedSource,
+                view.mockup.slot,
+                targetCanvas.width,
+                targetCanvas.height
+            );
 
         if (overlayImage) {
             context.drawImage(
@@ -1318,19 +1413,26 @@ const ProductPreview = (() => {
         };
     }
 
-    async function renderFromCanvas(options = {}) {
+    function renderFromCanvas(
+        options = {}
+    ) {
         return render({
             ...options,
-            source: options.sourceCanvas || null,
+            source:
+                options.sourceCanvas ||
+                null,
         });
     }
 
-    async function renderFromDataURL(options = {}) {
-        const sourceImage = options.sourceDataURL
-            ? await loadImage(
-                options.sourceDataURL
-            )
-            : null;
+    async function renderFromDataURL(
+        options = {}
+    ) {
+        const sourceImage =
+            options.sourceDataURL
+                ? await loadImage(
+                    options.sourceDataURL
+                )
+                : null;
 
         return render({
             ...options,
@@ -1338,9 +1440,11 @@ const ProductPreview = (() => {
         });
     }
 
-    async function renderFromFabric(options = {}) {
+    async function renderFromFabric(
+        options = {}
+    ) {
         const sourceCanvas =
-            createSourceCanvasFromFabric(
+            await createSourceCanvasFromFabric(
                 options.fabricCanvas,
                 {
                     isGuideObject:
@@ -1359,7 +1463,6 @@ const ProductPreview = (() => {
         getPrintSpec,
         getView,
         loadImage,
-        clearImageCache,
         createSourceCanvasFromFabric,
         render,
         renderFromCanvas,
@@ -1368,4 +1471,5 @@ const ProductPreview = (() => {
     };
 })();
 
-window.ProductPreview = ProductPreview;
+window.ProductPreview =
+    ProductPreview;

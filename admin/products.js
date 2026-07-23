@@ -908,192 +908,406 @@ function previewViewRow(view = {}, index = 0, canvasGuides = []) {
   const sourceZone = view.sourceZone || {};
   const slot = view.mockup?.slot || {};
   const viewId = view.id || createPreviewViewId();
-  const labelGuide = canvasGuides.find(guide => guide.type === 'label' && guide.viewId === viewId) || null;
-  const showGuide = Boolean(labelGuide) || canvasGuides.length === 0;
+
+  const xStartMm = Number.isFinite(Number(sourceZone.x_mm))
+    ? Number(sourceZone.x_mm)
+    : 0;
+
+  const yStartMm = Number.isFinite(Number(sourceZone.y_mm))
+    ? Number(sourceZone.y_mm)
+    : 0;
+
+  const sourceWidthMm = Number.isFinite(Number(sourceZone.width_mm))
+    ? Number(sourceZone.width_mm)
+    : 0;
+
+  const sourceHeightMm = Number.isFinite(Number(sourceZone.height_mm))
+    ? Number(sourceZone.height_mm)
+    : 0;
+
+  const xEndMm = xStartMm + sourceWidthMm;
+  const yEndMm = yStartMm + sourceHeightMm;
+
+  const labelGuide = canvasGuides.find(guide => (
+    guide.type === 'label' &&
+    guide.viewId === viewId
+  )) || null;
+
+  const showGuide =
+    Boolean(labelGuide) ||
+    canvasGuides.length === 0;
 
   return `
-    <article class="preview-view-row" data-preview-view-id="${escHtml(viewId)}">
+    <article
+      class="preview-view-row"
+      data-preview-view-id="${escHtml(viewId)}"
+    >
       <div class="preview-view-header">
         <div>
-          <strong>Zijde ${index + 1}: <span class="preview-view-title">${escHtml(view.label || `Weergave ${index + 1}`)}</span></strong>
-          <span>Brongebied op het volledige drukcanvas en plaatsing op de productmockup</span>
+          <strong>
+            Zijde ${index + 1}:
+            <span class="preview-view-title">
+              ${escHtml(view.label || `Weergave ${index + 1}`)}
+            </span>
+          </strong>
+
+          <span>
+            Kies welk gedeelte van het volledige ontwerpcanvas wordt gebruikt
+            en waar dit op de productfoto wordt geplaatst.
+          </span>
         </div>
-        <button class="icon-btn danger btn-remove-preview-view" type="button" title="Verwijder zijde">×</button>
+
+        <button
+          class="icon-btn danger btn-remove-preview-view"
+          type="button"
+          title="Zijde verwijderen"
+          aria-label="Zijde verwijderen"
+        >
+          ×
+        </button>
       </div>
 
       <div class="form-row">
         <div class="form-group">
           <label>Label</label>
-          <input type="text" class="preview-view-label" value="${escHtml(view.label || '')}" placeholder="Voorkant">
+
+          <input
+            type="text"
+            class="preview-view-label"
+            value="${escHtml(view.label || '')}"
+            placeholder="Voorkant"
+          >
         </div>
 
         <div class="form-group">
-          <label>Technisch ID</label>
-          <input type="text" class="preview-view-id" value="${escHtml(viewId)}" readonly>
-          <span class="form-hint">Blijft stabiel voor bestaande producten en orders.</span>
+          <label>Intern ID</label>
+
+          <input
+            type="text"
+            class="preview-view-id"
+            value="${escHtml(viewId)}"
+            readonly
+          >
+
+          <span class="form-hint">
+            Automatisch gegenereerd en niet aanpassen.
+          </span>
         </div>
       </div>
 
       <div class="form-row-1">
         <div class="form-group">
           <label>Uitleg voor de klant</label>
-          <input type="text" class="preview-view-help" value="${escHtml(view.helpText || '')}" placeholder="Dit deel wordt naar achteren gevouwen.">
+
+          <input
+            type="text"
+            class="preview-view-help"
+            value="${escHtml(view.helpText || '')}"
+            placeholder="Dit gedeelte is zichtbaar aan de voorkant."
+          >
         </div>
       </div>
 
-      <div class="preview-subtitle">Brongebied op het eindformaat</div>
+      <div class="preview-subtitle">
+        Brongebied op het eindformaat
+      </div>
+
       <span class="form-hint preview-coordinate-hint">
-        X en Y starten linksboven op het afgewerkte formaat, dus zonder afloop. De preview-engine verwerkt de afloop automatisch.
+        Alle punten worden gemeten vanaf de linkerbovenhoek van het afgewerkte
+        formaat, dus zonder afloop.
       </span>
 
       <div class="form-row-4">
-  <div class="form-group">
-    <label>X-startpunt mm</label>
-    <input
-      type="number"
-      class="preview-source-x"
-      value="${numberInputValue(sourceZone.x_mm)}"
-      min="0"
-      step="0.1"
-    >
-  </div>
+        <div class="form-group">
+          <label>X-startpunt mm</label>
 
-  <div class="form-group">
-    <label>Y-startpunt mm</label>
-    <input
-      type="number"
-      class="preview-source-y"
-      value="${numberInputValue(sourceZone.y_mm)}"
-      min="0"
-      step="0.1"
-    >
-  </div>
+          <input
+            type="number"
+            class="preview-source-x"
+            value="${numberInputValue(xStartMm, 0)}"
+            min="0"
+            step="0.1"
+          >
+        </div>
 
-  <div class="form-group">
-    <label>X-eindpunt mm</label>
-    <input
-      type="number"
-      class="preview-source-width"
-      value="${numberInputValue(sourceZone.width_mm)}"
-      min="0.1"
-      step="0.1"
-    >
-  </div>
+        <div class="form-group">
+          <label>Y-startpunt mm</label>
 
-  <div class="form-group">
-    <label>Y-eindpunt mm</label>
-    <input
-      type="number"
-      class="preview-source-height"
-      value="${numberInputValue(sourceZone.height_mm)}"
-      min="0.1"
-      step="0.1"
-    >
-  </div>
-</div>
+          <input
+            type="number"
+            class="preview-source-y"
+            value="${numberInputValue(yStartMm, 0)}"
+            min="0"
+            step="0.1"
+          >
+        </div>
+
+        <div class="form-group">
+          <label>X-eindpunt mm</label>
+
+          <input
+            type="number"
+            class="preview-source-width"
+            value="${numberInputValue(xEndMm, 0)}"
+            min="0"
+            step="0.1"
+          >
+        </div>
+
+        <div class="form-group">
+          <label>Y-eindpunt mm</label>
+
+          <input
+            type="number"
+            class="preview-source-height"
+            value="${numberInputValue(yEndMm, 0)}"
+            min="0"
+            step="0.1"
+          >
+        </div>
+      </div>
+
+      <span class="form-hint">
+        De software berekent automatisch de breedte uit
+        X-eindpunt − X-startpunt en de hoogte uit
+        Y-eindpunt − Y-startpunt.
+      </span>
 
       <div class="form-row-3">
         <div class="form-group">
           <label>Bronrotatie</label>
+
           <select class="preview-source-rotation">
             ${[0, 90, 180, 270].map(rotation => `
-              <option value="${rotation}" ${Number(sourceZone.rotation || 0) === rotation ? 'selected' : ''}>${rotation}°</option>
+              <option
+                value="${rotation}"
+                ${Number(sourceZone.rotation || 0) === rotation ? 'selected' : ''}
+              >
+                ${rotation}°
+              </option>
             `).join('')}
           </select>
         </div>
 
         <label class="preview-check-row">
-          <input type="checkbox" class="preview-source-flip-x" ${sourceZone.flipX ? 'checked' : ''}>
+          <input
+            type="checkbox"
+            class="preview-source-flip-x"
+            ${sourceZone.flipX ? 'checked' : ''}
+          >
+
           <span>Horizontaal spiegelen</span>
         </label>
 
         <label class="preview-check-row">
-          <input type="checkbox" class="preview-source-flip-y" ${sourceZone.flipY ? 'checked' : ''}>
+          <input
+            type="checkbox"
+            class="preview-source-flip-y"
+            ${sourceZone.flipY ? 'checked' : ''}
+          >
+
           <span>Verticaal spiegelen</span>
         </label>
       </div>
 
       <label class="preview-guide-toggle">
-        <input type="checkbox" class="preview-guide-enabled" ${showGuide ? 'checked' : ''}>
+        <input
+          type="checkbox"
+          class="preview-guide-enabled"
+          ${showGuide ? 'checked' : ''}
+        >
+
         <span>
-          <strong>Toon dit gebied als label op het ontwerpcanvas</strong>
-          <small>Dit label is alleen een hulplijn en komt nooit in de print-export.</small>
+          <strong>
+            Toon dit gebied als hulplabel in de ontwerptool
+          </strong>
+
+          <small>
+            Dit label wordt niet opgenomen in het drukbestand.
+          </small>
         </span>
       </label>
 
       <div class="form-row-1 preview-guide-description-wrap">
         <div class="form-group">
-          <label>Beschrijving onder canvaslabel</label>
-          <input type="text" class="preview-guide-description" value="${escHtml(labelGuide?.description || view.helpText || '')}" placeholder="Zichtbaar op het product">
+          <label>Beschrijving bij hulplabel</label>
+
+          <input
+            type="text"
+            class="preview-guide-description"
+            value="${escHtml(
+    labelGuide?.description ||
+    view.helpText ||
+    ''
+  )}"
+            placeholder="Zichtbaar aan de voorkant"
+          >
         </div>
       </div>
 
-      <div class="preview-subtitle">Mockupbestanden</div>
+      <div class="preview-subtitle">
+        Productfoto en bovenlaag
+      </div>
 
       <div class="form-row">
         <div class="form-group">
-          <label>Basismockup</label>
+          <label>Productfoto / onderlaag</label>
+
           <div class="file-upload-field">
             <div class="preview-base-output">
-              ${renderStoredFile(view.mockup?.baseImage || null, 'Basismockup')}
+              ${renderStoredFile(
+    view.mockup?.baseImage || null,
+    'Productfoto / onderlaag'
+  )}
             </div>
+
             <div class="file-upload-actions">
-              <input type="file" class="preview-base-file" accept="image/*">
-              <button type="button" class="btn btn-secondary btn-sm preview-base-remove">Verwijderen</button>
+              <input
+                type="file"
+                class="preview-base-file"
+                accept="image/*"
+              >
+
+              <button
+                type="button"
+                class="btn btn-secondary btn-sm preview-base-remove"
+              >
+                Verwijderen
+              </button>
             </div>
           </div>
         </div>
 
         <div class="form-group">
-          <label>Overlay optioneel</label>
+          <label>Transparante bovenlaag optioneel</label>
+
           <div class="file-upload-field">
             <div class="preview-overlay-output">
-              ${renderStoredFile(view.mockup?.overlayImage || null, 'Overlay')}
+              ${renderStoredFile(
+    view.mockup?.overlayImage || null,
+    'Transparante bovenlaag'
+  )}
             </div>
+
             <div class="file-upload-actions">
-              <input type="file" class="preview-overlay-file" accept="image/*">
-              <button type="button" class="btn btn-secondary btn-sm preview-overlay-remove">Verwijderen</button>
+              <input
+                type="file"
+                class="preview-overlay-file"
+                accept="image/*"
+              >
+
+              <button
+                type="button"
+                class="btn btn-secondary btn-sm preview-overlay-remove"
+              >
+                Verwijderen
+              </button>
             </div>
           </div>
         </div>
       </div>
 
-      <div class="preview-subtitle">Plaatsing op de mockup</div>
+      <div class="preview-subtitle">
+        Plaatsing op de productfoto
+      </div>
 
       <div class="form-row-4">
         <div class="form-group">
-          <label>X %</label>
-          <input type="number" class="preview-slot-x" value="${numberInputValue(slot.xPercent, 20)}" step="0.1">
+          <label>X-startpositie %</label>
+
+          <input
+            type="number"
+            class="preview-slot-x"
+            value="${numberInputValue(slot.xPercent, 20)}"
+            step="0.1"
+          >
         </div>
+
         <div class="form-group">
-          <label>Y %</label>
-          <input type="number" class="preview-slot-y" value="${numberInputValue(slot.yPercent, 10)}" step="0.1">
+          <label>Y-startpositie %</label>
+
+          <input
+            type="number"
+            class="preview-slot-y"
+            value="${numberInputValue(slot.yPercent, 10)}"
+            step="0.1"
+          >
         </div>
+
         <div class="form-group">
           <label>Breedte %</label>
-          <input type="number" class="preview-slot-width" value="${numberInputValue(slot.widthPercent, 60)}" min="0.1" step="0.1">
+
+          <input
+            type="number"
+            class="preview-slot-width"
+            value="${numberInputValue(slot.widthPercent, 60)}"
+            min="0.1"
+            step="0.1"
+          >
         </div>
+
         <div class="form-group">
           <label>Hoogte %</label>
-          <input type="number" class="preview-slot-height" value="${numberInputValue(slot.heightPercent, 55)}" min="0.1" step="0.1">
+
+          <input
+            type="number"
+            class="preview-slot-height"
+            value="${numberInputValue(slot.heightPercent, 55)}"
+            min="0.1"
+            step="0.1"
+          >
         </div>
       </div>
 
       <div class="form-row-3">
         <div class="form-group">
-          <label>Rotatie op mockup</label>
-          <input type="number" class="preview-slot-rotation" value="${numberInputValue(slot.rotation, 0)}" step="0.1">
+          <label>Hoek op productfoto</label>
+
+          <input
+            type="number"
+            class="preview-slot-rotation"
+            value="${numberInputValue(slot.rotation, 0)}"
+            step="0.1"
+          >
         </div>
+
         <div class="form-group">
           <label>Hoekafronding %</label>
-          <input type="number" class="preview-slot-radius" value="${numberInputValue(slot.borderRadius, 0)}" min="0" max="50" step="0.1">
+
+          <input
+            type="number"
+            class="preview-slot-radius"
+            value="${numberInputValue(slot.borderRadius, 0)}"
+            min="0"
+            max="50"
+            step="0.1"
+          >
         </div>
+
         <div class="form-group">
-          <label>Vulling</label>
+          <label>Passend maken</label>
+
           <select class="preview-slot-fit">
-            <option value="cover" ${slot.fit !== 'contain' && slot.fit !== 'stretch' ? 'selected' : ''}>Vullend uitsnijden</option>
-            <option value="contain" ${slot.fit === 'contain' ? 'selected' : ''}>Volledig zichtbaar</option>
-            <option value="stretch" ${slot.fit === 'stretch' ? 'selected' : ''}>Uitrekken naar slot</option>
+            <option
+              value="cover"
+              ${slot.fit !== 'contain' && slot.fit !== 'stretch' ? 'selected' : ''}
+            >
+              Vullend uitsnijden
+            </option>
+
+            <option
+              value="contain"
+              ${slot.fit === 'contain' ? 'selected' : ''}
+            >
+              Volledig zichtbaar
+            </option>
+
+            <option
+              value="stretch"
+              ${slot.fit === 'stretch' ? 'selected' : ''}
+            >
+              Uitrekken naar vlak
+            </option>
           </select>
         </div>
       </div>
@@ -1101,9 +1315,19 @@ function previewViewRow(view = {}, index = 0, canvasGuides = []) {
       <div class="preview-calibration-result">
         <div class="preview-calibration-result-header">
           <strong>Calibratievoorbeeld</strong>
-          <span class="preview-calibration-status">Wordt bijgewerkt…</span>
+
+          <span class="preview-calibration-status">
+            Wordt bijgewerkt…
+          </span>
         </div>
-        <canvas class="preview-calibration-canvas" aria-label="Calibratievoorbeeld van ${escHtml(view.label || `weergave ${index + 1}`)}"></canvas>
+
+        <canvas
+          class="preview-calibration-canvas"
+          aria-label="Calibratievoorbeeld van ${escHtml(
+    view.label ||
+    `weergave ${index + 1}`
+  )}"
+        ></canvas>
       </div>
     </article>
   `;
@@ -1812,7 +2036,11 @@ function createAdminPreviewRoundedRectPath(
   context.closePath();
 }
 
-function collectPreviewConfigFromRow(row, fileState = {}, spec = getAdminSpecFromRow(row)) {
+function collectPreviewConfigFromRow(
+  row,
+  fileState = {},
+  spec = getAdminSpecFromRow(row)
+) {
   const panel = row.querySelector('[data-preview-panel]');
 
   if (!panel) {
@@ -1825,35 +2053,140 @@ function collectPreviewConfigFromRow(row, fileState = {}, spec = getAdminSpecFro
     };
   }
 
-  const views = [...panel.querySelectorAll('.preview-view-row')].map((viewRow, index) => {
-    const viewId = viewRow.dataset.previewViewId || createPreviewViewId();
-    const files = fileState.previewViews?.[viewId] || {};
-    const label = viewRow.querySelector('.preview-view-label')?.value.trim() || `Weergave ${index + 1}`;
+  const viewRows = [
+    ...panel.querySelectorAll('.preview-view-row'),
+  ];
+
+  const views = viewRows.map((viewRow, index) => {
+    const viewId =
+      viewRow.dataset.previewViewId ||
+      createPreviewViewId();
+
+    const files =
+      fileState.previewViews?.[viewId] ||
+      {};
+
+    const label =
+      viewRow
+        .querySelector('.preview-view-label')
+        ?.value
+        .trim() ||
+      `Weergave ${index + 1}`;
+
+    const xStartMm = finiteInputValue(
+      viewRow.querySelector('.preview-source-x'),
+      0
+    );
+
+    const yStartMm = finiteInputValue(
+      viewRow.querySelector('.preview-source-y'),
+      0
+    );
+
+    const xEndMm = finiteInputValue(
+      viewRow.querySelector('.preview-source-width'),
+      xStartMm
+    );
+
+    const yEndMm = finiteInputValue(
+      viewRow.querySelector('.preview-source-height'),
+      yStartMm
+    );
+
+    const widthMm =
+      xEndMm -
+      xStartMm;
+
+    const heightMm =
+      yEndMm -
+      yStartMm;
 
     return {
       id: viewId,
       label,
-      helpText: viewRow.querySelector('.preview-view-help')?.value.trim() || '',
+
+      helpText:
+        viewRow
+          .querySelector('.preview-view-help')
+          ?.value
+          .trim() ||
+        '',
+
       sourceZone: {
-        x_mm: finiteInputValue(viewRow.querySelector('.preview-source-x'), 0),
-        y_mm: finiteInputValue(viewRow.querySelector('.preview-source-y'), 0),
-        width_mm: positiveInputValue(viewRow.querySelector('.preview-source-width'), spec.finishWidthMm),
-        height_mm: positiveInputValue(viewRow.querySelector('.preview-source-height'), spec.finishHeightMm),
-        rotation: finiteInputValue(viewRow.querySelector('.preview-source-rotation'), 0),
-        flipX: viewRow.querySelector('.preview-source-flip-x')?.checked || false,
-        flipY: viewRow.querySelector('.preview-source-flip-y')?.checked || false,
+        x_mm: xStartMm,
+        y_mm: yStartMm,
+        width_mm: widthMm,
+        height_mm: heightMm,
+
+        rotation: finiteInputValue(
+          viewRow.querySelector('.preview-source-rotation'),
+          0
+        ),
+
+        flipX:
+          viewRow
+            .querySelector('.preview-source-flip-x')
+            ?.checked ||
+          false,
+
+        flipY:
+          viewRow
+            .querySelector('.preview-source-flip-y')
+            ?.checked ||
+          false,
       },
+
       mockup: {
-        baseImage: files.baseImage || null,
-        overlayImage: files.overlayImage || null,
+        baseImage:
+          files.baseImage ||
+          null,
+
+        overlayImage:
+          files.overlayImage ||
+          null,
+
         slot: {
-          xPercent: finiteInputValue(viewRow.querySelector('.preview-slot-x'), 20),
-          yPercent: finiteInputValue(viewRow.querySelector('.preview-slot-y'), 10),
-          widthPercent: positiveInputValue(viewRow.querySelector('.preview-slot-width'), 60),
-          heightPercent: positiveInputValue(viewRow.querySelector('.preview-slot-height'), 55),
-          rotation: finiteInputValue(viewRow.querySelector('.preview-slot-rotation'), 0),
-          borderRadius: Math.max(0, finiteInputValue(viewRow.querySelector('.preview-slot-radius'), 0)),
-          fit: viewRow.querySelector('.preview-slot-fit')?.value || 'cover',
+          xPercent: finiteInputValue(
+            viewRow.querySelector('.preview-slot-x'),
+            20
+          ),
+
+          yPercent: finiteInputValue(
+            viewRow.querySelector('.preview-slot-y'),
+            10
+          ),
+
+          widthPercent: positiveInputValue(
+            viewRow.querySelector('.preview-slot-width'),
+            60
+          ),
+
+          heightPercent: positiveInputValue(
+            viewRow.querySelector('.preview-slot-height'),
+            55
+          ),
+
+          rotation: finiteInputValue(
+            viewRow.querySelector('.preview-slot-rotation'),
+            0
+          ),
+
+          borderRadius: Math.min(
+            50,
+            Math.max(
+              0,
+              finiteInputValue(
+                viewRow.querySelector('.preview-slot-radius'),
+                0
+              )
+            )
+          ),
+
+          fit:
+            viewRow
+              .querySelector('.preview-slot-fit')
+              ?.value ||
+            'cover',
         },
       },
     };
@@ -1861,8 +2194,12 @@ function collectPreviewConfigFromRow(row, fileState = {}, spec = getAdminSpecFro
 
   const canvasGuides = [];
 
-  [...panel.querySelectorAll('.preview-view-row')].forEach((viewRow, index) => {
-    if (!viewRow.querySelector('.preview-guide-enabled')?.checked) {
+  viewRows.forEach((viewRow, index) => {
+    if (
+      !viewRow
+        .querySelector('.preview-guide-enabled')
+        ?.checked
+    ) {
       return;
     }
 
@@ -1877,7 +2214,15 @@ function collectPreviewConfigFromRow(row, fileState = {}, spec = getAdminSpecFro
       type: 'label',
       viewId: view.id,
       label: view.label,
-      description: viewRow.querySelector('.preview-guide-description')?.value.trim() || view.helpText || '',
+
+      description:
+        viewRow
+          .querySelector('.preview-guide-description')
+          ?.value
+          .trim() ||
+        view.helpText ||
+        '',
+
       x_mm: view.sourceZone.x_mm,
       y_mm: view.sourceZone.y_mm,
       width_mm: view.sourceZone.width_mm,
@@ -1885,32 +2230,85 @@ function collectPreviewConfigFromRow(row, fileState = {}, spec = getAdminSpecFro
     });
   });
 
-  if (panel.querySelector('.preview-fold-enabled')?.checked) {
+  if (
+    panel
+      .querySelector('.preview-fold-enabled')
+      ?.checked
+  ) {
     canvasGuides.push({
       id: 'fold-line',
       type: 'line',
-      label: panel.querySelector('.preview-fold-label')?.value.trim() || 'Vouwlijn',
-      x1_mm: finiteInputValue(panel.querySelector('.preview-fold-x1'), 0),
-      y1_mm: finiteInputValue(panel.querySelector('.preview-fold-y1'), 0),
-      x2_mm: finiteInputValue(panel.querySelector('.preview-fold-x2'), spec.finishWidthMm),
-      y2_mm: finiteInputValue(panel.querySelector('.preview-fold-y2'), 0),
+
+      label:
+        panel
+          .querySelector('.preview-fold-label')
+          ?.value
+          .trim() ||
+        'Vouwlijn',
+
+      x1_mm: finiteInputValue(
+        panel.querySelector('.preview-fold-x1'),
+        0
+      ),
+
+      y1_mm: finiteInputValue(
+        panel.querySelector('.preview-fold-y1'),
+        0
+      ),
+
+      x2_mm: finiteInputValue(
+        panel.querySelector('.preview-fold-x2'),
+        spec.finishWidthMm
+      ),
+
+      y2_mm: finiteInputValue(
+        panel.querySelector('.preview-fold-y2'),
+        0
+      ),
     });
   }
 
-  const selectedDefault = panel.querySelector('.pers-preview-default-view')?.value;
-  const defaultViewId = views.some(view => view.id === selectedDefault)
-    ? selectedDefault
+  const selectedDefaultViewId =
+    panel
+      .querySelector('.pers-preview-default-view')
+      ?.value ||
+    '';
+
+  const defaultViewId = views.some(
+    view => view.id === selectedDefaultViewId
+  )
+    ? selectedDefaultViewId
     : views[0]?.id || null;
 
-  const selectedType = panel.querySelector('.pers-preview-type')?.value || 'single-view';
-  const previewType = views.length === 1
-    ? 'single-view'
-    : selectedType === 'single-view'
-      ? (views.length === 2 ? 'two-sided-toggle' : 'multi-view-toggle')
-      : selectedType;
+  const selectedType =
+    panel
+      .querySelector('.pers-preview-type')
+      ?.value ||
+    'single-view';
+
+  let previewType = selectedType;
+
+  if (views.length === 1) {
+    previewType = 'single-view';
+  } else if (
+    selectedType === 'single-view' &&
+    views.length === 2
+  ) {
+    previewType = 'two-sided-toggle';
+  } else if (
+    selectedType === 'single-view' &&
+    views.length > 2
+  ) {
+    previewType = 'multi-view-toggle';
+  }
 
   return {
-    enabled: panel.querySelector('.pers-product-preview-enabled')?.checked || false,
+    enabled:
+      panel
+        .querySelector('.pers-product-preview-enabled')
+        ?.checked ||
+      false,
+
     type: previewType,
     defaultViewId,
     views,
