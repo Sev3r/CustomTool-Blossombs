@@ -904,38 +904,42 @@ function renderPreviewCalibrationPanel(type = {}) {
   `;
 }
 
-function previewViewRow(view = {}, index = 0, canvasGuides = []) {
+function previewViewRow(view = {}, index = 0) {
   const sourceZone = view.sourceZone || {};
   const slot = view.mockup?.slot || {};
   const viewId = view.id || createPreviewViewId();
 
-  const xStartMm = Number.isFinite(Number(sourceZone.x_mm))
+  const xStartMm = Number.isFinite(
+    Number(sourceZone.x_mm)
+  )
     ? Number(sourceZone.x_mm)
     : 0;
 
-  const yStartMm = Number.isFinite(Number(sourceZone.y_mm))
+  const yStartMm = Number.isFinite(
+    Number(sourceZone.y_mm)
+  )
     ? Number(sourceZone.y_mm)
     : 0;
 
-  const sourceWidthMm = Number.isFinite(Number(sourceZone.width_mm))
+  const sourceWidthMm = Number.isFinite(
+    Number(sourceZone.width_mm)
+  )
     ? Number(sourceZone.width_mm)
     : 0;
 
-  const sourceHeightMm = Number.isFinite(Number(sourceZone.height_mm))
+  const sourceHeightMm = Number.isFinite(
+    Number(sourceZone.height_mm)
+  )
     ? Number(sourceZone.height_mm)
     : 0;
 
-  const xEndMm = xStartMm + sourceWidthMm;
-  const yEndMm = yStartMm + sourceHeightMm;
+  const xEndMm =
+    xStartMm +
+    sourceWidthMm;
 
-  const labelGuide = canvasGuides.find(guide => (
-    guide.type === 'label' &&
-    guide.viewId === viewId
-  )) || null;
-
-  const showGuide =
-    Boolean(labelGuide) ||
-    canvasGuides.length === 0;
+  const yEndMm =
+    yStartMm +
+    sourceHeightMm;
 
   return `
     <article
@@ -947,7 +951,10 @@ function previewViewRow(view = {}, index = 0, canvasGuides = []) {
           <strong>
             Zijde ${index + 1}:
             <span class="preview-view-title">
-              ${escHtml(view.label || `Weergave ${index + 1}`)}
+              ${escHtml(
+                view.label ||
+                `Weergave ${index + 1}`
+              )}
             </span>
           </strong>
 
@@ -1078,7 +1085,12 @@ function previewViewRow(view = {}, index = 0, canvasGuides = []) {
           <label>Bronrotatie</label>
 
           <select class="preview-source-rotation">
-            ${[0, 90, 180, 270].map(rotation => `
+            ${[
+              0,
+              90,
+              180,
+              270,
+            ].map(rotation => `
               <option
                 value="${rotation}"
                 ${Number(sourceZone.rotation || 0) === rotation ? 'selected' : ''}
@@ -1096,7 +1108,9 @@ function previewViewRow(view = {}, index = 0, canvasGuides = []) {
             ${sourceZone.flipX ? 'checked' : ''}
           >
 
-          <span>Horizontaal spiegelen</span>
+          <span>
+            Horizontaal spiegelen
+          </span>
         </label>
 
         <label class="preview-check-row">
@@ -1106,43 +1120,10 @@ function previewViewRow(view = {}, index = 0, canvasGuides = []) {
             ${sourceZone.flipY ? 'checked' : ''}
           >
 
-          <span>Verticaal spiegelen</span>
+          <span>
+            Verticaal spiegelen
+          </span>
         </label>
-      </div>
-
-      <label class="preview-guide-toggle">
-        <input
-          type="checkbox"
-          class="preview-guide-enabled"
-          ${showGuide ? 'checked' : ''}
-        >
-
-        <span>
-          <strong>
-            Toon dit gebied als hulplabel in de ontwerptool
-          </strong>
-
-          <small>
-            Dit label wordt niet opgenomen in het drukbestand.
-          </small>
-        </span>
-      </label>
-
-      <div class="form-row-1 preview-guide-description-wrap">
-        <div class="form-group">
-          <label>Beschrijving bij hulplabel</label>
-
-          <input
-            type="text"
-            class="preview-guide-description"
-            value="${escHtml(
-    labelGuide?.description ||
-    view.helpText ||
-    ''
-  )}"
-            placeholder="Zichtbaar aan de voorkant"
-          >
-        </div>
       </div>
 
       <div class="preview-subtitle">
@@ -1151,14 +1132,17 @@ function previewViewRow(view = {}, index = 0, canvasGuides = []) {
 
       <div class="form-row">
         <div class="form-group">
-          <label>Productfoto / onderlaag</label>
+          <label>
+            Productfoto / onderlaag
+          </label>
 
           <div class="file-upload-field">
             <div class="preview-base-output">
               ${renderStoredFile(
-    view.mockup?.baseImage || null,
-    'Productfoto / onderlaag'
-  )}
+                view.mockup?.baseImage ||
+                null,
+                'Productfoto / onderlaag'
+              )}
             </div>
 
             <div class="file-upload-actions">
@@ -1179,14 +1163,17 @@ function previewViewRow(view = {}, index = 0, canvasGuides = []) {
         </div>
 
         <div class="form-group">
-          <label>Transparante bovenlaag optioneel</label>
+          <label>
+            Transparante bovenlaag optioneel
+          </label>
 
           <div class="file-upload-field">
             <div class="preview-overlay-output">
               ${renderStoredFile(
-    view.mockup?.overlayImage || null,
-    'Transparante bovenlaag'
-  )}
+                view.mockup?.overlayImage ||
+                null,
+                'Transparante bovenlaag'
+              )}
             </div>
 
             <div class="file-upload-actions">
@@ -1261,7 +1248,9 @@ function previewViewRow(view = {}, index = 0, canvasGuides = []) {
 
       <div class="form-row-3">
         <div class="form-group">
-          <label>Hoek op productfoto</label>
+          <label>
+            Hoek op productfoto
+          </label>
 
           <input
             type="number"
@@ -1272,7 +1261,9 @@ function previewViewRow(view = {}, index = 0, canvasGuides = []) {
         </div>
 
         <div class="form-group">
-          <label>Hoekafronding %</label>
+          <label>
+            Hoekafronding %
+          </label>
 
           <input
             type="number"
@@ -1285,7 +1276,9 @@ function previewViewRow(view = {}, index = 0, canvasGuides = []) {
         </div>
 
         <div class="form-group">
-          <label>Passend maken</label>
+          <label>
+            Passend maken
+          </label>
 
           <select class="preview-slot-fit">
             <option
@@ -1314,7 +1307,9 @@ function previewViewRow(view = {}, index = 0, canvasGuides = []) {
 
       <div class="preview-calibration-result">
         <div class="preview-calibration-result-header">
-          <strong>Calibratievoorbeeld</strong>
+          <strong>
+            Calibratievoorbeeld
+          </strong>
 
           <span class="preview-calibration-status">
             Wordt bijgewerkt…
@@ -1324,9 +1319,9 @@ function previewViewRow(view = {}, index = 0, canvasGuides = []) {
         <canvas
           class="preview-calibration-canvas"
           aria-label="Calibratievoorbeeld van ${escHtml(
-    view.label ||
-    `weergave ${index + 1}`
-  )}"
+            view.label ||
+            `weergave ${index + 1}`
+          )}"
         ></canvas>
       </div>
     </article>
@@ -2041,7 +2036,10 @@ function collectPreviewConfigFromRow(
   fileState = {},
   spec = getAdminSpecFromRow(row)
 ) {
-  const panel = row.querySelector('[data-preview-panel]');
+  const panel =
+    row.querySelector(
+      '[data-preview-panel]'
+    );
 
   if (!panel) {
     return {
@@ -2054,185 +2052,209 @@ function collectPreviewConfigFromRow(
   }
 
   const viewRows = [
-    ...panel.querySelectorAll('.preview-view-row'),
+    ...panel.querySelectorAll(
+      '.preview-view-row'
+    ),
   ];
 
-  const views = viewRows.map((viewRow, index) => {
-    const viewId =
-      viewRow.dataset.previewViewId ||
-      createPreviewViewId();
-
-    const files =
-      fileState.previewViews?.[viewId] ||
-      {};
-
-    const label =
-      viewRow
-        .querySelector('.preview-view-label')
-        ?.value
-        .trim() ||
-      `Weergave ${index + 1}`;
-
-    const xStartMm = finiteInputValue(
-      viewRow.querySelector('.preview-source-x'),
-      0
-    );
-
-    const yStartMm = finiteInputValue(
-      viewRow.querySelector('.preview-source-y'),
-      0
-    );
-
-    const xEndMm = finiteInputValue(
-      viewRow.querySelector('.preview-source-width'),
-      xStartMm
-    );
-
-    const yEndMm = finiteInputValue(
-      viewRow.querySelector('.preview-source-height'),
-      yStartMm
-    );
-
-    const widthMm =
-      xEndMm -
-      xStartMm;
-
-    const heightMm =
-      yEndMm -
-      yStartMm;
-
-    return {
-      id: viewId,
-      label,
-
-      helpText:
+  const views = viewRows.map(
+    (viewRow, index) => {
+      const viewId =
         viewRow
-          .querySelector('.preview-view-help')
+          .dataset
+          .previewViewId ||
+        createPreviewViewId();
+
+      const files =
+        fileState
+          .previewViews
+          ?.[viewId] ||
+        {};
+
+      const label =
+        viewRow
+          .querySelector(
+            '.preview-view-label'
+          )
           ?.value
           .trim() ||
-        '',
+        `Weergave ${index + 1}`;
 
-      sourceZone: {
-        x_mm: xStartMm,
-        y_mm: yStartMm,
-        width_mm: widthMm,
-        height_mm: heightMm,
-
-        rotation: finiteInputValue(
-          viewRow.querySelector('.preview-source-rotation'),
+      const xStartMm =
+        finiteInputValue(
+          viewRow.querySelector(
+            '.preview-source-x'
+          ),
           0
-        ),
+        );
 
-        flipX:
+      const yStartMm =
+        finiteInputValue(
+          viewRow.querySelector(
+            '.preview-source-y'
+          ),
+          0
+        );
+
+      const xEndMm =
+        finiteInputValue(
+          viewRow.querySelector(
+            '.preview-source-width'
+          ),
+          xStartMm
+        );
+
+      const yEndMm =
+        finiteInputValue(
+          viewRow.querySelector(
+            '.preview-source-height'
+          ),
+          yStartMm
+        );
+
+      return {
+        id: viewId,
+        label,
+
+        helpText:
           viewRow
-            .querySelector('.preview-source-flip-x')
-            ?.checked ||
-          false,
+            .querySelector(
+              '.preview-view-help'
+            )
+            ?.value
+            .trim() ||
+          '',
 
-        flipY:
-          viewRow
-            .querySelector('.preview-source-flip-y')
-            ?.checked ||
-          false,
-      },
+        sourceZone: {
+          x_mm:
+            xStartMm,
 
-      mockup: {
-        baseImage:
-          files.baseImage ||
-          null,
+          y_mm:
+            yStartMm,
 
-        overlayImage:
-          files.overlayImage ||
-          null,
-
-        slot: {
-          xPercent: finiteInputValue(
-            viewRow.querySelector('.preview-slot-x'),
-            20
-          ),
-
-          yPercent: finiteInputValue(
-            viewRow.querySelector('.preview-slot-y'),
-            10
-          ),
-
-          widthPercent: positiveInputValue(
-            viewRow.querySelector('.preview-slot-width'),
-            60
-          ),
-
-          heightPercent: positiveInputValue(
-            viewRow.querySelector('.preview-slot-height'),
-            55
-          ),
-
-          rotation: finiteInputValue(
-            viewRow.querySelector('.preview-slot-rotation'),
-            0
-          ),
-
-          borderRadius: Math.min(
-            50,
+          width_mm:
             Math.max(
               0,
-              finiteInputValue(
-                viewRow.querySelector('.preview-slot-radius'),
-                0
-              )
-            )
-          ),
+              xEndMm -
+              xStartMm
+            ),
 
-          fit:
+          height_mm:
+            Math.max(
+              0,
+              yEndMm -
+              yStartMm
+            ),
+
+          rotation:
+            finiteInputValue(
+              viewRow.querySelector(
+                '.preview-source-rotation'
+              ),
+              0
+            ),
+
+          flipX:
             viewRow
-              .querySelector('.preview-slot-fit')
-              ?.value ||
-            'cover',
+              .querySelector(
+                '.preview-source-flip-x'
+              )
+              ?.checked ||
+            false,
+
+          flipY:
+            viewRow
+              .querySelector(
+                '.preview-source-flip-y'
+              )
+              ?.checked ||
+            false,
         },
-      },
-    };
-  });
+
+        mockup: {
+          baseImage:
+            files.baseImage ||
+            null,
+
+          overlayImage:
+            files.overlayImage ||
+            null,
+
+          slot: {
+            xPercent:
+              finiteInputValue(
+                viewRow.querySelector(
+                  '.preview-slot-x'
+                ),
+                20
+              ),
+
+            yPercent:
+              finiteInputValue(
+                viewRow.querySelector(
+                  '.preview-slot-y'
+                ),
+                10
+              ),
+
+            widthPercent:
+              positiveInputValue(
+                viewRow.querySelector(
+                  '.preview-slot-width'
+                ),
+                60
+              ),
+
+            heightPercent:
+              positiveInputValue(
+                viewRow.querySelector(
+                  '.preview-slot-height'
+                ),
+                55
+              ),
+
+            rotation:
+              finiteInputValue(
+                viewRow.querySelector(
+                  '.preview-slot-rotation'
+                ),
+                0
+              ),
+
+            borderRadius:
+              Math.min(
+                50,
+                Math.max(
+                  0,
+                  finiteInputValue(
+                    viewRow.querySelector(
+                      '.preview-slot-radius'
+                    ),
+                    0
+                  )
+                )
+              ),
+
+            fit:
+              viewRow
+                .querySelector(
+                  '.preview-slot-fit'
+                )
+                ?.value ||
+              'cover',
+          },
+        },
+      };
+    }
+  );
 
   const canvasGuides = [];
 
-  viewRows.forEach((viewRow, index) => {
-    if (
-      !viewRow
-        .querySelector('.preview-guide-enabled')
-        ?.checked
-    ) {
-      return;
-    }
-
-    const view = views[index];
-
-    if (!view) {
-      return;
-    }
-
-    canvasGuides.push({
-      id: `${view.id}-zone`,
-      type: 'label',
-      viewId: view.id,
-      label: view.label,
-
-      description:
-        viewRow
-          .querySelector('.preview-guide-description')
-          ?.value
-          .trim() ||
-        view.helpText ||
-        '',
-
-      x_mm: view.sourceZone.x_mm,
-      y_mm: view.sourceZone.y_mm,
-      width_mm: view.sourceZone.width_mm,
-      height_mm: view.sourceZone.height_mm,
-    });
-  });
-
   if (
     panel
-      .querySelector('.preview-fold-enabled')
+      .querySelector(
+        '.preview-fold-enabled'
+      )
       ?.checked
   ) {
     canvasGuides.push({
@@ -2241,75 +2263,107 @@ function collectPreviewConfigFromRow(
 
       label:
         panel
-          .querySelector('.preview-fold-label')
+          .querySelector(
+            '.preview-fold-label'
+          )
           ?.value
           .trim() ||
         'Vouwlijn',
 
-      x1_mm: finiteInputValue(
-        panel.querySelector('.preview-fold-x1'),
-        0
-      ),
+      x1_mm:
+        finiteInputValue(
+          panel.querySelector(
+            '.preview-fold-x1'
+          ),
+          0
+        ),
 
-      y1_mm: finiteInputValue(
-        panel.querySelector('.preview-fold-y1'),
-        0
-      ),
+      y1_mm:
+        finiteInputValue(
+          panel.querySelector(
+            '.preview-fold-y1'
+          ),
+          0
+        ),
 
-      x2_mm: finiteInputValue(
-        panel.querySelector('.preview-fold-x2'),
-        spec.finishWidthMm
-      ),
+      x2_mm:
+        finiteInputValue(
+          panel.querySelector(
+            '.preview-fold-x2'
+          ),
+          spec.finishWidthMm
+        ),
 
-      y2_mm: finiteInputValue(
-        panel.querySelector('.preview-fold-y2'),
-        0
-      ),
+      y2_mm:
+        finiteInputValue(
+          panel.querySelector(
+            '.preview-fold-y2'
+          ),
+          0
+        ),
     });
   }
 
   const selectedDefaultViewId =
     panel
-      .querySelector('.pers-preview-default-view')
+      .querySelector(
+        '.pers-preview-default-view'
+      )
       ?.value ||
     '';
 
-  const defaultViewId = views.some(
-    view => view.id === selectedDefaultViewId
-  )
-    ? selectedDefaultViewId
-    : views[0]?.id || null;
+  const defaultViewId =
+    views.some(
+      view =>
+        view.id ===
+        selectedDefaultViewId
+    )
+      ? selectedDefaultViewId
+      : views[0]?.id ||
+        null;
 
   const selectedType =
     panel
-      .querySelector('.pers-preview-type')
+      .querySelector(
+        '.pers-preview-type'
+      )
       ?.value ||
     'single-view';
 
-  let previewType = selectedType;
+  let previewType =
+    selectedType;
 
   if (views.length === 1) {
-    previewType = 'single-view';
+    previewType =
+      'single-view';
   } else if (
-    selectedType === 'single-view' &&
+    selectedType ===
+      'single-view' &&
     views.length === 2
   ) {
-    previewType = 'two-sided-toggle';
+    previewType =
+      'two-sided-toggle';
   } else if (
-    selectedType === 'single-view' &&
+    selectedType ===
+      'single-view' &&
     views.length > 2
   ) {
-    previewType = 'multi-view-toggle';
+    previewType =
+      'multi-view-toggle';
   }
 
   return {
     enabled:
       panel
-        .querySelector('.pers-product-preview-enabled')
+        .querySelector(
+          '.pers-product-preview-enabled'
+        )
         ?.checked ||
       false,
 
-    type: previewType,
+    type:
+      previewType,
+
     defaultViewId,
     views,
     canvasGuides,
