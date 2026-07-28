@@ -26,10 +26,30 @@ const CANVAS_ZOOM_MIN = 0.5;
 const CANVAS_ZOOM_MAX = 3;
 const CANVAS_ZOOM_STEP = 0.1;
 
+const DESIGN_VIEW_SHEET_ID = 'sheet';
+const DESIGN_VIEW_ORIENTATION_VERSION = 1;
+const DESIGN_VIEW_VIEWPORT_PADDING_PX = 20;
+const DESIGN_VIEW_VIEWPORT_EPSILON = 0.001;
+const DESIGN_VIEW_GUIDE_FLAG = '_isDesignViewGuide';
+
+const FABRIC_SERIALIZABLE_PROPERTIES = [
+  '_layerId',
+  '_uploadMeta',
+  '_designViewId',
+  '_designViewRotation',
+  '_designOrientationVersion',
+];
+
+let designViewContext = null;
+let designViewResizeObserver = null;
+let designViewSyncFrame = null;
+let designViewCanonicalDepth = 0;
+
 const IMAGE_DPI_RECOMMENDED = 300;
 const IMAGE_DPI_MINIMUM = 150;
 
 const CENTER_SNAP_THRESHOLD_PX = 6;
+const CENTER_GUIDE_COLOR = '#5C7A5C';
 const CENTER_GUIDE_STROKE_WIDTH = 1.25;
 const CENTER_GUIDE_DASH = [6, 4];
 
@@ -45,10 +65,10 @@ const AVAILABLE_FONTS = [
 ];
 
 function renderDesignPage() {
-  const el = document.getElementById('page-design');
+  const element = document.getElementById('page-design');
   const product = Session.getProduct();
   const options = Session.getOptions();
-  const saved = Session.getDesign() || {};
+  const savedDesign = Session.getDesign() || {};
 
   if (!product) {
     navigateTo('select');
@@ -60,33 +80,74 @@ function renderDesignPage() {
     return;
   }
 
-  const persTypes = Array.isArray(product.personalisatieTypes)
-    ? product.personalisatieTypes.filter(persType => persType.active !== false)
+  const personalisationTypes = Array.isArray(product.personalisatieTypes)
+    ? product.personalisatieTypes.filter(
+      personalisationType => personalisationType.active !== false
+    )
     : [];
 
-  const activePers = persTypes.find(persType => persType.id === options?.persTypeId) ||
+  const activePersonalisation = personalisationTypes.find(
+    personalisationType => personalisationType.id === options?.persTypeId
+  ) ||
     options?.persType ||
-    persTypes[0] ||
+    personalisationTypes[0] ||
     null;
 
-  const stateKey = `${DESIGN_STATE_KEY}_${product.id}_${activePers?.id || 'standaard'}`;
-  const savedState = loadDesignState(stateKey);
+  const stateKey =
+    `${DESIGN_STATE_KEY}_${product.id}_${activePersonalisation?.id || 'standaard'}`;
 
-  uploadedDataURL = saved.dataURL || savedState?.dataURL || null;
-  uploadedFileName = saved.fileName || savedState?.fileName || null;
-  uploadedCheck = saved.uploadCheck || savedState?.uploadCheck || null;
-  uploadedPdfDataURL = saved.pdfDataURL || savedState?.pdfDataURL || null;
+  const savedState = loadDesignState(stateKey);
+  const previewConfig = getDesignViewConfig(
+    activePersonalisation,
+    product
+  );
+
+  const initialDesignViewId = resolveInitialDesignViewId(
+    previewConfig,
+    savedState?.editorViewId ||
+      savedDesign.editorViewId ||
+      savedState?.previewViewId ||
+      savedDesign.previewViewId ||
+      null
+  );
+
+  uploadedDataURL =
+    savedDesign.dataURL ||
+    savedState?.dataURL ||
+    null;
+
+  uploadedFileName =
+    savedDesign.fileName ||
+    savedState?.fileName ||
+    null;
+
+  uploadedCheck =
+    savedDesign.uploadCheck ||
+    savedState?.uploadCheck ||
+    null;
+
+  uploadedPdfDataURL =
+    savedDesign.pdfDataURL ||
+    savedState?.pdfDataURL ||
+    null;
+
   uploadedRillinesPdfDataURL =
-    saved.rillinesPdfDataURL ||
+    savedDesign.rillinesPdfDataURL ||
     savedState?.rillinesPdfDataURL ||
     null;
-  activeDesignTab = saved.tab || savedState?.tab || 'tool';
 
-  el.innerHTML = `
+  activeDesignTab =
+    savedDesign.tab ||
+    savedState?.tab ||
+    'tool';
+
+  element.innerHTML = `
     <h1 class="page-title">Ontwerp uw verpakking</h1>
-    <p class="page-subtitle">Gebruik de ontwerptool of upload een eigen bestand</p>
+    <p class="page-subtitle">
+      Gebruik de ontwerptool of upload een eigen bestand
+    </p>
 
-    <div class="design-tabs" style="margin-bottom:24px">
+    <div class="design-tabs">
       <button
         class="design-tab ${activeDesignTab === 'tool' ? 'active' : ''}"
         type="button"
@@ -106,7 +167,7 @@ function renderDesignPage() {
 
     <div
       id="tab-tool"
-      style="${activeDesignTab === 'tool' ? '' : 'display:none'}"
+      ${activeDesignTab === 'tool' ? '' : 'hidden'}
     >
       <div id="app">
         <aside id="sidebar">
@@ -127,7 +188,7 @@ function renderDesignPage() {
               type="file"
               id="file-input"
               accept="image/*"
-              style="display:none"
+              hidden
             >
 
             <button
@@ -140,50 +201,57 @@ function renderDesignPage() {
           </div>
 
           <div class="side-section">
-            <div class="side-label">Lettertype</div>
+            <label
+              class="side-label"
+              for="font-select"
+            >
+              Lettertype
+            </label>
 
             <select
               id="font-select"
               class="font-select"
             >
               ${AVAILABLE_FONTS.map(font => `
-                <option
-                  value="${font.value}"
-                  style="font-family:${font.value}"
-                >
-                  ${font.label}
+                <option value="${escHtml(font.value)}">
+                  ${escHtml(font.label)}
                 </option>
               `).join('')}
             </select>
           </div>
 
           <div class="side-section">
-            <div class="side-label">Lettergrootte</div>
+            <label
+              class="side-label"
+              for="font-size"
+            >
+              Lettergrootte
+            </label>
 
             <select
               id="font-size"
               class="font-select"
             >
               ${[
-      8,
-      10,
-      12,
-      14,
-      16,
-      18,
-      20,
-      24,
-      28,
-      32,
-      36,
-      42,
-      48,
-      56,
-      64,
-      72,
-      84,
-      96,
-    ].map(size => `
+                8,
+                10,
+                12,
+                14,
+                16,
+                18,
+                20,
+                24,
+                28,
+                32,
+                36,
+                42,
+                48,
+                56,
+                64,
+                72,
+                84,
+                96,
+              ].map(size => `
                 <option
                   value="${size}"
                   ${size === 20 ? 'selected' : ''}
@@ -207,15 +275,21 @@ function renderDesignPage() {
                 type="color"
                 id="custom-element-color"
                 class="custom-color-input"
-                value="${fabricActiveColor}"
+                value="${escHtml(fabricActiveColor)}"
               >
             </div>
           </div>
 
-          ${activePers?.allowBackgroundColor ? `
+          ${activePersonalisation?.allowBackgroundColor ? `
             <div class="side-section">
-              <div class="side-label">Achtergrondkleur</div>
-              <div class="color-row" id="background-color-swatches"></div>
+              <div class="side-label">
+                Achtergrondkleur
+              </div>
+
+              <div
+                class="color-row"
+                id="background-color-swatches"
+              ></div>
 
               <div class="custom-color-row">
                 <label for="custom-background-color">
@@ -226,7 +300,7 @@ function renderDesignPage() {
                   type="color"
                   id="custom-background-color"
                   class="custom-color-input"
-                  value="${fabricBackgroundColor}"
+                  value="${escHtml(fabricBackgroundColor)}"
                 >
               </div>
             </div>
@@ -234,29 +308,10 @@ function renderDesignPage() {
         </aside>
 
         <section id="canvas-area">
-          <div id="canvas-toolbar">
-            <button class="tb-btn" type="button" id="btn-delete">
-              Verwijder
-            </button>
-
-            <button class="tb-btn" type="button" id="btn-front">
-              Voorgrond
-            </button>
-
-            <button class="tb-btn" type="button" id="btn-back">
-              Achtergrond
-            </button>
-
-            <div class="tb-sep"></div>
-
-            <button class="tb-btn" type="button" id="btn-undo">
-              Ongedaan
-            </button>
-
-            <button class="tb-btn" type="button" id="btn-clear">
-              Reset
-            </button>
-          </div>
+          ${renderDesignViewToolbar(
+            previewConfig,
+            initialDesignViewId
+          )}
 
           <div id="canvas-wrap">
             <div id="margin-warning">
@@ -267,7 +322,7 @@ function renderDesignPage() {
 
             <div
               class="canvas-zoom-controls"
-              aria-label="Canvas zoom controls"
+              aria-label="Canvaszoom"
             >
               <button
                 class="canvas-zoom-btn"
@@ -355,7 +410,8 @@ function renderDesignPage() {
           </div>
 
           <div id="status">
-            Selecteer een element om te bewerken. Klik en sleep om te verplaatsen.
+            Selecteer een element om te bewerken.
+            Klik en sleep om te verplaatsen.
           </div>
         </section>
 
@@ -367,29 +423,21 @@ function renderDesignPage() {
 
       <div
         id="fabric-image-dpi-warning"
-        style="
-          display:none;
-          position:fixed;
-          right:24px;
-          top:160px;
-          z-index:1000;
-          width:min(320px,calc(100vw - 48px));
-          padding:12px 14px;
-          border-radius:10px;
-          font-size:12px;
-          line-height:1.45;
-          box-shadow:0 10px 30px rgba(0,0,0,.12);
-        "
+        class="fabric-image-dpi-warning"
+        hidden
       ></div>
     </div>
 
     <div
       id="tab-upload"
-      style="${activeDesignTab === 'upload' ? '' : 'display:none'}"
+      ${activeDesignTab === 'upload' ? '' : 'hidden'}
     >
       <div class="design-layout">
         <div>
-          <div class="upload-zone" id="upload-zone">
+          <div
+            class="upload-zone"
+            id="upload-zone"
+          >
             <input
               type="file"
               id="upload-input"
@@ -397,45 +445,29 @@ function renderDesignPage() {
             >
 
             <div class="upload-icon">📁</div>
-            <div class="upload-title">Sleep uw bestand hierheen</div>
-            <div class="upload-sub">of klik om te bladeren</div>
-
-            <div
-              class="upload-sub"
-              style="margin-top:8px"
-            >
-              PNG, JPG, PDF, AI, EPS. Minimaal 300 DPI aanbevolen.
+            <div class="upload-title">
+              Sleep uw bestand hierheen
+            </div>
+            <div class="upload-sub">
+              of klik om te bladeren
+            </div>
+            <div class="upload-sub upload-format-hint">
+              PNG, JPG, PDF, AI, EPS.
+              Minimaal 300 DPI aanbevolen.
             </div>
           </div>
 
           ${uploadedDataURL ? `
-            <div
-              style="
-                margin-top:12px;
-                padding:10px 14px;
-                background:var(--green-light);
-                border-radius:8px;
-                font-size:13px;
-                color:var(--green-dark);
-                display:flex;
-                justify-content:space-between;
-                align-items:center;
-              "
-            >
+            <div class="uploaded-file-status">
               <span>
                 ${escHtml(uploadedFileName || 'Bestand geüpload')}
               </span>
 
               <button
-                onclick="clearUpload()"
+                class="uploaded-file-remove"
                 type="button"
-                style="
-                  background:none;
-                  border:none;
-                  cursor:pointer;
-                  color:#C0392B;
-                  font-size:18px;
-                "
+                id="btn-clear-upload"
+                aria-label="Upload verwijderen"
               >
                 ×
               </button>
@@ -444,16 +476,13 @@ function renderDesignPage() {
 
           ${uploadedCheck ? `
             <div
-              style="
-                margin-top:10px;
-                padding:10px 14px;
-                background:${getUploadCheckBackground(uploadedCheck.status)};
-                border-radius:8px;
-                font-size:12px;
-                color:${getUploadCheckTextColor(uploadedCheck.status)};
-              "
+              class="upload-check-message"
+              data-status="${escHtml(uploadedCheck.status || 'warning')}"
             >
-              ${escHtml(uploadedCheck.message || 'Upload gecontroleerd.')}
+              ${escHtml(
+                uploadedCheck.message ||
+                'Upload gecontroleerd.'
+              )}
             </div>
           ` : ''}
         </div>
@@ -463,41 +492,33 @@ function renderDesignPage() {
             class="preview-box"
             id="preview-box"
           >
-            ${uploadedDataURL &&
-      uploadedDataURL.startsWith('data:image')
-      ? `
-                  <img
-                    src="${uploadedDataURL}"
-                    alt="Preview"
-                  >
-                `
-      : `
-                  <div class="preview-placeholder">
-                    ${uploadedDataURL
-        ? escHtml(uploadedFileName || 'Bestand')
-        : 'Preview'
-      }
-                  </div>
-                `
-    }
+            ${uploadedDataURL && uploadedDataURL.startsWith('data:image')
+              ? `
+                <img
+                  src="${uploadedDataURL}"
+                  alt="Preview van het geüploade bestand"
+                >
+              `
+              : `
+                <div class="preview-placeholder">
+                  ${uploadedDataURL
+                    ? escHtml(uploadedFileName || 'Bestand')
+                    : 'Preview'}
+                </div>
+              `}
 
-            <div
+            <button
               class="preview-zoom"
               id="btn-zoom"
-              ${!uploadedDataURL ? 'style="display:none"' : ''}
+              type="button"
+              ${!uploadedDataURL ? 'hidden' : ''}
+              aria-label="Origineel bestand openen"
             >
               🔍
-            </div>
+            </button>
           </div>
 
-          <p
-            style="
-              font-size:12px;
-              color:var(--text-3);
-              margin-top:8px;
-              text-align:center;
-            "
-          >
+          <p class="technical-preview-caption">
             Preview van uw bestand
           </p>
         </div>
@@ -506,12 +527,8 @@ function renderDesignPage() {
 
     <div
       id="design-error"
-      style="
-        color:#C0392B;
-        font-size:13px;
-        display:none;
-        margin-top:16px;
-      "
+      class="design-error"
+      hidden
     >
       Maak een ontwerp of upload een bestand om verder te gaan.
     </div>
@@ -520,7 +537,7 @@ function renderDesignPage() {
       <button
         class="btn btn-outline"
         type="button"
-        onclick="navigateTo('options')"
+        id="btn-design-back"
       >
         ← Terug
       </button>
@@ -537,41 +554,1966 @@ function renderDesignPage() {
 
   bindDesignTabs(
     product,
-    activePers,
+    activePersonalisation,
     savedState,
     stateKey
   );
 
   bindUploadZone(
     stateKey,
-    activePers,
+    activePersonalisation,
     product
   );
 
   bindDesignNextButton(
     product,
-    activePers,
+    activePersonalisation,
     stateKey
   );
 
   document
-    .getElementById('btn-zoom')
-    ?.addEventListener('click', () => {
-      if (uploadedDataURL) {
-        window.open(
-          uploadedDataURL,
-          '_blank'
-        );
+    .getElementById('btn-design-back')
+    ?.addEventListener(
+      'click',
+      () => {
+        navigateTo('options');
       }
-    });
+    );
+
+  document
+    .getElementById('btn-clear-upload')
+    ?.addEventListener(
+      'click',
+      clearUpload
+    );
+
+  document
+    .getElementById('btn-zoom')
+    ?.addEventListener(
+      'click',
+      () => {
+        if (uploadedDataURL) {
+          window.open(
+            uploadedDataURL,
+            '_blank',
+            'noopener'
+          );
+        }
+      }
+    );
 
   if (activeDesignTab === 'tool') {
     scheduleFabricInit(
       product,
-      activePers,
+      activePersonalisation,
       savedState,
       stateKey
     );
+  }
+}
+
+function getDesignViewConfig(
+  activePersonalisation,
+  product
+) {
+  if (window.ProductPreview?.normalizeConfig) {
+    return ProductPreview.normalizeConfig(
+      activePersonalisation || {},
+      product || {}
+    );
+  }
+
+  const preview =
+    activePersonalisation?.preview ||
+    {};
+
+  const views = Array.isArray(preview.views)
+    ? preview.views
+    : [];
+
+  return {
+    enabled:
+      preview.enabled === true &&
+      views.length > 0,
+
+    type:
+      preview.type ||
+      'single-view',
+
+    defaultViewId:
+      preview.defaultViewId ||
+      views[0]?.id ||
+      null,
+
+    views,
+
+    canvasGuides:
+      Array.isArray(preview.canvasGuides)
+        ? preview.canvasGuides
+        : [],
+  };
+}
+
+function resolveInitialDesignViewId(
+  config,
+  storedViewId = null
+) {
+  if (
+    storedViewId === DESIGN_VIEW_SHEET_ID ||
+    config?.views?.some(
+      view => view.id === storedViewId
+    )
+  ) {
+    return storedViewId;
+  }
+
+  if (
+    !config?.enabled ||
+    !config.views?.length
+  ) {
+    return DESIGN_VIEW_SHEET_ID;
+  }
+
+  return (
+    config.defaultViewId ||
+    config.views[0].id
+  );
+}
+
+function renderDesignViewToolbar(
+  config,
+  activeViewId
+) {
+  const hasViews = Boolean(
+    config?.enabled &&
+    config.views?.length
+  );
+
+  if (!hasViews) {
+    return `
+      <div
+        id="canvas-toolbar"
+        class="canvas-toolbar-actions-only"
+      >
+        <button
+          class="tb-btn"
+          type="button"
+          id="btn-undo"
+        >
+          Ongedaan
+        </button>
+
+        <button
+          class="tb-btn"
+          type="button"
+          id="btn-clear"
+        >
+          Reset
+        </button>
+      </div>
+    `;
+  }
+
+  const buttons = [
+    ...config.views.map(view => ({
+      id: view.id,
+      label: view.label || 'Zijde',
+    })),
+
+    {
+      id: DESIGN_VIEW_SHEET_ID,
+      label: 'Volledig drukvel',
+    },
+  ];
+
+  return `
+    <div
+      id="canvas-toolbar"
+      class="canvas-view-toolbar"
+    >
+      <div class="canvas-view-toolbar-main">
+        <span class="canvas-view-toolbar-label">
+          Bewerkingsweergave
+        </span>
+
+        <div
+          class="canvas-view-tabs"
+          role="tablist"
+          aria-label="Te bewerken productzijde"
+        >
+          ${buttons.map(button => {
+            const isActive =
+              button.id === activeViewId;
+
+            return `
+              <button
+                class="canvas-view-tab${isActive ? ' active' : ''}"
+                type="button"
+                role="tab"
+                aria-selected="${String(isActive)}"
+                tabindex="${isActive ? '0' : '-1'}"
+                data-design-view-id="${escHtml(button.id)}"
+              >
+                ${escHtml(button.label)}
+              </button>
+            `;
+          }).join('')}
+        </div>
+      </div>
+
+      <div class="canvas-view-toolbar-actions">
+        <button
+          class="tb-btn"
+          type="button"
+          id="btn-undo"
+        >
+          Ongedaan
+        </button>
+
+        <button
+          class="tb-btn"
+          type="button"
+          id="btn-clear"
+        >
+          Reset
+        </button>
+      </div>
+
+      <p
+        id="canvas-view-note"
+        class="canvas-view-note"
+      ></p>
+    </div>
+  `;
+}
+
+function initializeDesignViewContext({
+  product,
+  activePers,
+  savedState,
+  stateKey,
+  margin,
+}) {
+  destroyDesignViewContext();
+
+  const config = getDesignViewConfig(
+    activePers,
+    product
+  );
+
+  const spec = window.ProductPreview?.getPrintSpec
+    ? ProductPreview.getPrintSpec(
+      activePers || {},
+      product || {}
+    )
+    : window.PrintSpecs?.normalizePrintSpec
+      ? PrintSpecs.normalizePrintSpec(
+        activePers || {},
+        product || {}
+      )
+      : {
+        exportWidthMm:
+          Number(
+            activePers?.width_mm ||
+            product?.width_mm ||
+            100
+          ),
+
+        exportHeightMm:
+          Number(
+            activePers?.height_mm ||
+            product?.height_mm ||
+            70
+          ),
+
+        trimXmm: 0,
+        trimYmm: 0,
+      };
+
+  designViewContext = {
+    product,
+    activePers,
+    stateKey,
+    config,
+    spec,
+    margin,
+
+    activeViewId:
+      resolveInitialDesignViewId(
+        config,
+        savedState?.editorViewId ||
+        savedState?.previewViewId ||
+        null
+      ),
+
+    pageAbortController:
+      new AbortController(),
+  };
+}
+
+function destroyDesignViewContext() {
+  designViewResizeObserver?.disconnect();
+  designViewResizeObserver = null;
+
+  if (designViewSyncFrame) {
+    cancelAnimationFrame(
+      designViewSyncFrame
+    );
+
+    designViewSyncFrame = null;
+  }
+
+  designViewContext
+    ?.pageAbortController
+    ?.abort();
+
+  if (fabricCanvas) {
+    removeDesignViewClip(
+      fabricCanvas
+    );
+
+    removeDesignViewGuides(
+      fabricCanvas
+    );
+  }
+
+  designViewContext = null;
+}
+
+function bindDesignViewControls(canvas) {
+  if (!designViewContext?.config.enabled) {
+    return;
+  }
+
+  const signal =
+    designViewContext
+      .pageAbortController
+      .signal;
+
+  document
+    .querySelectorAll(
+      '[data-design-view-id]'
+    )
+    .forEach(button => {
+      button.addEventListener(
+        'click',
+        () => {
+          setActiveDesignView(
+            button.dataset.designViewId,
+            true
+          );
+        },
+        { signal }
+      );
+    });
+
+  document
+    .getElementById('page-design')
+    ?.addEventListener(
+      'click',
+      event => {
+        const previewButton =
+          event.target.closest(
+            '[data-product-preview-view-id]'
+          );
+
+        if (!previewButton) {
+          return;
+        }
+
+        const viewId =
+          previewButton
+            .dataset
+            .productPreviewViewId;
+
+        if (getDesignViewById(viewId)) {
+          setActiveDesignView(
+            viewId,
+            false
+          );
+        }
+      },
+      { signal }
+    );
+
+  if (
+    typeof ResizeObserver ===
+    'function'
+  ) {
+    const canvasWrap =
+      document.getElementById(
+        'canvas-wrap'
+      );
+
+    if (canvasWrap) {
+      designViewResizeObserver =
+        new ResizeObserver(() => {
+          queueActiveDesignView(
+            canvas
+          );
+        });
+
+      designViewResizeObserver.observe(
+        canvasWrap
+      );
+    }
+  }
+}
+
+function setActiveDesignView(
+  viewId,
+  synchronizePreview = false
+) {
+  if (!designViewContext) {
+    return;
+  }
+
+  const isValid =
+    viewId === DESIGN_VIEW_SHEET_ID ||
+    Boolean(
+      getDesignViewById(viewId)
+    );
+
+  if (!isValid) {
+    return;
+  }
+
+  designViewContext.activeViewId =
+    viewId;
+
+  persistDesignState(
+    designViewContext.stateKey,
+    {
+      editorViewId: viewId,
+
+      ...(viewId !== DESIGN_VIEW_SHEET_ID
+        ? {
+          previewViewId: viewId,
+        }
+        : {}),
+    }
+  );
+
+  updateDesignViewToolbarState();
+
+  if (fabricCanvas) {
+    fabricCanvas.discardActiveObject();
+
+    applyActiveDesignView(
+      fabricCanvas
+    );
+  }
+
+  if (
+    synchronizePreview &&
+    viewId !== DESIGN_VIEW_SHEET_ID
+  ) {
+    const previewButton = [
+      ...document.querySelectorAll(
+        '[data-product-preview-view-id]'
+      ),
+    ].find(button => (
+      button
+        .dataset
+        .productPreviewViewId ===
+      viewId
+    ));
+
+    previewButton?.click();
+  }
+}
+
+function updateDesignViewToolbarState() {
+  if (!designViewContext) {
+    return;
+  }
+
+  document
+    .querySelectorAll(
+      '[data-design-view-id]'
+    )
+    .forEach(button => {
+      const isActive =
+        button.dataset.designViewId ===
+        designViewContext.activeViewId;
+
+      button.classList.toggle(
+        'active',
+        isActive
+      );
+
+      button.setAttribute(
+        'aria-selected',
+        String(isActive)
+      );
+
+      button.tabIndex =
+        isActive
+          ? 0
+          : -1;
+    });
+
+  const note =
+    document.getElementById(
+      'canvas-view-note'
+    );
+
+  if (!note) {
+    return;
+  }
+
+  if (
+    designViewContext.activeViewId ===
+    DESIGN_VIEW_SHEET_ID
+  ) {
+    note.textContent =
+      'Technische controleweergave. Gedraaide zijden staan zoals ze worden gedrukt.';
+
+    return;
+  }
+
+  const view =
+    getActiveDesignView();
+
+  const rotation =
+    getDesignViewRotation(view);
+
+  note.textContent = rotation
+    ? `Je bewerkt nu: ${view?.label || 'productzijde'}. Deze zijde wordt alleen in de editor rechtop getoond.`
+    : `Je bewerkt nu: ${view?.label || 'productzijde'}. Alleen dit ontwerpgebied is actief.`;
+}
+
+function getDesignViewById(viewId) {
+  return (
+    designViewContext
+      ?.config
+      ?.views
+      ?.find(
+        view => view.id === viewId
+      ) ||
+    null
+  );
+}
+
+function getActiveDesignView() {
+  if (
+    !designViewContext ||
+    designViewContext.activeViewId ===
+      DESIGN_VIEW_SHEET_ID
+  ) {
+    return null;
+  }
+
+  return getDesignViewById(
+    designViewContext.activeViewId
+  );
+}
+
+function isDesignSideViewActive() {
+  return Boolean(
+    getActiveDesignView()
+  );
+}
+
+function getDesignViewRotation(view) {
+  return normalizeDesignRotation(
+    view?.sourceZone?.rotation
+  );
+}
+
+function normalizeDesignRotation(value) {
+  return (
+    (
+      Number(value || 0) %
+      360
+    ) +
+    360
+  ) %
+    360;
+}
+
+function getDesignViewBounds(
+  canvas,
+  view = getActiveDesignView()
+) {
+  if (
+    !canvas ||
+    !view ||
+    !designViewContext?.spec
+  ) {
+    return null;
+  }
+
+  const sourceZone =
+    view.sourceZone ||
+    {};
+
+  const spec =
+    designViewContext.spec;
+
+  const exportWidthMm =
+    Number(
+      spec.exportWidthMm ||
+      spec.finishWidthMm ||
+      1
+    );
+
+  const exportHeightMm =
+    Number(
+      spec.exportHeightMm ||
+      spec.finishHeightMm ||
+      1
+    );
+
+  const left =
+    window.PrintSpecs
+      ?.finishMmToCanvasX
+      ? PrintSpecs.finishMmToCanvasX(
+        sourceZone.x_mm,
+        spec,
+        canvas.getWidth()
+      )
+      : (
+        (
+          Number(spec.trimXmm || 0) +
+          Number(sourceZone.x_mm || 0)
+        ) /
+        exportWidthMm
+      ) *
+      canvas.getWidth();
+
+  const top =
+    window.PrintSpecs
+      ?.finishMmToCanvasY
+      ? PrintSpecs.finishMmToCanvasY(
+        sourceZone.y_mm,
+        spec,
+        canvas.getHeight()
+      )
+      : (
+        (
+          Number(spec.trimYmm || 0) +
+          Number(sourceZone.y_mm || 0)
+        ) /
+        exportHeightMm
+      ) *
+      canvas.getHeight();
+
+  const width =
+    (
+      Number(
+        sourceZone.width_mm ||
+        0
+      ) /
+      exportWidthMm
+    ) *
+    canvas.getWidth();
+
+  const height =
+    (
+      Number(
+        sourceZone.height_mm ||
+        0
+      ) /
+      exportHeightMm
+    ) *
+    canvas.getHeight();
+
+  if (
+    width <= 0 ||
+    height <= 0
+  ) {
+    return null;
+  }
+
+  return {
+    left,
+    top,
+    width,
+    height,
+
+    right:
+      left +
+      width,
+
+    bottom:
+      top +
+      height,
+
+    centerX:
+      left +
+      width / 2,
+
+    centerY:
+      top +
+      height / 2,
+
+    rotation:
+      getDesignViewRotation(view),
+
+    viewId:
+      view.id,
+  };
+}
+
+function createDesignViewViewport(
+  canvas,
+  bounds
+) {
+  const radians =
+    bounds.rotation *
+    Math.PI /
+    180;
+
+  const swapsDimensions =
+    bounds.rotation === 90 ||
+    bounds.rotation === 270;
+
+  const visibleWidth =
+    swapsDimensions
+      ? bounds.height
+      : bounds.width;
+
+  const visibleHeight =
+    swapsDimensions
+      ? bounds.width
+      : bounds.height;
+
+  const scale =
+    Math.min(
+      Math.max(
+        1,
+        canvas.getWidth() -
+        DESIGN_VIEW_VIEWPORT_PADDING_PX * 2
+      ) /
+      visibleWidth,
+
+      Math.max(
+        1,
+        canvas.getHeight() -
+        DESIGN_VIEW_VIEWPORT_PADDING_PX * 2
+      ) /
+      visibleHeight
+    );
+
+  const cosine =
+    Math.cos(radians);
+
+  const sine =
+    Math.sin(radians);
+
+  const a =
+    scale *
+    cosine;
+
+  const b =
+    scale *
+    sine;
+
+  const c =
+    -scale *
+    sine;
+
+  const d =
+    scale *
+    cosine;
+
+  const e =
+    canvas.getWidth() / 2 -
+    (
+      a * bounds.centerX +
+      c * bounds.centerY
+    );
+
+  const f =
+    canvas.getHeight() / 2 -
+    (
+      b * bounds.centerX +
+      d * bounds.centerY
+    );
+
+  return [
+    a,
+    b,
+    c,
+    d,
+    e,
+    f,
+  ];
+}
+
+function hasExpectedDesignViewport(canvas) {
+  if (
+    !canvas ||
+    designViewCanonicalDepth > 0
+  ) {
+    return true;
+  }
+
+  const current =
+    Array.isArray(
+      canvas.viewportTransform
+    )
+      ? canvas.viewportTransform
+      : [
+        1,
+        0,
+        0,
+        1,
+        0,
+        0,
+      ];
+
+  const bounds =
+    getDesignViewBounds(canvas);
+
+  const expected =
+    bounds
+      ? createDesignViewViewport(
+        canvas,
+        bounds
+      )
+      : [
+        1,
+        0,
+        0,
+        1,
+        0,
+        0,
+      ];
+
+  return current.every(
+    (value, index) => (
+      Math.abs(
+        value -
+        expected[index]
+      ) <
+      DESIGN_VIEW_VIEWPORT_EPSILON
+    )
+  );
+}
+
+function queueActiveDesignView(
+  canvas = fabricCanvas
+) {
+  if (
+    !canvas ||
+    designViewSyncFrame
+  ) {
+    return;
+  }
+
+  designViewSyncFrame =
+    requestAnimationFrame(() => {
+      designViewSyncFrame = null;
+
+      if (
+        canvas ===
+        fabricCanvas
+      ) {
+        applyActiveDesignView(
+          canvas
+        );
+      }
+    });
+}
+
+function applyActiveDesignView(
+  canvas,
+  {
+    updateLayers = true,
+  } = {}
+) {
+  if (
+    !canvas ||
+    !designViewContext?.config.enabled
+  ) {
+    return;
+  }
+
+  removeDesignViewGuides(canvas);
+  restoreTechnicalGuideVisibility(
+    canvas
+  );
+
+  if (!isDesignSideViewActive()) {
+    canvas.setViewportTransform([
+      1,
+      0,
+      0,
+      1,
+      0,
+      0,
+    ]);
+
+    canvas.calcOffset();
+
+    removeDesignViewClip(canvas);
+    restoreDesignObjectInteractivity(
+      canvas
+    );
+
+    setCanvasZoomControlsVisible(true);
+    applyCanvasZoom();
+
+    if (updateLayers) {
+      updateLayerPanel();
+    }
+
+    updateDesignViewToolbarState();
+    canvas.requestRenderAll();
+
+    return;
+  }
+
+  const bounds =
+    getDesignViewBounds(canvas);
+
+  if (!bounds) {
+    return;
+  }
+
+  canvasZoom = 1;
+
+  clearCanvasContainerTransform(
+    canvas
+  );
+
+  canvas.setViewportTransform(
+    createDesignViewViewport(
+      canvas,
+      bounds
+    )
+  );
+
+  canvas.calcOffset();
+
+  hideTechnicalGuides(canvas);
+
+  updateDesignObjectInteractivity(
+    canvas
+  );
+
+  addDesignViewGuides(
+    canvas,
+    bounds
+  );
+
+  applyDesignViewClip(
+    canvas,
+    bounds
+  );
+
+  setCanvasZoomControlsVisible(false);
+
+  if (updateLayers) {
+    updateLayerPanel();
+  }
+
+  updateDesignViewToolbarState();
+  canvas.requestRenderAll();
+}
+
+function clearCanvasContainerTransform(canvas) {
+  const container =
+    canvas.wrapperEl ||
+    canvas.lowerCanvasEl?.parentElement;
+
+  if (!container) {
+    return;
+  }
+
+  container.style.transform =
+    'none';
+
+  container.style.transformOrigin =
+    'center center';
+}
+
+function setCanvasZoomControlsVisible(visible) {
+  const controls =
+    document.querySelector(
+      '.canvas-zoom-controls'
+    );
+
+  if (controls) {
+    controls.hidden =
+      !visible;
+  }
+}
+
+function prepareNewObjectForActiveDesignView(
+  canvas,
+  object,
+  {
+    fallbackLeft =
+      canvas?.getWidth?.() / 2 ||
+      0,
+
+    fallbackTop =
+      canvas?.getHeight?.() / 2 ||
+      0,
+
+    maximumWidth = null,
+  } = {}
+) {
+  if (
+    !canvas ||
+    !object ||
+    isGuideObject(object)
+  ) {
+    return;
+  }
+
+  const activeView =
+    getActiveDesignView();
+
+  const defaultView =
+    !activeView &&
+    designViewContext?.config.enabled
+      ? (
+        getDesignViewById(
+          designViewContext
+            .config
+            .defaultViewId
+        ) ||
+        designViewContext
+          .config
+          .views[0] ||
+        null
+      )
+      : null;
+
+  const view =
+    activeView ||
+    defaultView;
+
+  const bounds =
+    getDesignViewBounds(
+      canvas,
+      view
+    );
+
+  if (
+    view &&
+    bounds
+  ) {
+    object.set({
+      left:
+        bounds.centerX,
+
+      top:
+        bounds.centerY,
+
+      originX:
+        'center',
+
+      originY:
+        'center',
+
+      angle:
+        normalizeDesignRotation(
+          Number(
+            object.angle ||
+            0
+          ) -
+          bounds.rotation
+        ),
+
+      _designViewId:
+        view.id,
+
+      _designViewRotation:
+        bounds.rotation,
+
+      _designOrientationVersion:
+        DESIGN_VIEW_ORIENTATION_VERSION,
+    });
+
+    if (
+      maximumWidth &&
+      object.type === 'image'
+    ) {
+      scaleFabricImageToMaximumWidth(
+        object,
+        Math.min(
+          maximumWidth,
+          bounds.width * 0.42
+        )
+      );
+    }
+  } else {
+    object.set({
+      left:
+        fallbackLeft,
+
+      top:
+        fallbackTop,
+
+      _designViewId:
+        null,
+
+      _designViewRotation:
+        0,
+
+      _designOrientationVersion:
+        DESIGN_VIEW_ORIENTATION_VERSION,
+    });
+  }
+
+  object.setCoords?.();
+}
+
+function scaleFabricImageToMaximumWidth(
+  object,
+  maximumWidth
+) {
+  const sourceWidth =
+    Number(
+      object?.width ||
+      0
+    );
+
+  const currentWidth =
+    Number(
+      object?.getScaledWidth?.() ||
+      sourceWidth
+    );
+
+  if (
+    !sourceWidth ||
+    !maximumWidth ||
+    currentWidth <= maximumWidth
+  ) {
+    return;
+  }
+
+  object.scale(
+    maximumWidth /
+    sourceWidth
+  );
+}
+
+function hydrateDesignObjectMetadata(canvas) {
+  if (
+    !canvas ||
+    !designViewContext?.config.enabled
+  ) {
+    return;
+  }
+
+  canvas
+    .getObjects()
+    .filter(
+      object =>
+        !isGuideObject(object)
+    )
+    .forEach(object => {
+      const storedView =
+        getDesignViewById(
+          object._designViewId
+        );
+
+      const inferredViewId =
+        storedView
+          ? storedView.id
+          : inferDesignViewIdForObject(
+            canvas,
+            object
+          );
+
+      const view =
+        getDesignViewById(
+          inferredViewId
+        );
+
+      object._designViewId =
+        inferredViewId;
+
+      object._designViewRotation =
+        getDesignViewRotation(view);
+
+      if (
+        !Number.isFinite(
+          Number(
+            object
+              ._designOrientationVersion
+          )
+        )
+      ) {
+        object._designOrientationVersion =
+          0;
+      }
+
+      object.setCoords?.();
+    });
+}
+
+function assignObjectToCurrentDesignView(
+  canvas,
+  object
+) {
+  if (
+    !canvas ||
+    !object ||
+    isGuideObject(object) ||
+    !designViewContext?.config.enabled
+  ) {
+    return;
+  }
+
+  const activeView =
+    getActiveDesignView();
+
+  const nextViewId =
+    activeView?.id ||
+    inferDesignViewIdForObject(
+      canvas,
+      object
+    );
+
+  const view =
+    getDesignViewById(
+      nextViewId
+    );
+
+  object._designViewId =
+    nextViewId;
+
+  object._designViewRotation =
+    getDesignViewRotation(view);
+
+  object._designOrientationVersion =
+    Number(
+      object
+        ._designOrientationVersion
+    ) ||
+    DESIGN_VIEW_ORIENTATION_VERSION;
+
+  object.setCoords?.();
+}
+
+function inferDesignViewIdForObject(
+  canvas,
+  object
+) {
+  const center =
+    object?.getCenterPoint?.();
+
+  if (!center) {
+    return null;
+  }
+
+  return (
+    designViewContext
+      ?.config
+      ?.views
+      ?.find(view => {
+        const bounds =
+          getDesignViewBounds(
+            canvas,
+            view
+          );
+
+        return Boolean(
+          bounds &&
+          center.x >= bounds.left &&
+          center.x <= bounds.right &&
+          center.y >= bounds.top &&
+          center.y <= bounds.bottom
+        );
+      })
+      ?.id ||
+    null
+  );
+}
+
+function getObjectDesignViewId(
+  canvas,
+  object
+) {
+  return getDesignViewById(
+    object?._designViewId
+  )
+    ? object._designViewId
+    : inferDesignViewIdForObject(
+      canvas,
+      object
+    );
+}
+
+function constrainObjectToActiveDesignView(
+  canvas,
+  object
+) {
+  const bounds =
+    getDesignViewBounds(canvas);
+
+  const center =
+    object?.getCenterPoint?.();
+
+  if (
+    !bounds ||
+    !center ||
+    !object ||
+    isGuideObject(object)
+  ) {
+    return;
+  }
+
+  object.setPositionByOrigin(
+    new fabric.Point(
+      clamp(
+        center.x,
+        bounds.left,
+        bounds.right
+      ),
+
+      clamp(
+        center.y,
+        bounds.top,
+        bounds.bottom
+      )
+    ),
+    'center',
+    'center'
+  );
+
+  object._designViewId =
+    bounds.viewId;
+
+  object._designViewRotation =
+    bounds.rotation;
+
+  object._designOrientationVersion =
+    Number(
+      object
+        ._designOrientationVersion
+    ) ||
+    DESIGN_VIEW_ORIENTATION_VERSION;
+
+  object.setCoords?.();
+}
+
+function updateDesignObjectInteractivity(canvas) {
+  const activeView =
+    getActiveDesignView();
+
+  canvas
+    .getObjects()
+    .filter(
+      object =>
+        !isGuideObject(object)
+    )
+    .forEach(object => {
+      object._designOriginalSelectable ??=
+        object.selectable !== false;
+
+      object._designOriginalEvented ??=
+        object.evented !== false;
+
+      const belongsToActiveView =
+        getObjectDesignViewId(
+          canvas,
+          object
+        ) === activeView?.id;
+
+      object.selectable =
+        belongsToActiveView &&
+        object._designOriginalSelectable;
+
+      object.evented =
+        belongsToActiveView &&
+        object._designOriginalEvented;
+    });
+}
+
+function restoreDesignObjectInteractivity(canvas) {
+  canvas
+    .getObjects()
+    .filter(
+      object =>
+        !isGuideObject(object)
+    )
+    .forEach(object => {
+      object.selectable =
+        object
+          ._designOriginalSelectable !==
+        false;
+
+      object.evented =
+        object
+          ._designOriginalEvented !==
+        false;
+    });
+}
+
+function hideTechnicalGuides(canvas) {
+  canvas
+    .getObjects()
+    .filter(
+      object =>
+        isGuideObject(object) &&
+        !object[DESIGN_VIEW_GUIDE_FLAG]
+    )
+    .forEach(object => {
+      object.visible = false;
+    });
+}
+
+function restoreTechnicalGuideVisibility(canvas) {
+  canvas
+    .getObjects()
+    .filter(
+      object =>
+        isGuideObject(object) &&
+        !object[DESIGN_VIEW_GUIDE_FLAG]
+    )
+    .forEach(object => {
+      object.visible = true;
+    });
+}
+
+function removeDesignViewGuides(canvas) {
+  canvas
+    .getObjects()
+    .filter(
+      object =>
+        object[DESIGN_VIEW_GUIDE_FLAG]
+    )
+    .forEach(object => {
+      canvas.remove(object);
+    });
+}
+
+function addDesignViewGuides(
+  canvas,
+  bounds
+) {
+  const guideColor =
+    getContrastingGuideColor(
+      fabricBackgroundColor
+    );
+
+  const safeMargin =
+    Math.min(
+      designViewContext?.margin ||
+      0,
+
+      bounds.width / 3,
+      bounds.height / 3
+    );
+
+  const guides = [
+    new fabric.Rect({
+      left:
+        bounds.left,
+
+      top:
+        bounds.top,
+
+      width:
+        bounds.width,
+
+      height:
+        bounds.height,
+
+      fill:
+        'transparent',
+
+      stroke:
+        guideColor,
+
+      strokeWidth:
+        1.75,
+
+      strokeDashArray:
+        [7, 5],
+    }),
+
+    new fabric.Rect({
+      left:
+        bounds.left +
+        safeMargin,
+
+      top:
+        bounds.top +
+        safeMargin,
+
+      width:
+        Math.max(
+          1,
+          bounds.width -
+          safeMargin * 2
+        ),
+
+      height:
+        Math.max(
+          1,
+          bounds.height -
+          safeMargin * 2
+        ),
+
+      fill:
+        'transparent',
+
+      stroke:
+        guideColor,
+
+      strokeWidth:
+        1.75,
+
+      strokeDashArray:
+        [6, 4],
+    }),
+  ];
+
+  guides.forEach(guide => {
+    guide.set({
+      strokeUniform: true,
+      selectable: false,
+      evented: false,
+      objectCaching: false,
+      excludeFromExport: true,
+      _isGuide: true,
+
+      [DESIGN_VIEW_GUIDE_FLAG]:
+        true,
+    });
+
+    canvas.add(guide);
+    canvas.bringToFront(guide);
+  });
+}
+
+function getDesignViewScreenBounds(
+  canvas,
+  bounds
+) {
+  const transform =
+    Array.isArray(
+      canvas.viewportTransform
+    )
+      ? canvas.viewportTransform
+      : [
+        1,
+        0,
+        0,
+        1,
+        0,
+        0,
+      ];
+
+  const points = [
+    [
+      bounds.left,
+      bounds.top,
+    ],
+
+    [
+      bounds.right,
+      bounds.top,
+    ],
+
+    [
+      bounds.right,
+      bounds.bottom,
+    ],
+
+    [
+      bounds.left,
+      bounds.bottom,
+    ],
+  ].map(([x, y]) => ({
+    x:
+      transform[0] * x +
+      transform[2] * y +
+      transform[4],
+
+    y:
+      transform[1] * x +
+      transform[3] * y +
+      transform[5],
+  }));
+
+  const xValues =
+    points.map(
+      point => point.x
+    );
+
+  const yValues =
+    points.map(
+      point => point.y
+    );
+
+  const left =
+    Math.max(
+      0,
+      Math.min(...xValues)
+    );
+
+  const top =
+    Math.max(
+      0,
+      Math.min(...yValues)
+    );
+
+  const right =
+    Math.min(
+      canvas.getWidth(),
+      Math.max(...xValues)
+    );
+
+  const bottom =
+    Math.min(
+      canvas.getHeight(),
+      Math.max(...yValues)
+    );
+
+  return {
+    left,
+    top,
+    right,
+    bottom,
+
+    width:
+      Math.max(
+        1,
+        right - left
+      ),
+
+    height:
+      Math.max(
+        1,
+        bottom - top
+      ),
+  };
+}
+
+function applyDesignViewClip(
+  canvas,
+  bounds
+) {
+  const container =
+    canvas.wrapperEl ||
+    canvas.lowerCanvasEl?.parentElement;
+
+  if (!container) {
+    return;
+  }
+
+  const screenBounds =
+    getDesignViewScreenBounds(
+      canvas,
+      bounds
+    );
+
+  const rightInset =
+    Math.max(
+      0,
+      canvas.getWidth() -
+      screenBounds.right
+    );
+
+  const bottomInset =
+    Math.max(
+      0,
+      canvas.getHeight() -
+      screenBounds.bottom
+    );
+
+  container.classList.add(
+    'canvas-editor-side-view'
+  );
+
+  container.style.clipPath =
+    `inset(${screenBounds.top}px ${rightInset}px ${bottomInset}px ${screenBounds.left}px round 10px)`;
+
+  document
+    .getElementById('canvas-wrap')
+    ?.classList
+    .add('is-design-side-view');
+
+  updateDesignViewOutline(
+    canvas,
+    screenBounds
+  );
+}
+
+function removeDesignViewClip(canvas) {
+  const container =
+    canvas?.wrapperEl ||
+    canvas?.lowerCanvasEl?.parentElement;
+
+  if (container) {
+    container.classList.remove(
+      'canvas-editor-side-view'
+    );
+
+    container.style.clipPath = '';
+  }
+
+  document
+    .getElementById('canvas-wrap')
+    ?.classList
+    .remove('is-design-side-view');
+
+  document
+    .querySelector(
+      '[data-canvas-editor-outline]'
+    )
+    ?.remove();
+}
+
+function updateDesignViewOutline(
+  canvas,
+  screenBounds
+) {
+  const canvasWrap =
+    document.getElementById(
+      'canvas-wrap'
+    );
+
+  const container =
+    canvas.wrapperEl ||
+    canvas.lowerCanvasEl?.parentElement;
+
+  if (
+    !canvasWrap ||
+    !container
+  ) {
+    return;
+  }
+
+  let outline =
+    canvasWrap.querySelector(
+      '[data-canvas-editor-outline]'
+    );
+
+  if (!outline) {
+    outline =
+      document.createElement(
+        'div'
+      );
+
+    outline.className =
+      'canvas-editor-outline';
+
+    outline.dataset.canvasEditorOutline =
+      'true';
+
+    canvasWrap.appendChild(
+      outline
+    );
+  }
+
+  Object.assign(
+    outline.style,
+    {
+      left:
+        `${container.offsetLeft + screenBounds.left}px`,
+
+      top:
+        `${container.offsetTop + screenBounds.top}px`,
+
+      width:
+        `${screenBounds.width}px`,
+
+      height:
+        `${screenBounds.height}px`,
+    }
+  );
+}
+
+function isOutsideActiveDesignViewMargin(object) {
+  if (
+    !fabricCanvas ||
+    !object ||
+    !isDesignSideViewActive()
+  ) {
+    return null;
+  }
+
+  const bounds =
+    getDesignViewBounds(
+      fabricCanvas
+    );
+
+  if (!bounds) {
+    return null;
+  }
+
+  const safeMargin =
+    Math.min(
+      designViewContext?.margin ||
+      0,
+
+      bounds.width / 3,
+      bounds.height / 3
+    );
+
+  const objectBounds =
+    object.getBoundingRect(
+      true,
+      true
+    );
+
+  return (
+    objectBounds.left <
+      bounds.left +
+      safeMargin ||
+
+    objectBounds.top <
+      bounds.top +
+      safeMargin ||
+
+    objectBounds.left +
+      objectBounds.width >
+      bounds.right -
+      safeMargin ||
+
+    objectBounds.top +
+      objectBounds.height >
+      bounds.bottom -
+      safeMargin
+  );
+}
+
+function withCanonicalDesignCanvas(
+  canvas,
+  callback,
+  {
+    hideGuides = true,
+  } = {}
+) {
+  if (
+    !canvas ||
+    typeof callback !== 'function'
+  ) {
+    return null;
+  }
+
+  const previousViewport = [
+    ...(
+      canvas.viewportTransform ||
+      [
+        1,
+        0,
+        0,
+        1,
+        0,
+        0,
+      ]
+    ),
+  ];
+
+  const activeObject =
+    canvas.getActiveObject();
+
+  const guideStates =
+    getGuideObjects(canvas).map(
+      object => ({
+        object,
+        visible:
+          object.visible,
+      })
+    );
+
+  designViewCanonicalDepth += 1;
+
+  canvas.setViewportTransform([
+    1,
+    0,
+    0,
+    1,
+    0,
+    0,
+  ]);
+
+  canvas.calcOffset();
+
+  if (hideGuides) {
+    guideStates.forEach(
+      ({ object }) => {
+        object.visible = false;
+      }
+    );
+  }
+
+  canvas.discardActiveObject();
+  canvas.renderAll();
+
+  const restore = () => {
+    guideStates.forEach(
+      ({
+        object,
+        visible,
+      }) => {
+        if (
+          canvas
+            .getObjects()
+            .includes(object)
+        ) {
+          object.visible =
+            visible;
+        }
+      }
+    );
+
+    canvas.setViewportTransform(
+      previousViewport
+    );
+
+    canvas.calcOffset();
+
+    designViewCanonicalDepth =
+      Math.max(
+        0,
+        designViewCanonicalDepth - 1
+      );
+
+    applyActiveDesignView(
+      canvas,
+      {
+        updateLayers: false,
+      }
+    );
+
+    if (
+      activeObject &&
+      canvas
+        .getObjects()
+        .includes(activeObject) &&
+      activeObject.selectable !== false
+    ) {
+      canvas.setActiveObject(
+        activeObject
+      );
+    }
+
+    canvas.renderAll();
+  };
+
+  try {
+    const result =
+      callback();
+
+    if (
+      result &&
+      typeof result.then ===
+      'function'
+    ) {
+      return result.finally(
+        restore
+      );
+    }
+
+    restore();
+
+    return result;
+  } catch (error) {
+    restore();
+    throw error;
   }
 }
 
@@ -584,50 +2526,69 @@ function bindDesignTabs(
   document
     .querySelectorAll('.design-tab')
     .forEach(tab => {
-      tab.addEventListener('click', () => {
-        activeDesignTab = tab.dataset.tab;
+      tab.addEventListener(
+        'click',
+        () => {
+          activeDesignTab =
+            tab.dataset.tab;
 
-        document
-          .querySelectorAll('.design-tab')
-          .forEach(item => {
-            item.classList.remove('active');
-          });
+          document
+            .querySelectorAll(
+              '.design-tab'
+            )
+            .forEach(item => {
+              item.classList.remove(
+                'active'
+              );
+            });
 
-        tab.classList.add('active');
-
-        const toolTab = document.getElementById('tab-tool');
-        const uploadTab = document.getElementById('tab-upload');
-
-        if (toolTab) {
-          toolTab.style.display =
-            activeDesignTab === 'tool'
-              ? ''
-              : 'none';
-        }
-
-        if (uploadTab) {
-          uploadTab.style.display =
-            activeDesignTab === 'upload'
-              ? ''
-              : 'none';
-        }
-
-        persistDesignState(
-          stateKey,
-          {
-            tab: activeDesignTab,
-          }
-        );
-
-        if (activeDesignTab === 'tool') {
-          scheduleFabricInit(
-            product,
-            activePers,
-            savedState,
-            stateKey
+          tab.classList.add(
+            'active'
           );
+
+          const toolTab =
+            document.getElementById(
+              'tab-tool'
+            );
+
+          const uploadTab =
+            document.getElementById(
+              'tab-upload'
+            );
+
+          if (toolTab) {
+            toolTab.hidden =
+              activeDesignTab !==
+              'tool';
+          }
+
+          if (uploadTab) {
+            uploadTab.hidden =
+              activeDesignTab !==
+              'upload';
+          }
+
+          persistDesignState(
+            stateKey,
+            {
+              tab:
+                activeDesignTab,
+            }
+          );
+
+          if (
+            activeDesignTab ===
+            'tool'
+          ) {
+            scheduleFabricInit(
+              product,
+              activePers,
+              savedState,
+              stateKey
+            );
+          }
         }
-      });
+      );
     });
 }
 
@@ -636,54 +2597,90 @@ function bindUploadZone(
   activePers,
   product
 ) {
-  const zone = document.getElementById('upload-zone');
-  const input = document.getElementById('upload-input');
+  const zone =
+    document.getElementById(
+      'upload-zone'
+    );
 
-  if (!zone || !input) {
+  const input =
+    document.getElementById(
+      'upload-input'
+    );
+
+  if (
+    !zone ||
+    !input
+  ) {
     return;
   }
 
-  zone.addEventListener('click', () => {
-    input.click();
-  });
+  zone.addEventListener(
+    'click',
+    () => {
+      input.click();
+    }
+  );
 
-  zone.addEventListener('dragover', event => {
-    event.preventDefault();
-    zone.classList.add('dragover');
-  });
-
-  zone.addEventListener('dragleave', () => {
-    zone.classList.remove('dragover');
-  });
-
-  zone.addEventListener('drop', event => {
-    event.preventDefault();
-    zone.classList.remove('dragover');
-
-    const file = event.dataTransfer.files?.[0];
-
-    if (file) {
-      handleUpload(
-        file,
-        stateKey,
-        activePers,
-        product
+  zone.addEventListener(
+    'dragover',
+    event => {
+      event.preventDefault();
+      zone.classList.add(
+        'dragover'
       );
     }
-  });
+  );
 
-  input.addEventListener('change', event => {
-    const file = event.target.files?.[0];
-
-    if (file) {
-      handleUpload(
-        file,
-        stateKey,
-        activePers,
-        product
+  zone.addEventListener(
+    'dragleave',
+    () => {
+      zone.classList.remove(
+        'dragover'
       );
     }
-  });
+  );
+
+  zone.addEventListener(
+    'drop',
+    event => {
+      event.preventDefault();
+
+      zone.classList.remove(
+        'dragover'
+      );
+
+      const file =
+        event
+          .dataTransfer
+          .files?.[0];
+
+      if (file) {
+        handleUpload(
+          file,
+          stateKey,
+          activePers,
+          product
+        );
+      }
+    }
+  );
+
+  input.addEventListener(
+    'change',
+    event => {
+      const file =
+        event.target.files?.[0];
+
+      if (file) {
+        handleUpload(
+          file,
+          stateKey,
+          activePers,
+          product
+        );
+      }
+    }
+  );
 }
 
 function bindDesignNextButton(
@@ -692,135 +2689,234 @@ function bindDesignNextButton(
   stateKey
 ) {
   document
-    .getElementById('btn-design-next')
-    ?.addEventListener('click', () => {
-      const error = document.getElementById('design-error');
-
-      if (activeDesignTab === 'upload') {
-        if (!uploadedDataURL) {
-          if (error) {
-            error.style.display = 'block';
-          }
-
-          return;
-        }
-
-        const designData = {
-          dataURL: uploadedDataURL,
-
-          pdfDataURL:
-            uploadedPdfDataURL ||
-            (
-              uploadedDataURL.startsWith('data:application/pdf')
-                ? uploadedDataURL
-                : ''
-            ),
-
-          rillinesPdfDataURL:
-            uploadedRillinesPdfDataURL ||
-            '',
-
-          fileName: uploadedFileName,
-          tab: 'upload',
-          source: 'upload',
-          uploadCheck: uploadedCheck,
-
-          prepressWarnings:
-            getUploadPrepressWarnings(
-              uploadedCheck
-            ),
-        };
-
-        Session.setDesign(designData);
-        persistDesignState(stateKey, designData);
-      } else {
-        if (!fabricCanvas) {
-          if (error) {
-            error.textContent =
-              'De ontwerptool is nog niet geladen. Probeer het opnieuw.';
-
-            error.style.display = 'block';
-          }
-
-          return;
-        }
-
-        const snapshot = snapshotCanvas(
-          fabricCanvas,
-          product,
-          activePers
-        );
-
-        const prepressWarnings =
-          collectCanvasPrepressWarnings(
-            fabricCanvas,
-            activePers,
-            product
+    .getElementById(
+      'btn-design-next'
+    )
+    ?.addEventListener(
+      'click',
+      () => {
+        const error =
+          document.getElementById(
+            'design-error'
           );
 
-        Session.setDesign({
-          dataURL: snapshot.dataURL,
-          pdfDataURL: snapshot.pdfDataURL,
-          rillinesPdfDataURL: snapshot.rillinesPdfDataURL,
-          tab: 'tool',
-          source: 'fabric',
-          fabricJSON: snapshot.json,
-          backgroundColor: snapshot.backgroundColor,
-          prepressWarnings,
-          uploadCheck: null,
-        });
+        if (
+          activeDesignTab ===
+          'upload'
+        ) {
+          if (!uploadedDataURL) {
+            if (error) {
+              error.hidden = false;
+            }
 
-        persistDesignState(
-          stateKey,
-          {
-            dataURL: snapshot.dataURL,
-            pdfDataURL: snapshot.pdfDataURL,
-            rillinesPdfDataURL: snapshot.rillinesPdfDataURL,
-            fabricJSON: snapshot.json,
-            backgroundColor: snapshot.backgroundColor,
-            tab: 'tool',
+            return;
+          }
+
+          const designData = {
+            dataURL:
+              uploadedDataURL,
+
+            pdfDataURL:
+              uploadedPdfDataURL ||
+              (
+                uploadedDataURL.startsWith(
+                  'data:application/pdf'
+                )
+                  ? uploadedDataURL
+                  : ''
+              ),
+
+            rillinesPdfDataURL:
+              uploadedRillinesPdfDataURL ||
+              '',
+
+            fileName:
+              uploadedFileName,
+
+            tab:
+              'upload',
+
+            source:
+              'upload',
+
+            uploadCheck:
+              uploadedCheck,
+
+            prepressWarnings:
+              getUploadPrepressWarnings(
+                uploadedCheck
+              ),
+          };
+
+          Session.setDesign(
+            designData
+          );
+
+          persistDesignState(
+            stateKey,
+            designData
+          );
+        } else {
+          if (!fabricCanvas) {
+            if (error) {
+              error.textContent =
+                'De ontwerptool is nog niet geladen. Probeer het opnieuw.';
+
+              error.hidden = false;
+            }
+
+            return;
+          }
+
+          const snapshot =
+            snapshotCanvas(
+              fabricCanvas,
+              product,
+              activePers
+            );
+
+          const prepressWarnings =
+            withCanonicalDesignCanvas(
+              fabricCanvas,
+
+              () =>
+                collectCanvasPrepressWarnings(
+                  fabricCanvas,
+                  activePers,
+                  product
+                ),
+
+              {
+                hideGuides: false,
+              }
+            );
+
+          const editorViewId =
+            designViewContext
+              ?.activeViewId ||
+            DESIGN_VIEW_SHEET_ID;
+
+          Session.setDesign({
+            dataURL:
+              snapshot.dataURL,
+
+            pdfDataURL:
+              snapshot.pdfDataURL,
+
+            rillinesPdfDataURL:
+              snapshot.rillinesPdfDataURL,
+
+            tab:
+              'tool',
+
+            source:
+              'fabric',
+
+            fabricJSON:
+              snapshot.json,
+
+            backgroundColor:
+              snapshot.backgroundColor,
+
+            editorViewId,
+
+            ...(editorViewId !==
+              DESIGN_VIEW_SHEET_ID
+              ? {
+                previewViewId:
+                  editorViewId,
+              }
+              : {}),
+
             prepressWarnings,
             uploadCheck: null,
-          }
-        );
-      }
+          });
 
-      if (error) {
-        error.style.display = 'none';
-      }
+          persistDesignState(
+            stateKey,
+            {
+              dataURL:
+                snapshot.dataURL,
 
-      navigateTo('review');
-    });
+              pdfDataURL:
+                snapshot.pdfDataURL,
+
+              rillinesPdfDataURL:
+                snapshot.rillinesPdfDataURL,
+
+              fabricJSON:
+                snapshot.json,
+
+              backgroundColor:
+                snapshot.backgroundColor,
+
+              editorViewId,
+
+              ...(editorViewId !==
+                DESIGN_VIEW_SHEET_ID
+                ? {
+                  previewViewId:
+                    editorViewId,
+                }
+                : {}),
+
+              tab:
+                'tool',
+
+              prepressWarnings,
+              uploadCheck: null,
+            }
+          );
+        }
+
+        if (error) {
+          error.hidden = true;
+        }
+
+        navigateTo('review');
+      }
+    );
 }
 
 function bindFontSelector(
   canvas,
   stateKey
 ) {
-  const select = document.getElementById('font-select');
+  const select =
+    document.getElementById(
+      'font-select'
+    );
 
   if (!select) {
     return;
   }
 
-  select.addEventListener('change', () => {
-    const fontValue = select.value;
-    const object = canvas.getActiveObject();
+  select.addEventListener(
+    'change',
+    () => {
+      const fontValue =
+        select.value;
 
-    if (
-      object &&
-      object.type === 'i-text'
-    ) {
-      object.set(
-        'fontFamily',
-        fontValue
-      );
+      const object =
+        canvas.getActiveObject();
 
-      canvas.renderAll();
-      fabricSaveHistory();
-      autoSaveCanvasState(stateKey);
+      if (
+        object &&
+        object.type === 'i-text'
+      ) {
+        object.set(
+          'fontFamily',
+          fontValue
+        );
+
+        canvas.renderAll();
+        fabricSaveHistory();
+        autoSaveCanvasState(
+          stateKey
+        );
+      }
     }
-  });
+  );
 
   canvas.on(
     'selection:created',
@@ -833,28 +2929,35 @@ function bindFontSelector(
   );
 
   function syncFontControls() {
-    const object = canvas.getActiveObject();
+    const object =
+      canvas.getActiveObject();
 
     if (
-      object &&
-      object.type === 'i-text'
+      !object ||
+      object.type !== 'i-text'
     ) {
-      const currentFont =
-        object.fontFamily ||
-        'Georgia';
-
-      const match =
-        AVAILABLE_FONTS.find(
-          font =>
-            font.value === currentFont
-        );
-
-      if (match) {
-        select.value = match.value;
-      }
-
-      syncFontSizeControls(object);
+      return;
     }
+
+    const currentFont =
+      object.fontFamily ||
+      'Georgia';
+
+    const match =
+      AVAILABLE_FONTS.find(
+        font =>
+          font.value ===
+          currentFont
+      );
+
+    if (match) {
+      select.value =
+        match.value;
+    }
+
+    syncFontSizeControls(
+      object
+    );
   }
 }
 
@@ -862,36 +2965,47 @@ function bindFontSizeControl(
   canvas,
   stateKey
 ) {
-  const select = document.getElementById('font-size');
+  const select =
+    document.getElementById(
+      'font-size'
+    );
 
   if (!select) {
     return;
   }
 
-  select.addEventListener('change', event => {
-    const value = parseInt(
-      event.target.value,
-      10
-    );
+  select.addEventListener(
+    'change',
+    event => {
+      const value =
+        Number.parseInt(
+          event.target.value,
+          10
+        );
 
-    const object = canvas.getActiveObject();
+      const object =
+        canvas.getActiveObject();
 
-    if (
-      object &&
-      object.type === 'i-text' &&
-      !isGuideObject(object)
-    ) {
-      object.set(
-        'fontSize',
-        value
-      );
+      if (
+        object &&
+        object.type === 'i-text' &&
+        !isGuideObject(object)
+      ) {
+        object.set(
+          'fontSize',
+          value
+        );
 
-      canvas.renderAll();
-      fabricSaveHistory();
-      updateLayerPanel();
-      autoSaveCanvasState(stateKey);
+        canvas.renderAll();
+        fabricSaveHistory();
+        updateLayerPanel();
+
+        autoSaveCanvasState(
+          stateKey
+        );
+      }
     }
-  });
+  );
 
   canvas.on(
     'selection:created',
@@ -913,7 +3027,10 @@ function bindFontSizeControl(
 }
 
 function syncFontSizeControls(object) {
-  const select = document.getElementById('font-size');
+  const select =
+    document.getElementById(
+      'font-size'
+    );
 
   if (
     !select ||
@@ -923,29 +3040,35 @@ function syncFontSizeControls(object) {
     return;
   }
 
-  const fontSize = Math.round(
-    object.fontSize ||
-    20
-  );
-
-  const availableSizes =
-    [...select.options].map(
-      option =>
-        Number(option.value)
+  const fontSize =
+    Math.round(
+      object.fontSize ||
+      20
     );
+
+  const availableSizes = [
+    ...select.options,
+  ].map(option => (
+    Number(option.value)
+  ));
 
   const closestSize =
     availableSizes.reduce(
       (closest, size) => (
-        Math.abs(size - fontSize) <
-          Math.abs(closest - fontSize)
+        Math.abs(
+          size - fontSize
+        ) <
+        Math.abs(
+          closest - fontSize
+        )
           ? size
           : closest
       ),
       availableSizes[0]
     );
 
-  select.value = String(closestSize);
+  select.value =
+    String(closestSize);
 }
 
 function getResponsiveCanvasSize(
@@ -963,25 +3086,30 @@ function getResponsiveCanvasSize(
     827;
 
   const canvasWrap =
-    document.getElementById('canvas-wrap');
+    document.getElementById(
+      'canvas-wrap'
+    );
 
   const fallbackWidth =
     Math.max(
       280,
-      window.innerWidth - 560
+      window.innerWidth -
+      560
     );
 
   const fallbackHeight =
     Math.max(
       240,
-      window.innerHeight - 360
+      window.innerHeight -
+      360
     );
 
   const availableWidth =
     canvasWrap
       ? Math.max(
         280,
-        canvasWrap.clientWidth - 32
+        canvasWrap.clientWidth -
+        32
       )
       : fallbackWidth;
 
@@ -989,15 +3117,18 @@ function getResponsiveCanvasSize(
     canvasWrap
       ? Math.max(
         240,
-        canvasWrap.clientHeight - 32
+        canvasWrap.clientHeight -
+        32
       )
       : fallbackHeight;
 
   const scale =
     Math.min(
       1,
-      availableWidth / printWidthPx,
-      availableHeight / printHeightPx
+      availableWidth /
+      printWidthPx,
+      availableHeight /
+      printHeightPx
     );
 
   return {
@@ -1005,7 +3136,8 @@ function getResponsiveCanvasSize(
       Math.max(
         1,
         Math.floor(
-          printWidthPx * scale
+          printWidthPx *
+          scale
         )
       ),
 
@@ -1013,11 +3145,14 @@ function getResponsiveCanvasSize(
       Math.max(
         1,
         Math.floor(
-          printHeightPx * scale
+          printHeightPx *
+          scale
         )
       ),
 
     scale,
+    printWidthPx,
+    printHeightPx,
   };
 }
 
@@ -1031,6 +3166,16 @@ function applyCanvasZoom() {
     return;
   }
 
+  if (isDesignSideViewActive()) {
+    container.style.transform =
+      'none';
+
+    container.style.transformOrigin =
+      'center center';
+
+    return;
+  }
+
   container.style.transform =
     `scale(${canvasZoom})`;
 
@@ -1039,35 +3184,46 @@ function applyCanvasZoom() {
 }
 
 function setCanvasZoom(nextZoom) {
-  canvasZoom = Math.min(
-    CANVAS_ZOOM_MAX,
-    Math.max(
-      CANVAS_ZOOM_MIN,
-      nextZoom
-    )
-  );
+  canvasZoom =
+    Math.min(
+      CANVAS_ZOOM_MAX,
+      Math.max(
+        CANVAS_ZOOM_MIN,
+        nextZoom
+      )
+    );
 
   applyCanvasZoom();
 }
 
 function bindCanvasZoomControls() {
   document
-    .getElementById('btn-canvas-zoom-in')
-    ?.addEventListener('click', () => {
-      setCanvasZoom(
-        canvasZoom +
-        CANVAS_ZOOM_STEP
-      );
-    });
+    .getElementById(
+      'btn-canvas-zoom-in'
+    )
+    ?.addEventListener(
+      'click',
+      () => {
+        setCanvasZoom(
+          canvasZoom +
+          CANVAS_ZOOM_STEP
+        );
+      }
+    );
 
   document
-    .getElementById('btn-canvas-zoom-out')
-    ?.addEventListener('click', () => {
-      setCanvasZoom(
-        canvasZoom -
-        CANVAS_ZOOM_STEP
-      );
-    });
+    .getElementById(
+      'btn-canvas-zoom-out'
+    )
+    ?.addEventListener(
+      'click',
+      () => {
+        setCanvasZoom(
+          canvasZoom -
+          CANVAS_ZOOM_STEP
+        );
+      }
+    );
 }
 
 function scheduleFabricInit(
@@ -1077,25 +3233,36 @@ function scheduleFabricInit(
   stateKey
 ) {
   fabricInitToken += 1;
-  const token = fabricInitToken;
+
+  const token =
+    fabricInitToken;
 
   if (fabricInitTimer) {
-    clearTimeout(fabricInitTimer);
+    clearTimeout(
+      fabricInitTimer
+    );
   }
 
   fabricInitTimer =
     setTimeout(() => {
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
-          if (token !== fabricInitToken) {
+          if (
+            token !==
+            fabricInitToken
+          ) {
             return;
           }
 
           const canvasWrap =
-            document.getElementById('canvas-wrap');
+            document.getElementById(
+              'canvas-wrap'
+            );
 
           const canvasElement =
-            document.getElementById('c');
+            document.getElementById(
+              'c'
+            );
 
           if (
             !canvasWrap ||
@@ -1131,6 +3298,8 @@ function scheduleFabricInit(
 }
 
 function destroyFabricCanvas() {
+  destroyDesignViewContext();
+
   if (fabricCanvas) {
     try {
       fabricCanvas.off();
@@ -1146,26 +3315,35 @@ function destroyFabricCanvas() {
   }
 
   const canvasWrap =
-    document.getElementById('canvas-wrap');
+    document.getElementById(
+      'canvas-wrap'
+    );
 
   if (!canvasWrap) {
     return;
   }
 
   canvasWrap
-    .querySelectorAll('.canvas-container')
+    .querySelectorAll(
+      '.canvas-container'
+    )
     .forEach(container => {
       const nestedCanvas =
-        container.querySelector('canvas#c');
+        container.querySelector(
+          'canvas#c'
+        );
 
       if (nestedCanvas) {
-        canvasWrap.appendChild(nestedCanvas);
+        canvasWrap.appendChild(
+          nestedCanvas
+        );
       }
 
       container.remove();
     });
 
-  const canvas = document.getElementById('c');
+  const canvas =
+    document.getElementById('c');
 
   if (canvas) {
     canvas.removeAttribute('style');
@@ -1183,7 +3361,10 @@ function initFabricTool(
   token = fabricInitToken
 ) {
   if (!window.fabric) {
-    console.warn('Fabric.js niet geladen.');
+    console.warn(
+      'Fabric.js niet geladen.'
+    );
+
     return;
   }
 
@@ -1191,7 +3372,9 @@ function initFabricTool(
     document.getElementById('c');
 
   const canvasWrap =
-    document.getElementById('canvas-wrap');
+    document.getElementById(
+      'canvas-wrap'
+    );
 
   if (
     !canvasElement ||
@@ -1202,7 +3385,10 @@ function initFabricTool(
 
   destroyFabricCanvas();
 
-  if (token !== fabricInitToken) {
+  if (
+    token !==
+    fabricInitToken
+  ) {
     return;
   }
 
@@ -1221,8 +3407,11 @@ function initFabricTool(
       product
     );
 
-  const canvasWidth = display.width;
-  const canvasHeight = display.height;
+  const canvasWidth =
+    display.width;
+
+  const canvasHeight =
+    display.height;
 
   const marginPx =
     activePers?.margin_px ||
@@ -1238,18 +3427,42 @@ function initFabricTool(
     null;
 
   fabricCanvas =
-    new fabric.Canvas('c', {
-      width: canvasWidth,
-      height: canvasHeight,
-      selection: true,
-      backgroundColor: fabricBackgroundColor,
-      preserveObjectStacking: true,
-    });
+    new fabric.Canvas(
+      'c',
+      {
+        width:
+          canvasWidth,
+
+        height:
+          canvasHeight,
+
+        selection:
+          true,
+
+        backgroundColor:
+          fabricBackgroundColor,
+
+        preserveObjectStacking:
+          true,
+      }
+    );
+
+  initializeDesignViewContext({
+    product,
+    activePers,
+    savedState,
+    stateKey,
+    margin,
+  });
 
   window._currentDesignStateKey =
     stateKey;
 
   bindFabricDocumentHandlers();
+
+  bindDesignViewControls(
+    fabricCanvas
+  );
 
   applyCanvasClipPath(
     clipShape,
@@ -1295,7 +3508,6 @@ function initFabricTool(
     product
   );
 
-  fabricSaveHistory();
   updateLayerPanel();
 
   updateFabricImageDpiWarning(
@@ -1305,12 +3517,16 @@ function initFabricTool(
   );
 
   bindCanvasZoomControls();
-  applyCanvasZoom();
+
+  applyActiveDesignView(
+    fabricCanvas
+  );
 
   setTimeout(() => {
     if (
       fabricCanvas &&
-      token === fabricInitToken
+      token ===
+        fabricInitToken
     ) {
       redrawGuides(
         fabricCanvas,
@@ -1321,13 +3537,19 @@ function initFabricTool(
         canvasHeight
       );
 
+      hydrateDesignObjectMetadata(
+        fabricCanvas
+      );
+
       updateFabricImageDpiWarning(
         fabricCanvas,
         activePers,
         product
       );
 
-      applyCanvasZoom();
+      applyActiveDesignView(
+        fabricCanvas
+      );
     }
   }, 120);
 }
@@ -1349,7 +3571,8 @@ function bindFabricDocumentHandlers() {
       fabricCanvas._currentTransform;
 
     if (transform) {
-      fabricCanvas._currentTransform = null;
+      fabricCanvas._currentTransform =
+        null;
 
       fabricCanvas.setCursor(
         fabricCanvas.defaultCursor
@@ -1371,31 +3594,39 @@ function bindFabricDocumentHandlers() {
     );
   }
 
-  window._fabricKeyHandler = event => {
-    if (
-      event.key !== 'Backspace' &&
-      event.key !== 'Delete'
-    ) {
-      return;
-    }
+  window._fabricKeyHandler =
+    event => {
+      if (
+        event.key !== 'Backspace' &&
+        event.key !== 'Delete'
+      ) {
+        return;
+      }
 
-    const object =
-      fabricCanvas?.getActiveObject();
+      const object =
+        fabricCanvas?.getActiveObject();
 
-    if (
-      object &&
-      !isGuideObject(object) &&
-      !(
-        object.type === 'i-text' &&
-        object.isEditing
-      )
-    ) {
+      if (
+        !object ||
+        isGuideObject(object) ||
+        (
+          object.type === 'i-text' &&
+          object.isEditing
+        )
+      ) {
+        return;
+      }
+
       fabricCanvas.remove(object);
 
       updateFabricImageDpiWarning(
         fabricCanvas,
-        window._currentDesignGuideState?.activePers,
-        window._currentDesignGuideState?.product
+        window
+          ._currentDesignGuideState
+          ?.activePers,
+        window
+          ._currentDesignGuideState
+          ?.product
       );
 
       fabricSaveHistory();
@@ -1404,8 +3635,7 @@ function bindFabricDocumentHandlers() {
       autoSaveCanvasState(
         window._currentDesignStateKey
       );
-    }
-  };
+    };
 
   document.addEventListener(
     'keydown',
@@ -1418,46 +3648,54 @@ function applyCanvasClipPath(
   canvasWidth,
   canvasHeight
 ) {
-  const canvasEl =
+  const canvasElement =
     document.querySelector(
       '#canvas-wrap canvas'
     );
 
-  if (!canvasEl) {
+  if (!canvasElement) {
     return;
   }
 
-  canvasEl.style.clipPath = '';
-  canvasEl.style.borderRadius = '';
+  canvasElement.style.clipPath = '';
+  canvasElement.style.borderRadius = '';
 
   if (!clipShape) {
     return;
   }
 
-  canvasEl.style.clipPath = clipShape;
+  canvasElement.style.clipPath =
+    clipShape;
 
-  canvasEl.style.borderRadius =
+  canvasElement.style.borderRadius =
     clipShape.startsWith('circle')
       ? '50%'
       : '4px';
 
-  if (clipShape.startsWith('circle')) {
+  if (
+    clipShape.startsWith('circle')
+  ) {
     const radius =
       Math.min(
         canvasWidth,
         canvasHeight
-      ) / 2;
+      ) /
+      2;
 
     fabricCanvas.clipPath =
       new fabric.Circle({
         radius,
+
         left:
           canvasWidth / 2 -
           radius,
+
         top:
           canvasHeight / 2 -
           radius,
-        absolutePositioned: true,
+
+        absolutePositioned:
+          true,
       });
   }
 }
@@ -1485,33 +3723,59 @@ function renderColorSwatches() {
 
   swatchContainer.innerHTML = '';
 
-  colors.forEach((color, index) => {
-    const swatch =
-      document.createElement('div');
+  colors.forEach(
+    (color, index) => {
+      const swatch =
+        document.createElement(
+          'button'
+        );
 
-    swatch.className =
-      `color-swatch${index === 0 ? ' active' : ''}`;
+      swatch.type =
+        'button';
 
-    swatch.style.background = color;
+      swatch.className =
+        `color-swatch${index === 0 ? ' active' : ''}`;
 
-    swatch.addEventListener('click', () => {
-      swatchContainer
-        .querySelectorAll('.color-swatch')
-        .forEach(item => {
-          item.classList.remove('active');
-        });
+      swatch.style.background =
+        color;
 
-      swatch.classList.add('active');
-      fabricActiveColor = color;
-
-      applyToSelected(
-        'fill',
-        color
+      swatch.setAttribute(
+        'aria-label',
+        `Kleur ${color}`
       );
-    });
 
-    swatchContainer.appendChild(swatch);
-  });
+      swatch.addEventListener(
+        'click',
+        () => {
+          swatchContainer
+            .querySelectorAll(
+              '.color-swatch'
+            )
+            .forEach(item => {
+              item.classList.remove(
+                'active'
+              );
+            });
+
+          swatch.classList.add(
+            'active'
+          );
+
+          fabricActiveColor =
+            color;
+
+          applyToSelected(
+            'fill',
+            color
+          );
+        }
+      );
+
+      swatchContainer.appendChild(
+        swatch
+      );
+    }
+  );
 
   const customColorInput =
     document.getElementById(
@@ -1525,14 +3789,20 @@ function renderColorSwatches() {
     customColorInput.addEventListener(
       'input',
       event => {
-        const color = event.target.value;
+        const color =
+          event.target.value;
 
-        fabricActiveColor = color;
+        fabricActiveColor =
+          color;
 
         swatchContainer
-          .querySelectorAll('.color-swatch')
+          .querySelectorAll(
+            '.color-swatch'
+          )
           .forEach(item => {
-            item.classList.remove('active');
+            item.classList.remove(
+              'active'
+            );
           });
 
         applyToSelected(
@@ -1576,42 +3846,66 @@ function renderBackgroundColorSwatches(
 
   colors.forEach(color => {
     const swatch =
-      document.createElement('div');
-
-    swatch.className =
-      `color-swatch${color.toLowerCase() ===
-        fabricBackgroundColor.toLowerCase()
-        ? ' active'
-        : ''
-      }`;
-
-    swatch.style.background = color;
-
-    swatch.addEventListener('click', () => {
-      setCanvasBackgroundColor(
-        color,
-        stateKey
+      document.createElement(
+        'button'
       );
 
-      swatchContainer
-        .querySelectorAll('.color-swatch')
-        .forEach(item => {
-          item.classList.remove('active');
-        });
+    swatch.type =
+      'button';
 
-      swatch.classList.add('active');
+    swatch.className =
+      `color-swatch${
+        color.toLowerCase() ===
+        fabricBackgroundColor.toLowerCase()
+          ? ' active'
+          : ''
+      }`;
 
-      const customBackgroundInput =
-        document.getElementById(
-          'custom-background-color'
+    swatch.style.background =
+      color;
+
+    swatch.setAttribute(
+      'aria-label',
+      `Achtergrondkleur ${color}`
+    );
+
+    swatch.addEventListener(
+      'click',
+      () => {
+        setCanvasBackgroundColor(
+          color,
+          stateKey
         );
 
-      if (customBackgroundInput) {
-        customBackgroundInput.value = color;
-      }
-    });
+        swatchContainer
+          .querySelectorAll(
+            '.color-swatch'
+          )
+          .forEach(item => {
+            item.classList.remove(
+              'active'
+            );
+          });
 
-    swatchContainer.appendChild(swatch);
+        swatch.classList.add(
+          'active'
+        );
+
+        const customBackgroundInput =
+          document.getElementById(
+            'custom-background-color'
+          );
+
+        if (customBackgroundInput) {
+          customBackgroundInput.value =
+            color;
+        }
+      }
+    );
+
+    swatchContainer.appendChild(
+      swatch
+    );
   });
 
   const customBackgroundInput =
@@ -1632,9 +3926,13 @@ function renderBackgroundColorSwatches(
         );
 
         swatchContainer
-          .querySelectorAll('.color-swatch')
+          .querySelectorAll(
+            '.color-swatch'
+          )
           .forEach(item => {
-            item.classList.remove('active');
+            item.classList.remove(
+              'active'
+            );
           });
       }
     );
@@ -1645,34 +3943,42 @@ function setCanvasBackgroundColor(
   color,
   stateKey
 ) {
-  fabricBackgroundColor = color;
+  fabricBackgroundColor =
+    color;
 
   if (!fabricCanvas) {
     return;
   }
 
   if (
-    typeof fabricCanvas.setBackgroundColor ===
+    typeof fabricCanvas
+      .setBackgroundColor ===
     'function'
   ) {
     fabricCanvas.setBackgroundColor(
       color,
-      fabricCanvas.renderAll.bind(
-        fabricCanvas
-      )
+      fabricCanvas
+        .renderAll
+        .bind(fabricCanvas)
     );
   } else {
-    fabricCanvas.backgroundColor = color;
+    fabricCanvas.backgroundColor =
+      color;
+
     fabricCanvas.renderAll();
   }
 
   redrawGuidesFromCurrentState();
-  autoSaveCanvasState(stateKey);
+
+  autoSaveCanvasState(
+    stateKey
+  );
 
   persistDesignState(
     stateKey,
     {
-      backgroundColor: color,
+      backgroundColor:
+        color,
     }
   );
 }
@@ -1682,7 +3988,6 @@ function drawMarginRect(
   margin,
   canvasWidth,
   canvasHeight,
-  palette,
   isWarning = false
 ) {
   canvas
@@ -1696,39 +4001,64 @@ function drawMarginRect(
       canvas.remove(object);
     });
 
+  const marginColor =
+    isWarning
+      ? '#C0392B'
+      : getContrastingGuideColor(
+        fabricBackgroundColor
+      );
+
   const marginRect =
     new fabric.Rect({
-      left: margin,
-      top: margin,
+      left:
+        margin,
+
+      top:
+        margin,
+
       width:
         Math.max(
           1,
           canvasWidth -
           margin * 2
         ),
+
       height:
         Math.max(
           1,
           canvasHeight -
           margin * 2
         ),
-      fill: 'transparent',
+
+      fill:
+        'transparent',
+
       stroke:
-        isWarning
-          ? palette.warning
-          : palette.margin,
+        marginColor,
+
       strokeWidth:
         isWarning
-          ? 2.75
+          ? 2.5
           : 1.75,
-      strokeDashArray: [6, 4],
-      strokeUniform: true,
-      selectable: false,
-      evented: false,
-      objectCaching: false,
-      excludeFromExport: true,
-      _isMargin: true,
-      _isGuide: true,
+
+      strokeDashArray:
+        [6, 4],
+
+      selectable:
+        false,
+
+      evented:
+        false,
+
+      excludeFromExport:
+        true,
+
+      _isMargin:
+        true,
+
+      _isGuide:
+        true,
+
       _guideMeta: {
         margin,
         canvasWidth,
@@ -1736,7 +4066,9 @@ function drawMarginRect(
       },
     });
 
-  canvas.add(marginRect);
+  canvas.add(
+    marginRect
+  );
 }
 
 function drawBlockedZones(
@@ -1744,11 +4076,12 @@ function drawBlockedZones(
   activePers,
   product,
   canvasWidth,
-  canvasHeight,
-  palette
+  canvasHeight
 ) {
   const zones =
-    Array.isArray(activePers?.blockedZones)
+    Array.isArray(
+      activePers?.blockedZones
+    )
       ? activePers.blockedZones
       : [];
 
@@ -1763,6 +4096,7 @@ function drawBlockedZones(
     });
 
   if (!zones.length) {
+    canvas.renderAll();
     return;
   }
 
@@ -1786,25 +4120,46 @@ function drawBlockedZones(
           left:
             circleData.cx -
             circleData.safeRadius,
+
           top:
             circleData.cy -
             circleData.safeRadius,
+
           radius:
             circleData.safeRadius,
+
           fill:
-            palette.safeFill,
+            'rgba(232, 134, 10, 0.14)',
+
           stroke:
-            palette.safe,
-          strokeWidth: 2,
-          strokeDashArray: [8, 5],
-          strokeUniform: true,
-          selectable: false,
-          evented: false,
-          objectCaching: false,
-          excludeFromExport: true,
-          _isMargin: true,
-          _isGuide: true,
-          _isBlockedZone: true,
+            '#E8860A',
+
+          strokeWidth:
+            2,
+
+          strokeDashArray:
+            [8, 5],
+
+          selectable:
+            false,
+
+          evented:
+            false,
+
+          objectCaching:
+            false,
+
+          excludeFromExport:
+            true,
+
+          _isMargin:
+            true,
+
+          _isGuide:
+            true,
+
+          _isBlockedZone:
+            true,
         });
 
       const holeCircle =
@@ -1812,29 +4167,51 @@ function drawBlockedZones(
           left:
             circleData.cx -
             circleData.holeRadius,
+
           top:
             circleData.cy -
             circleData.holeRadius,
+
           radius:
             circleData.holeRadius,
+
           fill:
-            palette.blockedFill,
+            'rgba(192, 57, 43, 0.24)',
+
           stroke:
-            palette.blocked,
-          strokeWidth: 2,
-          strokeDashArray: [4, 3],
-          strokeUniform: true,
-          selectable: false,
-          evented: false,
-          objectCaching: false,
-          excludeFromExport: true,
-          _isMargin: true,
-          _isGuide: true,
-          _isBlockedZone: true,
+            '#C0392B',
+
+          strokeWidth:
+            2,
+
+          strokeDashArray:
+            [4, 3],
+
+          selectable:
+            false,
+
+          evented:
+            false,
+
+          objectCaching:
+            false,
+
+          excludeFromExport:
+            true,
+
+          _isMargin:
+            true,
+
+          _isGuide:
+            true,
+
+          _isBlockedZone:
+            true,
         });
 
       canvas.add(safeCircle);
       canvas.add(holeCircle);
+
       return;
     }
 
@@ -1854,50 +4231,103 @@ function drawBlockedZones(
 
       const safeRect =
         new fabric.Rect({
-          left: rectData.safeLeft,
-          top: rectData.safeTop,
-          width: rectData.safeWidth,
-          height: rectData.safeHeight,
+          left:
+            rectData.safeLeft,
+
+          top:
+            rectData.safeTop,
+
+          width:
+            rectData.safeWidth,
+
+          height:
+            rectData.safeHeight,
+
           fill:
-            palette.safeFill,
+            'rgba(232, 134, 10, 0.14)',
+
           stroke:
-            palette.safe,
-          strokeWidth: 2,
-          strokeDashArray: [8, 5],
-          strokeUniform: true,
-          selectable: false,
-          evented: false,
-          objectCaching: false,
-          excludeFromExport: true,
-          _isMargin: true,
-          _isGuide: true,
-          _isBlockedZone: true,
+            '#E8860A',
+
+          strokeWidth:
+            2,
+
+          strokeDashArray:
+            [8, 5],
+
+          selectable:
+            false,
+
+          evented:
+            false,
+
+          objectCaching:
+            false,
+
+          excludeFromExport:
+            true,
+
+          _isMargin:
+            true,
+
+          _isGuide:
+            true,
+
+          _isBlockedZone:
+            true,
         });
 
       const blockedRect =
         new fabric.Rect({
-          left: rectData.left,
-          top: rectData.top,
-          width: rectData.width,
-          height: rectData.height,
+          left:
+            rectData.left,
+
+          top:
+            rectData.top,
+
+          width:
+            rectData.width,
+
+          height:
+            rectData.height,
+
           fill:
-            palette.blockedFill,
+            'rgba(192, 57, 43, 0.18)',
+
           stroke:
-            palette.blocked,
-          strokeWidth: 2,
-          strokeDashArray: [4, 3],
-          strokeUniform: true,
-          selectable: false,
-          evented: false,
-          objectCaching: false,
-          excludeFromExport: true,
-          _isMargin: true,
-          _isGuide: true,
-          _isBlockedZone: true,
+            '#C0392B',
+
+          strokeWidth:
+            2,
+
+          strokeDashArray:
+            [4, 3],
+
+          selectable:
+            false,
+
+          evented:
+            false,
+
+          objectCaching:
+            false,
+
+          excludeFromExport:
+            true,
+
+          _isMargin:
+            true,
+
+          _isGuide:
+            true,
+
+          _isBlockedZone:
+            true,
         });
 
       canvas.add(safeRect);
       canvas.add(blockedRect);
+
       return;
     }
 
@@ -1917,8 +4347,7 @@ function drawBlockedZones(
 
       const safeZone =
         createCenteredLineSafeZone(
-          lineData,
-          palette
+          lineData
         );
 
       if (safeZone) {
@@ -1934,33 +4363,190 @@ function drawBlockedZones(
             lineData.y2,
           ],
           {
-            stroke: palette.fold,
+            stroke:
+              '#C0392B',
+
             strokeWidth:
               Math.max(
-                1.75,
+                1.5,
                 lineData.lineWidth
               ),
-            strokeDashArray: [3, 2],
-            strokeUniform: true,
-            selectable: false,
-            evented: false,
-            objectCaching: false,
-            excludeFromExport: true,
-            _isMargin: true,
-            _isGuide: true,
-            _isBlockedZone: true,
+
+            strokeDashArray:
+              [2, 1.5],
+
+            selectable:
+              false,
+
+            evented:
+              false,
+
+            objectCaching:
+              false,
+
+            excludeFromExport:
+              true,
+
+            _isMargin:
+              true,
+
+            _isGuide:
+              true,
+
+            _isBlockedZone:
+              true,
           }
         );
 
       canvas.add(foldLine);
     }
   });
+
+  bringGuidesToFront(canvas);
+  canvas.renderAll();
 }
 
-function createCenteredLineSafeZone(
-  lineData,
-  palette
+function drawPreviewCanvasGuides(
+  canvas,
+  canvasWidth,
+  canvasHeight
 ) {
+  const guides =
+    Array.isArray(
+      designViewContext
+        ?.config
+        ?.canvasGuides
+    )
+      ? designViewContext
+        .config
+        .canvasGuides
+      : [];
+
+  guides
+    .filter(
+      guide =>
+        guide?.type === 'line'
+    )
+    .forEach(guide => {
+      const spec =
+        designViewContext?.spec;
+
+      if (!spec) {
+        return;
+      }
+
+      const x1 =
+        window.PrintSpecs
+          ?.finishMmToCanvasX
+          ? PrintSpecs.finishMmToCanvasX(
+            guide.x1_mm,
+            spec,
+            canvasWidth
+          )
+          : (
+            (
+              Number(spec.trimXmm || 0) +
+              Number(guide.x1_mm || 0)
+            ) /
+            Number(spec.exportWidthMm || 1)
+          ) *
+          canvasWidth;
+
+      const y1 =
+        window.PrintSpecs
+          ?.finishMmToCanvasY
+          ? PrintSpecs.finishMmToCanvasY(
+            guide.y1_mm,
+            spec,
+            canvasHeight
+          )
+          : (
+            (
+              Number(spec.trimYmm || 0) +
+              Number(guide.y1_mm || 0)
+            ) /
+            Number(spec.exportHeightMm || 1)
+          ) *
+          canvasHeight;
+
+      const x2 =
+        window.PrintSpecs
+          ?.finishMmToCanvasX
+          ? PrintSpecs.finishMmToCanvasX(
+            guide.x2_mm,
+            spec,
+            canvasWidth
+          )
+          : (
+            (
+              Number(spec.trimXmm || 0) +
+              Number(guide.x2_mm || 0)
+            ) /
+            Number(spec.exportWidthMm || 1)
+          ) *
+          canvasWidth;
+
+      const y2 =
+        window.PrintSpecs
+          ?.finishMmToCanvasY
+          ? PrintSpecs.finishMmToCanvasY(
+            guide.y2_mm,
+            spec,
+            canvasHeight
+          )
+          : (
+            (
+              Number(spec.trimYmm || 0) +
+              Number(guide.y2_mm || 0)
+            ) /
+            Number(spec.exportHeightMm || 1)
+          ) *
+          canvasHeight;
+
+      canvas.add(
+        new fabric.Line(
+          [
+            x1,
+            y1,
+            x2,
+            y2,
+          ],
+          {
+            stroke:
+              getContrastingGuideColor(
+                fabricBackgroundColor
+              ),
+
+            strokeWidth:
+              1.75,
+
+            strokeDashArray:
+              [4, 3],
+
+            selectable:
+              false,
+
+            evented:
+              false,
+
+            objectCaching:
+              false,
+
+            excludeFromExport:
+              true,
+
+            _isGuide:
+              true,
+
+            _isPreviewGuide:
+              true,
+          }
+        )
+      );
+    });
+}
+
+function createCenteredLineSafeZone(lineData) {
   const deltaX =
     lineData.x2 -
     lineData.x1;
@@ -1983,13 +4569,15 @@ function createCenteredLineSafeZone(
     (
       lineData.x1 +
       lineData.x2
-    ) / 2;
+    ) /
+    2;
 
   const centerY =
     (
       lineData.y1 +
       lineData.y2
-    ) / 2;
+    ) /
+    2;
 
   const angle =
     Math.atan2(
@@ -2000,296 +4588,61 @@ function createCenteredLineSafeZone(
     Math.PI;
 
   return new fabric.Rect({
-    left: centerX,
-    top: centerY,
-    width: lineLength,
-    height: lineData.safeWidth,
-    originX: 'center',
-    originY: 'center',
+    left:
+      centerX,
+
+    top:
+      centerY,
+
+    width:
+      lineLength,
+
+    height:
+      lineData.safeWidth,
+
+    originX:
+      'center',
+
+    originY:
+      'center',
+
     angle,
-    fill: palette.safeFill,
-    stroke: palette.safe,
-    strokeWidth: 1.25,
-    strokeDashArray: [8, 5],
-    strokeUniform: true,
-    selectable: false,
-    evented: false,
-    objectCaching: false,
-    excludeFromExport: true,
-    _isMargin: true,
-    _isGuide: true,
-    _isBlockedZone: true,
-  });
-}
 
-function drawProductPreviewGuides(
-  canvas,
-  activePers,
-  product,
-  canvasWidth,
-  canvasHeight,
-  palette
-) {
-  if (!window.ProductPreview) {
-    return;
-  }
+    fill:
+      'rgba(232, 134, 10, 0.18)',
 
-  const config =
-    ProductPreview.normalizeConfig(
-      activePers || {},
-      product || {}
-    );
+    stroke:
+      '#E8860A',
 
-  if (
-    !config.enabled ||
-    !config.canvasGuides.length
-  ) {
-    return;
-  }
+    strokeWidth:
+      1,
 
-  const spec =
-    ProductPreview.getPrintSpec(
-      activePers || {},
-      product || {}
-    );
+    strokeDashArray:
+      [8, 5],
 
-  const fontSize =
-    Math.max(
-      10,
-      Math.min(
-        15,
-        Math.round(
-          Math.min(
-            canvasWidth,
-            canvasHeight
-          ) / 34
-        )
-      )
-    );
+    selectable:
+      false,
 
-  const toCanvasX = value => {
-    if (
-      window.PrintSpecs
-        ?.finishMmToCanvasX
-    ) {
-      return PrintSpecs.finishMmToCanvasX(
-        value,
-        spec,
-        canvasWidth
-      );
-    }
+    evented:
+      false,
 
-    return (
-      (
-        spec.trimXmm +
-        Number(value || 0)
-      ) /
-      spec.exportWidthMm
-    ) * canvasWidth;
-  };
+    objectCaching:
+      false,
 
-  const toCanvasY = value => {
-    if (
-      window.PrintSpecs
-        ?.finishMmToCanvasY
-    ) {
-      return PrintSpecs.finishMmToCanvasY(
-        value,
-        spec,
-        canvasHeight
-      );
-    }
+    excludeFromExport:
+      true,
 
-    return (
-      (
-        spec.trimYmm +
-        Number(value || 0)
-      ) /
-      spec.exportHeightMm
-    ) * canvasHeight;
-  };
+    opacity:
+      0.75,
 
-  const widthToCanvas = value => (
-    Number(value || 0) /
-    spec.exportWidthMm
-  ) * canvasWidth;
+    _isMargin:
+      true,
 
-  const heightToCanvas = value => (
-    Number(value || 0) /
-    spec.exportHeightMm
-  ) * canvasHeight;
+    _isGuide:
+      true,
 
-  config.canvasGuides.forEach(guide => {
-    if (guide.type === 'line') {
-      const x1 =
-        toCanvasX(guide.x1_mm);
-
-      const y1 =
-        toCanvasY(guide.y1_mm);
-
-      const x2 =
-        toCanvasX(guide.x2_mm);
-
-      const y2 =
-        toCanvasY(guide.y2_mm);
-
-      const line =
-        new fabric.Line(
-          [x1, y1, x2, y2],
-          {
-            stroke: palette.fold,
-            strokeWidth: 2,
-            strokeDashArray: [10, 6],
-            strokeUniform: true,
-            selectable: false,
-            evented: false,
-            objectCaching: false,
-            excludeFromExport: true,
-            _isGuide: true,
-            _isPreviewGuide: true,
-            _previewGuideId: guide.id,
-          }
-        );
-
-      const label =
-        new fabric.Text(
-          guide.label ||
-          'Vouwlijn',
-          {
-            left:
-              (x1 + x2) / 2,
-
-            top:
-              (y1 + y2) / 2,
-
-            originX: 'center',
-            originY: 'bottom',
-            fontSize,
-            fontFamily:
-              'DM Sans, sans-serif',
-            fontWeight: 700,
-            fill:
-              palette.labelText,
-            backgroundColor:
-              palette.labelBackground,
-            selectable: false,
-            evented: false,
-            objectCaching: false,
-            excludeFromExport: true,
-            _isGuide: true,
-            _isPreviewGuide: true,
-            _previewGuideId:
-              `${guide.id}-label`,
-          }
-        );
-
-      canvas.add(line);
-      canvas.add(label);
-      return;
-    }
-
-    const left =
-      toCanvasX(guide.x_mm);
-
-    const top =
-      toCanvasY(guide.y_mm);
-
-    const width =
-      Math.max(
-        1,
-        widthToCanvas(
-          guide.width_mm
-        )
-      );
-
-    const height =
-      Math.max(
-        1,
-        heightToCanvas(
-          guide.height_mm
-        )
-      );
-
-    const zone =
-      new fabric.Rect({
-        left,
-        top,
-        width,
-        height,
-        fill:
-          palette.previewFill,
-        stroke:
-          palette.preview,
-        strokeWidth: 1.75,
-        strokeDashArray: [7, 5],
-        strokeUniform: true,
-        selectable: false,
-        evented: false,
-        objectCaching: false,
-        excludeFromExport: true,
-        _isGuide: true,
-        _isPreviewGuide: true,
-        _previewGuideId: guide.id,
-      });
-
-    const labelText =
-      [
-        guide.label,
-        guide.description,
-      ]
-        .filter(Boolean)
-        .join('\n');
-
-    const label =
-      new fabric.Textbox(
-        labelText,
-        {
-          left:
-            left +
-            Math.min(
-              8,
-              width * 0.04
-            ),
-
-          top:
-            top +
-            Math.min(
-              8,
-              height * 0.04
-            ),
-
-          width:
-            Math.max(
-              36,
-              width -
-              Math.min(
-                16,
-                width * 0.08
-              )
-            ),
-
-          fontSize,
-          fontFamily:
-            'DM Sans, sans-serif',
-          fontWeight: 700,
-          lineHeight: 1.2,
-          fill:
-            palette.labelText,
-          backgroundColor:
-            palette.labelBackground,
-          selectable: false,
-          evented: false,
-          objectCaching: false,
-          excludeFromExport: true,
-          _isGuide: true,
-          _isPreviewGuide: true,
-          _previewGuideId:
-            `${guide.id}-label`,
-        }
-      );
-
-    canvas.add(zone);
-    canvas.add(label);
+    _isBlockedZone:
+      true,
   });
 }
 
@@ -2306,12 +4659,6 @@ function redrawGuides(
     return;
   }
 
-  const palette =
-    getCanvasGuidePalette(
-      canvas.backgroundColor ||
-      fabricBackgroundColor
-    );
-
   removeGuideObjects(canvas);
 
   drawMarginRect(
@@ -2319,7 +4666,6 @@ function redrawGuides(
     margin,
     canvasWidth,
     canvasHeight,
-    palette,
     isWarning
   );
 
@@ -2328,17 +4674,13 @@ function redrawGuides(
     activePers,
     product,
     canvasWidth,
-    canvasHeight,
-    palette
+    canvasHeight
   );
 
-  drawProductPreviewGuides(
+  drawPreviewCanvasGuides(
     canvas,
-    activePers,
-    product,
     canvasWidth,
-    canvasHeight,
-    palette
+    canvasHeight
   );
 
   bringGuidesToFront(canvas);
@@ -2351,6 +4693,17 @@ function redrawGuides(
     canvasWidth,
     canvasHeight,
   };
+
+  if (
+    designViewContext?.config.enabled
+  ) {
+    applyActiveDesignView(
+      canvas,
+      {
+        updateLayers: false,
+      }
+    );
+  }
 }
 
 function redrawGuidesFromCurrentState(
@@ -2380,23 +4733,28 @@ function redrawGuidesFromCurrentState(
 function bringGuidesToFront(canvas) {
   canvas
     .getObjects()
-    .filter(object => {
-      return isGuideObject(object);
-    })
+    .filter(
+      object =>
+        isGuideObject(object)
+    )
     .forEach(object => {
       object.selectable = false;
       object.evented = false;
       object.hoverCursor = 'default';
-      canvas.bringToFront(object);
+
+      canvas.bringToFront(
+        object
+      );
     });
 }
 
 function removeGuideObjects(canvas) {
   canvas
     .getObjects()
-    .filter(object => {
-      return isGuideObject(object);
-    })
+    .filter(
+      object =>
+        isGuideObject(object)
+    )
     .forEach(object => {
       canvas.remove(object);
     });
@@ -2408,209 +4766,75 @@ function isGuideObject(object) {
     object?._isBlockedZone ||
     object?._isMargin ||
     object?._isPreviewGuide ||
-    object?._isCenterGuide
+    object?._isCenterGuide ||
+    object?.[DESIGN_VIEW_GUIDE_FLAG]
   );
 }
 
-function getCanvasGuidePalette(
+function getContrastingGuideColor(
   backgroundColor
 ) {
-  const { r, g, b } =
-    parseCanvasColor(
+  const hex =
+    normalizeHexColor(
       backgroundColor
     );
 
-  const relativeLuminance =
-    getRelativeLuminance(
-      r,
-      g,
-      b
-    );
-
-  if (relativeLuminance < 0.38) {
-    return {
-      margin: '#FFFFFF',
-      safe: '#FFD166',
-      safeFill:
-        'rgba(255, 209, 102, 0.22)',
-      blocked: '#FF8A80',
-      blockedFill:
-        'rgba(255, 138, 128, 0.24)',
-      fold: '#FFB4AB',
-      preview: '#8DE5D5',
-      previewFill:
-        'rgba(141, 229, 213, 0.18)',
-      center: '#FFFFFF',
-      warning: '#FF8A80',
-      labelText: '#FFFFFF',
-      labelBackground:
-        'rgba(20, 20, 18, 0.86)',
-    };
+  if (!hex) {
+    return '#2A2A22';
   }
 
-  return {
-    margin: '#18231D',
-    safe: '#7A4B00',
-    safeFill:
-      'rgba(184, 111, 0, 0.18)',
-    blocked: '#9F1D14',
-    blockedFill:
-      'rgba(159, 29, 20, 0.18)',
-    fold: '#7C2D12',
-    preview: '#075E54',
-    previewFill:
-      'rgba(7, 94, 84, 0.12)',
-    center: '#18231D',
-    warning: '#B42318',
-    labelText: '#12372F',
-    labelBackground:
-      'rgba(255, 255, 255, 0.90)',
-  };
+  const red =
+    Number.parseInt(
+      hex.slice(1, 3),
+      16
+    );
+
+  const green =
+    Number.parseInt(
+      hex.slice(3, 5),
+      16
+    );
+
+  const blue =
+    Number.parseInt(
+      hex.slice(5, 7),
+      16
+    );
+
+  const brightness =
+    (
+      red * 299 +
+      green * 587 +
+      blue * 114
+    ) /
+    1000;
+
+  return brightness > 170
+    ? '#2A2A22'
+    : '#FFFFFF';
 }
 
-function parseCanvasColor(value) {
-  const fallback = {
-    r: 183,
-    g: 189,
-    b: 184,
-  };
+function normalizeHexColor(value) {
+  if (
+    !value ||
+    typeof value !== 'string'
+  ) {
+    return '';
+  }
 
   if (
-    typeof value !== 'string' ||
-    !value.trim()
+    /^#[0-9A-Fa-f]{6}$/.test(value)
   ) {
-    return fallback;
+    return value;
   }
-
-  const color = value.trim();
-
-  const hexMatch =
-    color.match(
-      /^#([0-9a-f]{3,8})$/i
-    );
-
-  if (hexMatch) {
-    const hex = hexMatch[1];
-
-    if (
-      hex.length === 3 ||
-      hex.length === 4
-    ) {
-      return {
-        r: parseInt(
-          `${hex[0]}${hex[0]}`,
-          16
-        ),
-
-        g: parseInt(
-          `${hex[1]}${hex[1]}`,
-          16
-        ),
-
-        b: parseInt(
-          `${hex[2]}${hex[2]}`,
-          16
-        ),
-      };
-    }
-
-    return {
-      r: parseInt(
-        hex.slice(0, 2),
-        16
-      ),
-
-      g: parseInt(
-        hex.slice(2, 4),
-        16
-      ),
-
-      b: parseInt(
-        hex.slice(4, 6),
-        16
-      ),
-    };
-  }
-
-  const rgbMatch =
-    color.match(
-      /^rgba?\(\s*([\d.]+)\s*[, ]\s*([\d.]+)\s*[, ]\s*([\d.]+)/i
-    );
-
-  if (rgbMatch) {
-    return {
-      r: clamp(
-        Number(rgbMatch[1]),
-        0,
-        255
-      ),
-
-      g: clamp(
-        Number(rgbMatch[2]),
-        0,
-        255
-      ),
-
-      b: clamp(
-        Number(rgbMatch[3]),
-        0,
-        255
-      ),
-    };
-  }
-
-  const context =
-    document
-      .createElement('canvas')
-      .getContext('2d');
-
-  if (!context) {
-    return fallback;
-  }
-
-  context.fillStyle = '#b7bdb8';
-  context.fillStyle = color;
-
-  const normalized =
-    context.fillStyle;
 
   if (
-    normalized === color ||
-    normalized.toLowerCase() ===
-    color.toLowerCase()
+    /^#[0-9A-Fa-f]{3}$/.test(value)
   ) {
-    return fallback;
+    return `#${value[1]}${value[1]}${value[2]}${value[2]}${value[3]}${value[3]}`;
   }
 
-  return parseCanvasColor(normalized);
-}
-
-function getRelativeLuminance(
-  r,
-  g,
-  b
-) {
-  const channels =
-    [r, g, b].map(value => {
-      const normalized =
-        value / 255;
-
-      return normalized <= 0.04045
-        ? normalized / 12.92
-        : Math.pow(
-          (
-            normalized +
-            0.055
-          ) / 1.055,
-          2.4
-        );
-    });
-
-  return (
-    channels[0] * 0.2126 +
-    channels[1] * 0.7152 +
-    channels[2] * 0.0722
-  );
+  return '';
 }
 
 function getBlockedCircleCanvasData(
@@ -2648,10 +4872,16 @@ function getBlockedCircleCanvasData(
     Number(zone.y_mm || 0);
 
   const diameterMm =
-    Number(zone.diameter_mm || 0);
+    Number(
+      zone.diameter_mm ||
+      0
+    );
 
   const marginMm =
-    Number(zone.margin_mm || 0);
+    Number(
+      zone.margin_mm ||
+      0
+    );
 
   if (!diameterMm) {
     return null;
@@ -2669,13 +4899,12 @@ function getBlockedCircleCanvasData(
     (
       pxPerMmX +
       pxPerMmY
-    ) / 2;
+    ) /
+    2;
 
   const holeRadius =
-    (
-      diameterMm /
-      2
-    ) *
+    diameterMm /
+    2 *
     averagePxPerMm;
 
   const safeRadius =
@@ -2732,13 +4961,22 @@ function getBlockedRectCanvasData(
     Number(zone.y_mm || 0);
 
   const rectWidthMm =
-    Number(zone.width_mm || 0);
+    Number(
+      zone.width_mm ||
+      0
+    );
 
   const rectHeightMm =
-    Number(zone.height_mm || 0);
+    Number(
+      zone.height_mm ||
+      0
+    );
 
   const marginMm =
-    Number(zone.margin_mm || 0);
+    Number(
+      zone.margin_mm ||
+      0
+    );
 
   if (
     !rectWidthMm ||
@@ -2832,16 +5070,28 @@ function getBlockedLineCanvasData(
   }
 
   let x1Mm =
-    Number(zone.x1_mm || 0);
+    Number(
+      zone.x1_mm ||
+      0
+    );
 
   let y1Mm =
-    Number(zone.y1_mm || 0);
+    Number(
+      zone.y1_mm ||
+      0
+    );
 
   let x2Mm =
-    Number(zone.x2_mm || 0);
+    Number(
+      zone.x2_mm ||
+      0
+    );
 
   let y2Mm =
-    Number(zone.y2_mm || 0);
+    Number(
+      zone.y2_mm ||
+      0
+    );
 
   const lineWidthMm =
     Number(
@@ -2850,7 +5100,10 @@ function getBlockedLineCanvasData(
     );
 
   const marginMm =
-    Number(zone.margin_mm || 0);
+    Number(
+      zone.margin_mm ||
+      0
+    );
 
   if (
     x1Mm === x2Mm &&
@@ -2876,18 +5129,22 @@ function getBlockedLineCanvasData(
       (
         y1Mm +
         y2Mm
-      ) / 2;
+      ) /
+      2;
 
     x1Mm = 0;
     x2Mm = widthMm;
     y1Mm = centerYmm;
     y2Mm = centerYmm;
-  } else if (deltaXmm <= 0.01) {
+  } else if (
+    deltaXmm <= 0.01
+  ) {
     const centerXmm =
       (
         x1Mm +
         x2Mm
-      ) / 2;
+      ) /
+      2;
 
     x1Mm = centerXmm;
     x2Mm = centerXmm;
@@ -2907,7 +5164,8 @@ function getBlockedLineCanvasData(
     (
       pxPerMmX +
       pxPerMmY
-    ) / 2;
+    ) /
+    2;
 
   return {
     x1:
@@ -2947,8 +5205,7 @@ function getBlockedLineCanvasData(
       Math.max(
         1.5,
         (
-          lineWidthMm /
-          2 +
+          lineWidthMm / 2 +
           marginMm
         ) *
         averagePxPerMm
@@ -2967,9 +5224,9 @@ function restoreCanvasStateOrDefault(
   product
 ) {
   const redrawAfterRestore = () => {
-    canvas.backgroundImage = null;
-    canvas.backgroundColor =
-      fabricBackgroundColor;
+    hydrateDesignObjectMetadata(
+      canvas
+    );
 
     redrawGuides(
       canvas,
@@ -2980,7 +5237,9 @@ function restoreCanvasStateOrDefault(
       canvasHeightValue
     );
 
-    restoreFabricImageUploadMeta(canvas);
+    restoreFabricImageUploadMeta(
+      canvas
+    );
 
     updateFabricImageDpiWarning(
       canvas,
@@ -2988,30 +5247,25 @@ function restoreCanvasStateOrDefault(
       product
     );
 
+    applyActiveDesignView(
+      canvas
+    );
+
     updateLayerPanel();
-    canvas.renderAll();
+
+    fabricHistory = [];
+    fabricSaveHistory();
   };
 
   if (savedState?.fabricJSON) {
     try {
-      const fabricState =
-        typeof savedState.fabricJSON === 'string'
-          ? JSON.parse(
-            savedState.fabricJSON
-          )
-          : {
-            ...savedState.fabricJSON,
-          };
-
-      delete fabricState.backgroundImage;
-
-      fabricState.background =
-        fabricBackgroundColor;
-
       canvas.loadFromJSON(
-        fabricState,
+        savedState.fabricJSON,
         () => {
-          removeGuideObjects(canvas);
+          removeGuideObjects(
+            canvas
+          );
+
           redrawAfterRestore();
         }
       );
@@ -3039,7 +5293,9 @@ function addDefaultText(
 ) {
   const selectedFont =
     document
-      .getElementById('font-select')
+      .getElementById(
+        'font-select'
+      )
       ?.value ||
     'Georgia';
 
@@ -3047,22 +5303,40 @@ function addDefaultText(
     new fabric.IText(
       'Jouw bedrijfsnaam',
       {
-        left: 60,
-        top:
-          Math.round(
-            canvasHeight * 0.65
-          ),
-        fontSize: 18,
-        fill: '#ffffff',
-        fontFamily: selectedFont,
-        editable: true,
-        opacity: 0.9,
+        fontSize:
+          18,
+
+        fill:
+          '#ffffff',
+
+        fontFamily:
+          selectedFont,
+
+        editable:
+          true,
+
+        opacity:
+          0.9,
       }
     );
 
+  prepareNewObjectForActiveDesignView(
+    canvas,
+    demo,
+    {
+      fallbackLeft:
+        60,
+
+      fallbackTop:
+        Math.round(
+          canvasHeight *
+          0.65
+        ),
+    }
+  );
+
   canvas.add(demo);
   canvas.renderAll();
-  fabricSaveHistory();
   updateLayerPanel();
 }
 
@@ -3075,16 +5349,26 @@ function isCenterSnappableObject(object) {
 }
 
 function getCanvasCenterPoint(canvas) {
+  const bounds =
+    getDesignViewBounds(
+      canvas
+    );
+
   return new fabric.Point(
-    canvas.getWidth() / 2,
-    canvas.getHeight() / 2
+    bounds?.centerX ??
+      canvas.getWidth() / 2,
+
+    bounds?.centerY ??
+      canvas.getHeight() / 2
   );
 }
 
 function getCenterSnapThreshold(canvas) {
   const zoom =
-    typeof canvas.getZoom === 'function'
-      ? canvas.getZoom() || 1
+    typeof canvas.getZoom ===
+      'function'
+      ? canvas.getZoom() ||
+        1
       : 1;
 
   return (
@@ -3099,38 +5383,52 @@ function applyCenterSnap(
 ) {
   if (
     !canvas ||
-    !isCenterSnappableObject(object)
+    !isCenterSnappableObject(
+      object
+    )
   ) {
-    removeCenterSnapGuides(canvas);
+    removeCenterSnapGuides(
+      canvas
+    );
+
     return;
   }
 
   const canvasCenter =
-    getCanvasCenterPoint(canvas);
+    getCanvasCenterPoint(
+      canvas
+    );
 
   const objectCenter =
     object.getCenterPoint();
 
   const threshold =
-    getCenterSnapThreshold(canvas);
+    getCenterSnapThreshold(
+      canvas
+    );
 
   const shouldSnapX =
     Math.abs(
       objectCenter.x -
       canvasCenter.x
-    ) <= threshold;
+    ) <=
+    threshold;
 
   const shouldSnapY =
     Math.abs(
       objectCenter.y -
       canvasCenter.y
-    ) <= threshold;
+    ) <=
+    threshold;
 
   if (
     !shouldSnapX &&
     !shouldSnapY
   ) {
-    removeCenterSnapGuides(canvas);
+    removeCenterSnapGuides(
+      canvas
+    );
+
     return;
   }
 
@@ -3156,8 +5454,11 @@ function applyCenterSnap(
   renderCenterSnapGuides(
     canvas,
     {
-      showVertical: shouldSnapX,
-      showHorizontal: shouldSnapY,
+      showVertical:
+        shouldSnapX,
+
+      showHorizontal:
+        shouldSnapY,
     }
   );
 }
@@ -3173,13 +5474,38 @@ function renderCenterSnapGuides(
     return;
   }
 
-  removeCenterSnapGuides(canvas);
+  removeCenterSnapGuides(
+    canvas
+  );
+
+  const bounds =
+    getDesignViewBounds(
+      canvas
+    );
 
   const centerX =
+    bounds?.centerX ??
     canvas.getWidth() / 2;
 
   const centerY =
+    bounds?.centerY ??
     canvas.getHeight() / 2;
+
+  const left =
+    bounds?.left ??
+    0;
+
+  const top =
+    bounds?.top ??
+    0;
+
+  const right =
+    bounds?.right ??
+    canvas.getWidth();
+
+  const bottom =
+    bounds?.bottom ??
+    canvas.getHeight();
 
   const guideObjects = [];
 
@@ -3188,9 +5514,9 @@ function renderCenterSnapGuides(
       new fabric.Line(
         [
           centerX,
-          0,
+          top,
           centerX,
-          canvas.getHeight(),
+          bottom,
         ],
         getCenterGuideObjectOptions()
       )
@@ -3201,9 +5527,9 @@ function renderCenterSnapGuides(
     guideObjects.push(
       new fabric.Line(
         [
-          0,
+          left,
           centerY,
-          canvas.getWidth(),
+          right,
           centerY,
         ],
         getCenterGuideObjectOptions()
@@ -3211,10 +5537,12 @@ function renderCenterSnapGuides(
     );
   }
 
-  guideObjects.forEach(guide => {
-    canvas.add(guide);
-    guide.bringToFront();
-  });
+  guideObjects.forEach(
+    guide => {
+      canvas.add(guide);
+      guide.bringToFront();
+    }
+  );
 
   canvas._centerSnapGuides =
     guideObjects;
@@ -3223,25 +5551,33 @@ function renderCenterSnapGuides(
 }
 
 function getCenterGuideObjectOptions() {
-  const palette =
-    getCanvasGuidePalette(
-      fabricCanvas?.backgroundColor ||
-      fabricBackgroundColor
-    );
-
   return {
-    stroke: palette.center,
+    stroke:
+      CENTER_GUIDE_COLOR,
+
     strokeWidth:
       CENTER_GUIDE_STROKE_WIDTH,
+
     strokeDashArray:
       CENTER_GUIDE_DASH,
-    strokeUniform: true,
-    selectable: false,
-    evented: false,
-    objectCaching: false,
-    excludeFromExport: true,
-    _isGuide: true,
-    _isCenterGuide: true,
+
+    selectable:
+      false,
+
+    evented:
+      false,
+
+    objectCaching:
+      false,
+
+    excludeFromExport:
+      true,
+
+    _isGuide:
+      true,
+
+    _isCenterGuide:
+      true,
   };
 }
 
@@ -3255,9 +5591,8 @@ function removeCenterSnapGuides(canvas) {
     return;
   }
 
-  canvas
-    ._centerSnapGuides
-    .forEach(guide => {
+  canvas._centerSnapGuides.forEach(
+    guide => {
       if (
         canvas
           .getObjects()
@@ -3265,7 +5600,8 @@ function removeCenterSnapGuides(canvas) {
       ) {
         canvas.remove(guide);
       }
-    });
+    }
+  );
 
   canvas._centerSnapGuides = [];
   canvas.requestRenderAll();
@@ -3297,13 +5633,20 @@ function bindFabricEvents(
       return;
     }
 
-    const outsideOuterMargin =
-      isOutsideMargin(
-        object,
-        margin,
-        canvasWidth,
-        canvasHeight
+    const activeViewWarning =
+      isOutsideActiveDesignViewMargin(
+        object
       );
+
+    const outsideOuterMargin =
+      activeViewWarning === null
+        ? isOutsideMargin(
+          object,
+          margin,
+          canvasWidth,
+          canvasHeight
+        )
+        : activeViewWarning;
 
     const overlapsBlockedZone =
       isObjectOverlappingBlockedZones(
@@ -3340,28 +5683,90 @@ function bindFabricEvents(
   };
 
   canvas.on(
+    'object:added',
+    event => {
+      const object =
+        event.target;
+
+      if (
+        !object ||
+        isGuideObject(object)
+      ) {
+        return;
+      }
+
+      if (
+        !Number.isFinite(
+          Number(
+            object
+              ._designOrientationVersion
+          )
+        )
+      ) {
+        assignObjectToCurrentDesignView(
+          canvas,
+          object
+        );
+      }
+    }
+  );
+
+  canvas.on(
     'object:moving',
     event => {
-      checkMargin(event.target);
-      applyCenterSnap(canvas, event.target);
-      bringGuidesToFront(canvas);
+      constrainObjectToActiveDesignView(
+        canvas,
+        event.target
+      );
+
+      checkMargin(
+        event.target
+      );
+
+      applyCenterSnap(
+        canvas,
+        event.target
+      );
+
+      bringGuidesToFront(
+        canvas
+      );
     }
   );
 
   canvas.on(
     'object:rotating',
     event => {
-      checkMargin(event.target);
-      removeCenterSnapGuides(canvas);
-      bringGuidesToFront(canvas);
+      checkMargin(
+        event.target
+      );
+
+      removeCenterSnapGuides(
+        canvas
+      );
+
+      bringGuidesToFront(
+        canvas
+      );
     }
   );
 
   canvas.on(
     'object:scaling',
     event => {
-      checkMargin(event.target);
-      applyCenterSnap(canvas, event.target);
+      constrainObjectToActiveDesignView(
+        canvas,
+        event.target
+      );
+
+      checkMargin(
+        event.target
+      );
+
+      applyCenterSnap(
+        canvas,
+        event.target
+      );
 
       updateFabricImageDpiWarning(
         canvas,
@@ -3369,15 +5774,29 @@ function bindFabricEvents(
         product
       );
 
-      bringGuidesToFront(canvas);
+      bringGuidesToFront(
+        canvas
+      );
+
+      updateLayerPanel();
     }
   );
 
   canvas.on(
     'object:modified',
     event => {
-      removeCenterSnapGuides(canvas);
-      checkMargin(event.target);
+      removeCenterSnapGuides(
+        canvas
+      );
+
+      assignObjectToCurrentDesignView(
+        canvas,
+        event.target
+      );
+
+      checkMargin(
+        event.target
+      );
 
       updateFabricImageDpiWarning(
         canvas,
@@ -3385,64 +5804,42 @@ function bindFabricEvents(
         product
       );
 
-      bringGuidesToFront(canvas);
+      redrawGuides(
+        canvas,
+        activePers,
+        product,
+        margin,
+        canvasWidth,
+        canvasHeight
+      );
+
+      fabricSaveHistory();
+      updateLayerPanel();
+
+      autoSaveCanvasState(
+        stateKey
+      );
     }
   );
 
   canvas.on(
     'text:changed',
     event => {
-      checkMargin(event.target);
+      assignObjectToCurrentDesignView(
+        canvas,
+        event.target
+      );
+
+      checkMargin(
+        event.target
+      );
+
       fabricSaveHistory();
       updateLayerPanel();
-      autoSaveCanvasState(stateKey);
-    }
-  );
 
-  canvas.on(
-    'object:moved',
-    () => {
-      removeCenterSnapGuides(canvas);
-
-      const warning =
-        document.getElementById(
-          'margin-warning'
-        );
-
-      if (warning) {
-        warning.style.display = 'none';
-      }
-
-      redrawGuides(
-        canvas,
-        activePers,
-        product,
-        margin,
-        canvasWidth,
-        canvasHeight
+      autoSaveCanvasState(
+        stateKey
       );
-
-      fabricSaveHistory();
-      autoSaveCanvasState(stateKey);
-    }
-  );
-
-  canvas.on(
-    'object:modified',
-    () => {
-      removeCenterSnapGuides(canvas);
-
-      redrawGuides(
-        canvas,
-        activePers,
-        product,
-        margin,
-        canvasWidth,
-        canvasHeight
-      );
-
-      fabricSaveHistory();
-      autoSaveCanvasState(stateKey);
     }
   );
 
@@ -3477,7 +5874,9 @@ function bindFabricEvents(
   canvas.on(
     'selection:cleared',
     () => {
-      removeCenterSnapGuides(canvas);
+      removeCenterSnapGuides(
+        canvas
+      );
 
       const status =
         document.getElementById(
@@ -3502,13 +5901,25 @@ function bindFabricEvents(
   canvas.on(
     'mouse:up',
     () => {
-      removeCenterSnapGuides(canvas);
+      removeCenterSnapGuides(
+        canvas
+      );
     }
   );
 
   canvas.on(
-    'object:scaling',
-    updateLayerPanel
+    'after:render',
+    () => {
+      if (
+        !hasExpectedDesignViewport(
+          canvas
+        )
+      ) {
+        queueActiveDesignView(
+          canvas
+        );
+      }
+    }
   );
 }
 
@@ -3523,14 +5934,21 @@ function bindFabricButtons(
 ) {
   document
     .getElementById('btn-logo')
-    ?.addEventListener('click', () => {
-      document
-        .getElementById('file-input')
-        ?.click();
-    });
+    ?.addEventListener(
+      'click',
+      () => {
+        document
+          .getElementById(
+            'file-input'
+          )
+          ?.click();
+      }
+    );
 
   document
-    .getElementById('file-input')
+    .getElementById(
+      'file-input'
+    )
     ?.addEventListener(
       'change',
       event => {
@@ -3555,16 +5973,36 @@ function bindFabricButtons(
                     image
                   );
 
-                image.scaleToWidth(120);
+                image.scaleToWidth(
+                  120
+                );
 
                 image.set({
-                  left: 140,
-                  top: 140,
-                  _uploadMeta: uploadMeta,
+                  _uploadMeta:
+                    uploadMeta,
                 });
 
+                prepareNewObjectForActiveDesignView(
+                  canvas,
+                  image,
+                  {
+                    fallbackLeft:
+                      140,
+
+                    fallbackTop:
+                      140,
+
+                    maximumWidth:
+                      120,
+                  }
+                );
+
                 canvas.add(image);
-                canvas.setActiveObject(image);
+
+                canvas.setActiveObject(
+                  image
+                );
+
                 canvas.renderAll();
 
                 updateFabricImageDpiWarning(
@@ -3576,57 +6014,167 @@ function bindFabricButtons(
 
                 fabricSaveHistory();
                 updateLayerPanel();
-                autoSaveCanvasState(stateKey);
+
+                autoSaveCanvasState(
+                  stateKey
+                );
               }
             );
           };
 
-        reader.readAsDataURL(file);
+        reader.readAsDataURL(
+          file
+        );
+
         event.target.value = '';
       }
     );
 
   document
-    .getElementById('btn-text')
-    ?.addEventListener('click', () => {
-      const text =
-        new fabric.IText(
-          'Dubbelklik om tekst te bewerken',
+    .getElementById(
+      'btn-text'
+    )
+    ?.addEventListener(
+      'click',
+      () => {
+        const text =
+          new fabric.IText(
+            'Dubbelklik om tekst te bewerken',
+            {
+              fontSize:
+                20,
+
+              fill:
+                fabricActiveColor,
+
+              fontFamily:
+                document
+                  .getElementById(
+                    'font-select'
+                  )
+                  ?.value ||
+                'Georgia',
+
+              editable:
+                true,
+            }
+          );
+
+        prepareNewObjectForActiveDesignView(
+          canvas,
+          text,
           {
-            left: 100,
-            top: 160,
-            fontSize: 20,
-            fill: fabricActiveColor,
-            fontFamily:
-              document
-                .getElementById('font-select')
-                ?.value ||
-              'Georgia',
-            editable: true,
+            fallbackLeft:
+              100,
+
+            fallbackTop:
+              160,
           }
         );
 
-      canvas.add(text);
-      canvas.setActiveObject(text);
-      canvas.renderAll();
+        canvas.add(text);
 
-      syncFontSizeControls(text);
-      fabricSaveHistory();
-      updateLayerPanel();
-      autoSaveCanvasState(stateKey);
-    });
+        canvas.setActiveObject(
+          text
+        );
+
+        canvas.renderAll();
+
+        syncFontSizeControls(
+          text
+        );
+
+        fabricSaveHistory();
+        updateLayerPanel();
+
+        autoSaveCanvasState(
+          stateKey
+        );
+      }
+    );
 
   document
-    .getElementById('btn-delete')
-    ?.addEventListener('click', () => {
-      const object =
-        canvas.getActiveObject();
+    .getElementById(
+      'btn-undo'
+    )
+    ?.addEventListener(
+      'click',
+      () => {
+        if (
+          fabricHistory.length <= 1
+        ) {
+          return;
+        }
 
-      if (
-        object &&
-        !isGuideObject(object)
-      ) {
-        canvas.remove(object);
+        fabricHistory.pop();
+
+        canvas.loadFromJSON(
+          fabricHistory[
+            fabricHistory.length -
+            1
+          ],
+          () => {
+            removeGuideObjects(
+              canvas
+            );
+
+            hydrateDesignObjectMetadata(
+              canvas
+            );
+
+            restoreFabricImageUploadMeta(
+              canvas
+            );
+
+            redrawGuides(
+              canvas,
+              activePers,
+              product,
+              margin,
+              canvasWidth,
+              canvasHeight
+            );
+
+            updateFabricImageDpiWarning(
+              canvas,
+              activePers,
+              product
+            );
+
+            applyActiveDesignView(
+              canvas
+            );
+
+            updateLayerPanel();
+
+            autoSaveCanvasState(
+              stateKey
+            );
+          }
+        );
+      }
+    );
+
+  document
+    .getElementById(
+      'btn-clear'
+    )
+    ?.addEventListener(
+      'click',
+      () => {
+        canvas.clear();
+
+        canvas.backgroundColor =
+          fabricBackgroundColor;
+
+        redrawGuides(
+          canvas,
+          activePers,
+          product,
+          margin,
+          canvasWidth,
+          canvasHeight
+        );
 
         updateFabricImageDpiWarning(
           canvas,
@@ -3634,131 +6182,35 @@ function bindFabricButtons(
           product
         );
 
-        fabricSaveHistory();
-        updateLayerPanel();
-        autoSaveCanvasState(stateKey);
-      }
-    });
-
-  document
-    .getElementById('btn-front')
-    ?.addEventListener('click', () => {
-      const object =
-        canvas.getActiveObject();
-
-      if (
-        object &&
-        !isGuideObject(object)
-      ) {
-        canvas.bringToFront(object);
-
-        redrawGuides(
-          canvas,
-          activePers,
-          product,
-          margin,
-          canvasWidth,
-          canvasHeight
+        applyActiveDesignView(
+          canvas
         );
 
         fabricSaveHistory();
         updateLayerPanel();
-        autoSaveCanvasState(stateKey);
-      }
-    });
+        clearDesignState(stateKey);
 
-  document
-    .getElementById('btn-back')
-    ?.addEventListener('click', () => {
-      const object =
-        canvas.getActiveObject();
+        persistDesignState(
+          stateKey,
+          {
+            editorViewId:
+              designViewContext
+                ?.activeViewId ||
+              DESIGN_VIEW_SHEET_ID,
 
-      if (
-        object &&
-        !isGuideObject(object)
-      ) {
-        canvas.sendBackwards(object);
-
-        redrawGuides(
-          canvas,
-          activePers,
-          product,
-          margin,
-          canvasWidth,
-          canvasHeight
+            ...(designViewContext
+              ?.activeViewId !==
+              DESIGN_VIEW_SHEET_ID
+              ? {
+                previewViewId:
+                  designViewContext
+                    .activeViewId,
+              }
+              : {}),
+          }
         );
-
-        fabricSaveHistory();
-        updateLayerPanel();
-        autoSaveCanvasState(stateKey);
       }
-    });
-
-  document
-    .getElementById('btn-undo')
-    ?.addEventListener('click', () => {
-      if (fabricHistory.length <= 1) {
-        return;
-      }
-
-      fabricHistory.pop();
-
-      canvas.loadFromJSON(
-        fabricHistory[
-        fabricHistory.length - 1
-        ],
-        () => {
-          restoreFabricImageUploadMeta(
-            canvas
-          );
-
-          redrawGuides(
-            canvas,
-            activePers,
-            product,
-            margin,
-            canvasWidth,
-            canvasHeight
-          );
-
-          updateFabricImageDpiWarning(
-            canvas,
-            activePers,
-            product
-          );
-
-          updateLayerPanel();
-          autoSaveCanvasState(stateKey);
-        }
-      );
-    });
-
-  document
-    .getElementById('btn-clear')
-    ?.addEventListener('click', () => {
-      canvas.clear();
-      canvas.backgroundColor =
-        fabricBackgroundColor;
-
-      redrawGuides(
-        canvas,
-        activePers,
-        product,
-        margin,
-        canvasWidth,
-        canvasHeight
-      );
-
-      updateFabricImageDpiWarning(
-        canvas,
-        activePers,
-        product
-      );
-
-      fabricSaveHistory();
-      updateLayerPanel();
-      clearDesignState(stateKey);
-    });
+    );
 
   bindFontSelector(
     canvas,
@@ -3795,14 +6247,18 @@ function createFabricImageUploadMeta(
     widthPx:
       Number(
         image?.width ||
-        image?._element?.naturalWidth ||
+        image
+          ?._element
+          ?.naturalWidth ||
         0
       ),
 
     heightPx:
       Number(
         image?.height ||
-        image?._element?.naturalHeight ||
+        image
+          ?._element
+          ?.naturalHeight ||
         0
       ),
   };
@@ -3811,32 +6267,39 @@ function createFabricImageUploadMeta(
 function restoreFabricImageUploadMeta(canvas) {
   canvas
     .getObjects()
-    .filter(object => {
-      return (
+    .filter(
+      object =>
         object.type === 'image' &&
         object._uploadMeta
-      );
-    })
+    )
     .forEach(object => {
       object._uploadMeta = {
         fileName:
-          object._uploadMeta.fileName ||
+          object
+            ._uploadMeta
+            .fileName ||
           'Afbeelding',
 
         fileType:
-          object._uploadMeta.fileType ||
+          object
+            ._uploadMeta
+            .fileType ||
           '',
 
         widthPx:
           Number(
-            object._uploadMeta.widthPx ||
+            object
+              ._uploadMeta
+              .widthPx ||
             object.width ||
             0
           ),
 
         heightPx:
           Number(
-            object._uploadMeta.heightPx ||
+            object
+              ._uploadMeta
+              .heightPx ||
             object.height ||
             0
           ),
@@ -3869,8 +6332,9 @@ function updateFabricImageDpiWarning(
     );
 
   if (!imageObject) {
-    warningElement.style.display = 'none';
+    warningElement.hidden = true;
     warningElement.textContent = '';
+
     return;
   }
 
@@ -3883,30 +6347,16 @@ function updateFabricImageDpiWarning(
     );
 
   if (!warning) {
-    warningElement.style.display = 'none';
+    warningElement.hidden = true;
     warningElement.textContent = '';
+
     return;
   }
 
-  const isError =
-    warning.level === 'error';
+  warningElement.hidden = false;
 
-  warningElement.style.display = 'block';
-
-  warningElement.style.background =
-    isError
-      ? '#FCE8E3'
-      : '#FFF3D8';
-
-  warningElement.style.color =
-    isError
-      ? '#C0392B'
-      : '#8A681E';
-
-  warningElement.style.border =
-    isError
-      ? '1px solid #F3B7A8'
-      : '1px solid #E6C46A';
+  warningElement.dataset.level =
+    warning.level;
 
   warningElement.textContent =
     warning.message;
@@ -3943,18 +6393,17 @@ function getSelectedFabricImageForDpiWarning(
 
   if (
     activeObject.type === 'activeSelection' &&
-    typeof activeObject.getObjects === 'function'
+    typeof activeObject.getObjects ===
+      'function'
   ) {
     return (
       activeObject
         .getObjects()
-        .find(object => {
-          return (
-            object.type === 'image' &&
-            object._uploadMeta &&
-            !isGuideObject(object)
-          );
-        }) ||
+        .find(object => (
+          object.type === 'image' &&
+          object._uploadMeta &&
+          !isGuideObject(object)
+        )) ||
       null
     );
   }
@@ -3973,21 +6422,19 @@ function getFabricImageDpiWarnings(
 
   return canvas
     .getObjects()
-    .filter(object => {
-      return (
-        object.type === 'image' &&
-        !isGuideObject(object) &&
-        object._uploadMeta
-      );
-    })
-    .map(object => {
-      return getFabricImageDpiWarningForCanvas(
+    .filter(object => (
+      object.type === 'image' &&
+      !isGuideObject(object) &&
+      object._uploadMeta
+    ))
+    .map(object => (
+      getFabricImageDpiWarningForCanvas(
         object,
         canvas,
         activePers,
         product
-      );
-    })
+      )
+    ))
     .filter(Boolean);
 }
 
@@ -4042,19 +6489,19 @@ function getFabricImageDpiWarning(
   widthMm,
   heightMm
 ) {
-  const meta =
+  const metadata =
     object._uploadMeta ||
     {};
 
   const sourceWidthPx =
     Number(
-      meta.widthPx ||
+      metadata.widthPx ||
       0
     );
 
   const sourceHeightPx =
     Number(
-      meta.heightPx ||
+      metadata.heightPx ||
       0
     );
 
@@ -4072,17 +6519,13 @@ function getFabricImageDpiWarning(
     );
 
   const placedWidthMm =
-    (
-      bounds.width /
-      canvasWidth
-    ) *
+    bounds.width /
+    canvasWidth *
     widthMm;
 
   const placedHeightMm =
-    (
-      bounds.height /
-      canvasHeight
-    ) *
+    bounds.height /
+    canvasHeight *
     heightMm;
 
   if (
@@ -4094,19 +6537,15 @@ function getFabricImageDpiWarning(
 
   const dpiX =
     Math.round(
-      (
-        sourceWidthPx /
-        placedWidthMm
-      ) *
+      sourceWidthPx /
+      placedWidthMm *
       25.4
     );
 
   const dpiY =
     Math.round(
-      (
-        sourceHeightPx /
-        placedHeightMm
-      ) *
+      sourceHeightPx /
+      placedHeightMm *
       25.4
     );
 
@@ -4117,15 +6556,19 @@ function getFabricImageDpiWarning(
     );
 
   const fileName =
-    meta.fileName ||
+    metadata.fileName ||
     'afbeelding';
 
-  if (dpi < IMAGE_DPI_MINIMUM) {
+  if (
+    dpi <
+    IMAGE_DPI_MINIMUM
+  ) {
     return {
       type:
         'fabric-image-resolution-low',
 
-      level: 'error',
+      level:
+        'error',
 
       fileName,
       dpi,
@@ -4135,12 +6578,16 @@ function getFabricImageDpiWarning(
     };
   }
 
-  if (dpi < IMAGE_DPI_RECOMMENDED) {
+  if (
+    dpi <
+    IMAGE_DPI_RECOMMENDED
+  ) {
     return {
       type:
         'fabric-image-resolution-warning',
 
-      level: 'warning',
+      level:
+        'warning',
 
       fileName,
       dpi,
@@ -4168,10 +6615,14 @@ function isOutsideMargin(
   return (
     bounds.left < margin ||
     bounds.top < margin ||
-    bounds.left + bounds.width >
-    canvasWidth - margin ||
-    bounds.top + bounds.height >
-    canvasHeight - margin
+    bounds.left +
+      bounds.width >
+      canvasWidth -
+      margin ||
+    bounds.top +
+      bounds.height >
+      canvasHeight -
+      margin
   );
 }
 
@@ -4190,7 +6641,9 @@ function isObjectOverlappingBlockedZones(
   }
 
   const zones =
-    Array.isArray(activePers?.blockedZones)
+    Array.isArray(
+      activePers?.blockedZones
+    )
       ? activePers.blockedZones
       : [];
 
@@ -4297,14 +6750,16 @@ function isRectOverlappingCircle(
     clamp(
       circleX,
       rect.left,
-      rect.left + rect.width
+      rect.left +
+      rect.width
     );
 
   const closestY =
     clamp(
       circleY,
       rect.top,
-      rect.top + rect.height
+      rect.top +
+      rect.height
     );
 
   const distanceX =
@@ -4318,7 +6773,8 @@ function isRectOverlappingCircle(
   return (
     distanceX * distanceX +
     distanceY * distanceY
-  ) <= radius * radius;
+  ) <=
+    radius * radius;
 }
 
 function isRectOverlappingRect(
@@ -4327,13 +6783,20 @@ function isRectOverlappingRect(
 ) {
   return (
     rectA.left <
-    rectB.left + rectB.width &&
-    rectA.left + rectA.width >
-    rectB.left &&
+      rectB.left +
+      rectB.width &&
+
+    rectA.left +
+      rectA.width >
+      rectB.left &&
+
     rectA.top <
-    rectB.top + rectB.height &&
-    rectA.top + rectA.height >
-    rectB.top
+      rectB.top +
+      rectB.height &&
+
+    rectA.top +
+      rectA.height >
+      rectB.top
   );
 }
 
@@ -4382,25 +6845,28 @@ function isRectNearLine(
     return true;
   }
 
-  const rectLines = [
+  const rectangleLines = [
     [
       expandedRect.left,
       expandedRect.top,
       expandedRect.right,
       expandedRect.top,
     ],
+
     [
       expandedRect.right,
       expandedRect.top,
       expandedRect.right,
       expandedRect.bottom,
     ],
+
     [
       expandedRect.right,
       expandedRect.bottom,
       expandedRect.left,
       expandedRect.bottom,
     ],
+
     [
       expandedRect.left,
       expandedRect.bottom,
@@ -4409,7 +6875,7 @@ function isRectNearLine(
     ],
   ];
 
-  return rectLines.some(
+  return rectangleLines.some(
     ([
       rectX1,
       rectY1,
@@ -4466,7 +6932,7 @@ function doLineSegmentsIntersect(
     )
   );
 
-  const direction1 =
+  const directionOne =
     direction(
       x3,
       y3,
@@ -4476,7 +6942,7 @@ function doLineSegmentsIntersect(
       y1
     );
 
-  const direction2 =
+  const directionTwo =
     direction(
       x3,
       y3,
@@ -4486,7 +6952,7 @@ function doLineSegmentsIntersect(
       y2
     );
 
-  const direction3 =
+  const directionThree =
     direction(
       x1,
       y1,
@@ -4496,7 +6962,7 @@ function doLineSegmentsIntersect(
       y3
     );
 
-  const direction4 =
+  const directionFour =
     direction(
       x1,
       y1,
@@ -4508,31 +6974,36 @@ function doLineSegmentsIntersect(
 
   return (
     (
-      (
-        direction1 > 0 &&
-        direction2 < 0
-      ) ||
-      (
-        direction1 < 0 &&
-        direction2 > 0
-      )
-    ) &&
+      directionOne > 0 &&
+      directionTwo < 0
+    ) ||
+    (
+      directionOne < 0 &&
+      directionTwo > 0
+    )
+  ) &&
     (
       (
-        direction3 > 0 &&
-        direction4 < 0
+        directionThree > 0 &&
+        directionFour < 0
       ) ||
       (
-        direction3 < 0 &&
-        direction4 > 0
+        directionThree < 0 &&
+        directionFour > 0
       )
-    )
-  );
+    );
 }
 
-function clamp(value, min, max) {
+function clamp(
+  value,
+  min,
+  max
+) {
   return Math.min(
-    Math.max(value, min),
+    Math.max(
+      value,
+      min
+    ),
     max
   );
 }
@@ -4572,30 +7043,33 @@ function collectCanvasPrepressWarnings(
   const editableObjects =
     canvas
       .getObjects()
-      .filter(object => {
-        return !isGuideObject(object);
-      });
+      .filter(
+        object =>
+          !isGuideObject(object)
+      );
 
   const outsideMarginCount =
-    editableObjects.filter(object => {
-      return isOutsideMargin(
-        object,
-        margin,
-        canvasWidth,
-        canvasHeight
-      );
-    }).length;
+    editableObjects.filter(
+      object =>
+        isOutsideMargin(
+          object,
+          margin,
+          canvasWidth,
+          canvasHeight
+        )
+    ).length;
 
   const blockedZoneCount =
-    editableObjects.filter(object => {
-      return isObjectOverlappingBlockedZones(
-        object,
-        activePers,
-        product,
-        canvasWidth,
-        canvasHeight
-      );
-    }).length;
+    editableObjects.filter(
+      object =>
+        isObjectOverlappingBlockedZones(
+          object,
+          activePers,
+          product,
+          canvasWidth,
+          canvasHeight
+        )
+    ).length;
 
   const imageDpiWarnings =
     getFabricImageDpiWarnings(
@@ -4604,10 +7078,15 @@ function collectCanvasPrepressWarnings(
       product
     );
 
-  if (outsideMarginCount > 0) {
+  if (
+    outsideMarginCount > 0
+  ) {
     warnings.push({
-      type: 'safe-margin',
-      level: 'warning',
+      type:
+        'safe-margin',
+
+      level:
+        'warning',
 
       message:
         outsideMarginCount === 1
@@ -4616,10 +7095,15 @@ function collectCanvasPrepressWarnings(
     });
   }
 
-  if (blockedZoneCount > 0) {
+  if (
+    blockedZoneCount > 0
+  ) {
     warnings.push({
-      type: 'blocked-zone',
-      level: 'warning',
+      type:
+        'blocked-zone',
+
+      level:
+        'warning',
 
       message:
         blockedZoneCount === 1
@@ -4628,20 +7112,28 @@ function collectCanvasPrepressWarnings(
     });
   }
 
-  imageDpiWarnings.forEach(warning => {
-    warnings.push({
-      type: warning.type,
+  imageDpiWarnings.forEach(
+    warning => {
+      warnings.push({
+        type:
+          warning.type,
 
-      level:
-        warning.level === 'error'
-          ? 'warning'
-          : warning.level,
+        level:
+          warning.level === 'error'
+            ? 'warning'
+            : warning.level,
 
-      message: warning.message,
-      fileName: warning.fileName,
-      dpi: warning.dpi,
-    });
-  });
+        message:
+          warning.message,
+
+        fileName:
+          warning.fileName,
+
+        dpi:
+          warning.dpi,
+      });
+    }
+  );
 
   return warnings;
 }
@@ -4683,7 +7175,9 @@ function updateFabricStatus() {
     fabricCanvas?.getActiveObject();
 
   const status =
-    document.getElementById('status');
+    document.getElementById(
+      'status'
+    );
 
   if (
     !object ||
@@ -4693,10 +7187,7 @@ function updateFabricStatus() {
   }
 
   status.textContent =
-    `${object.type === 'i-text'
-      ? 'Tekst'
-      : 'Afbeelding'
-    } geselecteerd. Sleep, schaal of roteer.`;
+    `${object.type === 'i-text' ? 'Tekst' : 'Afbeelding'} geselecteerd. Sleep, schaal of roteer.`;
 }
 
 function updateLayerPanel() {
@@ -4714,48 +7205,88 @@ function updateLayerPanel() {
 
   panel.innerHTML = '';
 
+  const activeView =
+    getActiveDesignView();
+
   fabricCanvas
     .getObjects()
-    .filter(object => {
-      return !isGuideObject(object);
-    })
-    .reverse()
-    .forEach((object, index) => {
-      const item =
-        document.createElement('div');
-
-      item.className = 'layer-item';
-      item.draggable = true;
-
-      item.dataset.objectId =
-        getFabricObjectId(object);
-
-      item.textContent =
-        object.type === 'i-text'
-          ? `${index + 1}. Tekst: "${object.text}"`
-          : `${index + 1}. Afbeelding`;
-
-      if (
-        fabricCanvas.getActiveObject() ===
+    .filter(
+      object =>
+        !isGuideObject(object)
+    )
+    .filter(object => (
+      !activeView ||
+      getObjectDesignViewId(
+        fabricCanvas,
         object
-      ) {
-        item.classList.add('active');
-      }
+      ) === activeView.id
+    ))
+    .reverse()
+    .forEach(
+      (object, index) => {
+        const item =
+          document.createElement(
+            'div'
+          );
 
-      item.addEventListener('click', () => {
-        fabricCanvas.setActiveObject(object);
-        fabricCanvas.renderAll();
+        item.className =
+          'layer-item';
 
-        updateFabricImageDpiWarning(
-          fabricCanvas,
-          window._currentDesignGuideState?.activePers,
-          window._currentDesignGuideState?.product,
+        item.draggable =
+          true;
+
+        item.dataset.objectId =
+          getFabricObjectId(
+            object
+          );
+
+        item.textContent =
+          object.type === 'i-text'
+            ? `${index + 1}. Tekst: "${object.text}"`
+            : `${index + 1}. Afbeelding`;
+
+        if (
+          fabricCanvas
+            .getActiveObject() ===
           object
-        );
-      });
+        ) {
+          item.classList.add(
+            'active'
+          );
+        }
 
-      panel.appendChild(item);
-    });
+        item.addEventListener(
+          'click',
+          () => {
+            if (
+              object.selectable === false ||
+              object.evented === false
+            ) {
+              return;
+            }
+
+            fabricCanvas.setActiveObject(
+              object
+            );
+
+            fabricCanvas.renderAll();
+
+            updateFabricImageDpiWarning(
+              fabricCanvas,
+              window
+                ._currentDesignGuideState
+                ?.activePers,
+              window
+                ._currentDesignGuideState
+                ?.product,
+              object
+            );
+          }
+        );
+
+        panel.appendChild(item);
+      }
+    );
 }
 
 function bindLayerDragAndDrop(
@@ -4788,7 +7319,9 @@ function bindLayerDragAndDrop(
         item.dataset.objectId
       );
 
-      item.classList.add('dragging');
+      item.classList.add(
+        'dragging'
+      );
     }
   );
 
@@ -4797,9 +7330,8 @@ function bindLayerDragAndDrop(
     event => {
       event.target
         .closest('.layer-item')
-        ?.classList.remove(
-          'dragging'
-        );
+        ?.classList
+        .remove('dragging');
     }
   );
 
@@ -4835,7 +7367,9 @@ function bindLayerDragAndDrop(
       const targetId =
         targetItem.dataset.objectId;
 
-      if (draggedId === targetId) {
+      if (
+        draggedId === targetId
+      ) {
         return;
       }
 
@@ -4846,7 +7380,11 @@ function bindLayerDragAndDrop(
       );
 
       fabricSaveHistory();
-      autoSaveCanvasState(stateKey);
+
+      autoSaveCanvasState(
+        stateKey
+      );
+
       updateLayerPanel();
     }
   );
@@ -4860,25 +7398,24 @@ function reorderCanvasObjectsFromLayerDrop(
   const editableObjects =
     canvas
       .getObjects()
-      .filter(object => {
-        return !isGuideObject(object);
-      });
+      .filter(
+        object =>
+          !isGuideObject(object)
+      );
 
   const draggedObject =
-    editableObjects.find(object => {
-      return (
+    editableObjects.find(
+      object =>
         getFabricObjectId(object) ===
         draggedId
-      );
-    });
+    );
 
   const targetObject =
-    editableObjects.find(object => {
-      return (
+    editableObjects.find(
+      object =>
         getFabricObjectId(object) ===
         targetId
-      );
-    });
+    );
 
   if (
     !draggedObject ||
@@ -4918,6 +7455,13 @@ function reorderCanvasObjectsFromLayerDrop(
   const activeObject =
     canvas.getActiveObject();
 
+  const backgroundColor =
+    canvas.backgroundColor;
+
+  const backgroundImage =
+    canvas.backgroundImage ||
+    null;
+
   editableObjects.forEach(
     (object, index) => {
       if (
@@ -4940,6 +7484,12 @@ function reorderCanvasObjectsFromLayerDrop(
       }
     }
   );
+
+  canvas.backgroundColor =
+    backgroundColor;
+
+  canvas.backgroundImage =
+    backgroundImage;
 
   bringGuidesToFront(canvas);
 
@@ -4996,32 +7546,28 @@ function fabricSaveHistory() {
     return;
   }
 
-  const guideObjects =
-    getGuideObjects(fabricCanvas);
-
-  guideObjects.forEach(object => {
-    object.visible = false;
-  });
-
   const json =
-    JSON.stringify(
-      fabricCanvas.toJSON([
-        '_layerId',
-        '_uploadMeta',
-      ])
+    withCanonicalDesignCanvas(
+      fabricCanvas,
+
+      () => JSON.stringify(
+        fabricCanvas.toJSON(
+          FABRIC_SERIALIZABLE_PROPERTIES
+        )
+      )
     );
 
-  guideObjects.forEach(object => {
-    object.visible = true;
-  });
+  if (!json) {
+    return;
+  }
 
   fabricHistory.push(json);
 
-  if (fabricHistory.length > 20) {
+  if (
+    fabricHistory.length > 20
+  ) {
     fabricHistory.shift();
   }
-
-  fabricCanvas.renderAll();
 }
 
 function snapshotCanvas(
@@ -5029,86 +7575,79 @@ function snapshotCanvas(
   product,
   activePers
 ) {
-  const guideObjects =
-    getGuideObjects(canvas);
+  return withCanonicalDesignCanvas(
+    canvas,
 
-  guideObjects.forEach(object => {
-    object.visible = false;
-  });
+    () => {
+      const printWidthPx =
+        activePers?.width_px ||
+        product.width_px ||
+        1181;
 
-  canvas.discardActiveObject();
-  canvas.renderAll();
+      const displayWidthPx =
+        canvas.getWidth();
 
-  const printWidthPx =
-    activePers?.width_px ||
-    product.width_px ||
-    1181;
+      const multiplier =
+        printWidthPx /
+        displayWidthPx;
 
-  const displayWidthPx =
-    canvas.getWidth();
+      const dataURL =
+        canvas.toDataURL({
+          format:
+            'png',
 
-  const multiplier =
-    printWidthPx /
-    displayWidthPx;
+          multiplier,
 
-  const dataURL =
-    canvas.toDataURL({
-      format: 'png',
-      multiplier,
-      enableRetinaScaling: false,
-    });
+          enableRetinaScaling:
+            false,
+        });
 
-  guideObjects.forEach(object => {
-    object.visible = true;
-  });
+      const json =
+        JSON.stringify(
+          canvas.toJSON(
+            FABRIC_SERIALIZABLE_PROPERTIES
+          )
+        );
 
-  canvas.renderAll();
+      const backgroundColor =
+        canvas.backgroundColor ||
+        fabricBackgroundColor;
 
-  const json =
-    JSON.stringify(
-      canvas.toJSON([
-        '_layerId',
-        '_uploadMeta',
-      ])
-    );
+      const finishWidthMm =
+        activePers?.width_mm ||
+        product.width_mm ||
+        100;
 
-  const backgroundColor =
-    canvas.backgroundColor ||
-    fabricBackgroundColor;
+      const finishHeightMm =
+        activePers?.height_mm ||
+        product.height_mm ||
+        70;
 
-  const finishWidthMm =
-    activePers?.width_mm ||
-    product.width_mm ||
-    100;
+      const pdfDataURL =
+        generatePrintPDF(
+          dataURL,
+          finishWidthMm,
+          finishHeightMm
+        );
 
-  const finishHeightMm =
-    activePers?.height_mm ||
-    product.height_mm ||
-    70;
+      const rillinesPdfDataURL =
+        generatePrintPDFWithRillines(
+          dataURL,
+          finishWidthMm,
+          finishHeightMm,
+          activePers,
+          product
+        );
 
-  const pdfDataURL =
-    generatePrintPDF(
-      dataURL,
-      finishWidthMm,
-      finishHeightMm
-    );
-
-  const rillinesPdfDataURL =
-    generatePrintPDFWithRillines(
-      dataURL,
-      finishWidthMm,
-      finishHeightMm,
-      activePers,
-      product
-    );
-
-  return {
-    dataURL,
-    json,
-    backgroundColor,
-    pdfDataURL,
-    rillinesPdfDataURL,
-  };
+      return {
+        dataURL,
+        json,
+        backgroundColor,
+        pdfDataURL,
+        rillinesPdfDataURL,
+      };
+    }
+  );
 }
 
 function generatePrintPDF(
@@ -5117,11 +7656,15 @@ function generatePrintPDF(
   heightMm
 ) {
   if (!window.jspdf) {
-    console.warn('jsPDF niet geladen');
+    console.warn(
+      'jsPDF niet geladen'
+    );
+
     return null;
   }
 
-  const { jsPDF } = window.jspdf;
+  const { jsPDF } =
+    window.jspdf;
 
   const pdfGeometry =
     getPrintPdfGeometry(
@@ -5133,18 +7676,20 @@ function generatePrintPDF(
     new jsPDF({
       orientation:
         pdfGeometry.pageW >
-          pdfGeometry.pageH
+        pdfGeometry.pageH
           ? 'landscape'
           : 'portrait',
 
-      unit: 'mm',
+      unit:
+        'mm',
 
       format: [
         pdfGeometry.pageW,
         pdfGeometry.pageH,
       ],
 
-      compress: true,
+      compress:
+        true,
     });
 
   pdf.addImage(
@@ -5176,11 +7721,15 @@ function generatePrintPDFWithRillines(
   product
 ) {
   if (!window.jspdf) {
-    console.warn('jsPDF niet geladen');
+    console.warn(
+      'jsPDF niet geladen'
+    );
+
     return null;
   }
 
-  const { jsPDF } = window.jspdf;
+  const { jsPDF } =
+    window.jspdf;
 
   const pdfGeometry =
     getPrintPdfGeometry(
@@ -5192,18 +7741,20 @@ function generatePrintPDFWithRillines(
     new jsPDF({
       orientation:
         pdfGeometry.pageW >
-          pdfGeometry.pageH
+        pdfGeometry.pageH
           ? 'landscape'
           : 'portrait',
 
-      unit: 'mm',
+      unit:
+        'mm',
 
       format: [
         pdfGeometry.pageW,
         pdfGeometry.pageH,
       ],
 
-      compress: true,
+      compress:
+        true,
     });
 
   pdf.addImage(
@@ -5242,11 +7793,11 @@ function getPrintPdfGeometry(
   const markMm = 5;
   const gapMm = 2.117;
 
-  const pageW =
+  const pageWidth =
     Number(widthMm || 100) +
     bleedMm * 2;
 
-  const pageH =
+  const pageHeight =
     Number(heightMm || 70) +
     bleedMm * 2;
 
@@ -5254,10 +7805,18 @@ function getPrintPdfGeometry(
     bleedMm,
     markMm,
     gapMm,
-    pageW,
-    pageH,
-    trimX1: bleedMm,
-    trimY1: bleedMm,
+
+    pageW:
+      pageWidth,
+
+    pageH:
+      pageHeight,
+
+    trimX1:
+      bleedMm,
+
+    trimY1:
+      bleedMm,
 
     trimX2:
       bleedMm +
@@ -5273,87 +7832,118 @@ function drawCropMarks(
   pdf,
   geometry
 ) {
-  pdf.setDrawColor(0, 0, 0);
-  pdf.setLineWidth(0.088);
+  pdf.setDrawColor(
+    0,
+    0,
+    0
+  );
+
+  pdf.setLineWidth(
+    0.088
+  );
 
   pdf.line(
     geometry.trimX1 -
-    geometry.gapMm -
-    geometry.markMm,
+      geometry.gapMm -
+      geometry.markMm,
+
     geometry.trimY1,
+
     geometry.trimX1 -
-    geometry.gapMm,
+      geometry.gapMm,
+
     geometry.trimY1
   );
 
   pdf.line(
     geometry.trimX1,
+
     geometry.trimY1 -
-    geometry.gapMm -
-    geometry.markMm,
+      geometry.gapMm -
+      geometry.markMm,
+
     geometry.trimX1,
+
     geometry.trimY1 -
-    geometry.gapMm
+      geometry.gapMm
   );
 
   pdf.line(
     geometry.trimX2 +
-    geometry.gapMm,
+      geometry.gapMm,
+
     geometry.trimY1,
+
     geometry.trimX2 +
-    geometry.gapMm +
-    geometry.markMm,
+      geometry.gapMm +
+      geometry.markMm,
+
     geometry.trimY1
   );
 
   pdf.line(
     geometry.trimX2,
+
     geometry.trimY1 -
-    geometry.gapMm -
-    geometry.markMm,
+      geometry.gapMm -
+      geometry.markMm,
+
     geometry.trimX2,
+
     geometry.trimY1 -
-    geometry.gapMm
+      geometry.gapMm
   );
 
   pdf.line(
     geometry.trimX1 -
-    geometry.gapMm -
-    geometry.markMm,
+      geometry.gapMm -
+      geometry.markMm,
+
     geometry.trimY2,
+
     geometry.trimX1 -
-    geometry.gapMm,
+      geometry.gapMm,
+
     geometry.trimY2
   );
 
   pdf.line(
     geometry.trimX1,
+
     geometry.trimY2 +
-    geometry.gapMm,
+      geometry.gapMm,
+
     geometry.trimX1,
+
     geometry.trimY2 +
-    geometry.gapMm +
-    geometry.markMm
+      geometry.gapMm +
+      geometry.markMm
   );
 
   pdf.line(
     geometry.trimX2 +
-    geometry.gapMm,
+      geometry.gapMm,
+
     geometry.trimY2,
+
     geometry.trimX2 +
-    geometry.gapMm +
-    geometry.markMm,
+      geometry.gapMm +
+      geometry.markMm,
+
     geometry.trimY2
   );
 
   pdf.line(
     geometry.trimX2,
+
     geometry.trimY2 +
-    geometry.gapMm,
+      geometry.gapMm,
+
     geometry.trimX2,
+
     geometry.trimY2 +
-    geometry.gapMm +
-    geometry.markMm
+      geometry.gapMm +
+      geometry.markMm
   );
 }
 
@@ -5364,7 +7954,9 @@ function drawRillinesOnPdf(
   product
 ) {
   const zones =
-    Array.isArray(activePers?.blockedZones)
+    Array.isArray(
+      activePers?.blockedZones
+    )
       ? activePers.blockedZones
       : [];
 
@@ -5390,25 +7982,45 @@ function drawRillinesOnPdf(
     return;
   }
 
-  pdf.setDrawColor(0, 255, 255);
-  pdf.setLineWidth(0.25);
+  pdf.setDrawColor(
+    0,
+    255,
+    255
+  );
+
+  pdf.setLineWidth(
+    0.25
+  );
 
   zones
-    .filter(zone => {
-      return zone.type === 'line';
-    })
+    .filter(
+      zone =>
+        zone.type === 'line'
+    )
     .forEach(zone => {
       let x1Mm =
-        Number(zone.x1_mm || 0);
+        Number(
+          zone.x1_mm ||
+          0
+        );
 
       let y1Mm =
-        Number(zone.y1_mm || 0);
+        Number(
+          zone.y1_mm ||
+          0
+        );
 
       let x2Mm =
-        Number(zone.x2_mm || 0);
+        Number(
+          zone.x2_mm ||
+          0
+        );
 
       let y2Mm =
-        Number(zone.y2_mm || 0);
+        Number(
+          zone.y2_mm ||
+          0
+        );
 
       const deltaXmm =
         Math.abs(
@@ -5422,23 +8034,29 @@ function drawRillinesOnPdf(
           y1Mm
         );
 
-      if (deltaYmm <= 0.01) {
+      if (
+        deltaYmm <= 0.01
+      ) {
         const centerYmm =
           (
             y1Mm +
             y2Mm
-          ) / 2;
+          ) /
+          2;
 
         x1Mm = 0;
         x2Mm = sourceWidthMm;
         y1Mm = centerYmm;
         y2Mm = centerYmm;
-      } else if (deltaXmm <= 0.01) {
+      } else if (
+        deltaXmm <= 0.01
+      ) {
         const centerXmm =
           (
             x1Mm +
             x2Mm
-          ) / 2;
+          ) /
+          2;
 
         x1Mm = centerXmm;
         x2Mm = centerXmm;
@@ -5491,7 +8109,8 @@ function drawRillinesOnPdf(
         );
 
       if (
-        typeof pdf.setLineDashPattern ===
+        typeof pdf
+          .setLineDashPattern ===
         'function'
       ) {
         pdf.setLineDashPattern(
@@ -5508,7 +8127,8 @@ function drawRillinesOnPdf(
       );
 
       if (
-        typeof pdf.setLineDashPattern ===
+        typeof pdf
+          .setLineDashPattern ===
         'function'
       ) {
         pdf.setLineDashPattern(
@@ -5527,45 +8147,52 @@ function autoSaveCanvasState(stateKey) {
     return;
   }
 
-  const guideObjects =
-    getGuideObjects(fabricCanvas);
-
-  guideObjects.forEach(object => {
-    object.visible = false;
-  });
-
   const json =
-    JSON.stringify(
-      fabricCanvas.toJSON([
-        '_layerId',
-        '_uploadMeta',
-      ])
-    );
+    withCanonicalDesignCanvas(
+      fabricCanvas,
 
-  guideObjects.forEach(object => {
-    object.visible = true;
-  });
+      () => JSON.stringify(
+        fabricCanvas.toJSON(
+          FABRIC_SERIALIZABLE_PROPERTIES
+        )
+      )
+    );
 
   persistDesignState(
     stateKey,
     {
-      fabricJSON: json,
+      fabricJSON:
+        json,
 
       backgroundColor:
         fabricCanvas.backgroundColor ||
         fabricBackgroundColor,
+
+      editorViewId:
+        designViewContext
+          ?.activeViewId ||
+        DESIGN_VIEW_SHEET_ID,
+
+      ...(designViewContext
+        ?.activeViewId !==
+        DESIGN_VIEW_SHEET_ID
+        ? {
+          previewViewId:
+            designViewContext
+              .activeViewId,
+        }
+        : {}),
     }
   );
-
-  fabricCanvas.renderAll();
 }
 
 function getGuideObjects(canvas) {
   return canvas
     .getObjects()
-    .filter(object => {
-      return isGuideObject(object);
-    });
+    .filter(
+      object =>
+        isGuideObject(object)
+    );
 }
 
 function persistDesignState(
@@ -5587,10 +8214,13 @@ function persistDesignState(
 
     localStorage.setItem(
       stateKey,
+
       JSON.stringify({
         ...current,
         ...data,
-        savedAt: Date.now(),
+
+        savedAt:
+          Date.now(),
       })
     );
   } catch (error) {
@@ -5617,7 +8247,10 @@ function loadDesignState(stateKey) {
 
     if (
       Date.now() -
-      (state.savedAt || 0) >
+      (
+        state.savedAt ||
+        0
+      ) >
       86400000
     ) {
       localStorage.removeItem(
@@ -5649,7 +8282,7 @@ async function handleUpload(
   activePers,
   product
 ) {
-  const uploadCheck =
+  const uploadCheckResult =
     await buildUploadCheck(
       file,
       activePers,
@@ -5667,7 +8300,7 @@ async function handleUpload(
       file.name;
 
     uploadedCheck =
-      uploadCheck;
+      uploadCheckResult;
 
     const generatedUploadPdfs =
       buildUploadPdfData(
@@ -5695,8 +8328,11 @@ async function handleUpload(
       fileName:
         uploadedFileName,
 
-      tab: 'upload',
-      source: 'upload',
+      tab:
+        'upload',
+
+      source:
+        'upload',
 
       uploadCheck:
         uploadedCheck,
@@ -5708,11 +8344,18 @@ async function handleUpload(
     };
 
     Session.setDesign(data);
-    persistDesignState(stateKey, data);
+
+    persistDesignState(
+      stateKey,
+      data
+    );
+
     renderDesignPage();
   };
 
-  reader.readAsDataURL(file);
+  reader.readAsDataURL(
+    file
+  );
 }
 
 function buildUploadPdfData(
@@ -5736,8 +8379,11 @@ function buildUploadPdfData(
     )
   ) {
     return {
-      pdfDataURL: dataURL,
-      rillinesPdfDataURL: '',
+      pdfDataURL:
+        dataURL,
+
+      rillinesPdfDataURL:
+        '',
     };
   }
 
@@ -5747,8 +8393,11 @@ function buildUploadPdfData(
     )
   ) {
     return {
-      pdfDataURL: '',
-      rillinesPdfDataURL: '',
+      pdfDataURL:
+        '',
+
+      rillinesPdfDataURL:
+        '',
     };
   }
 
@@ -5784,10 +8433,14 @@ function buildUploadCheck(
 
   const fileType =
     file?.type ||
-    getFileTypeFromName(fileName);
+    getFileTypeFromName(
+      fileName
+    );
 
   const extension =
-    getFileExtension(fileName);
+    getFileExtension(
+      fileName
+    );
 
   const printSpec =
     getUploadPrintSpec(
@@ -5802,7 +8455,9 @@ function buildUploadCheck(
     printSpec.requiredHeightPx;
 
   if (!file) {
-    return Promise.resolve(null);
+    return Promise.resolve(
+      null
+    );
   }
 
   if (
@@ -5815,20 +8470,34 @@ function buildUploadCheck(
     return Promise.resolve({
       fileName,
       fileType,
-      widthPx: null,
-      heightPx: null,
+
+      widthPx:
+        null,
+
+      heightPx:
+        null,
+
       requiredWidthPx,
       requiredHeightPx,
-      estimatedDpiX: null,
-      estimatedDpiY: null,
-      status: 'manual-check',
+
+      estimatedDpiX:
+        null,
+
+      estimatedDpiY:
+        null,
+
+      status:
+        'manual-check',
+
       message:
         'Dit bestand wordt technisch gecontroleerd in Adobe.',
     });
   }
 
   if (
-    !fileType.startsWith('image/') &&
+    !fileType.startsWith(
+      'image/'
+    ) &&
     ![
       'png',
       'jpg',
@@ -5838,27 +8507,39 @@ function buildUploadCheck(
     return Promise.resolve({
       fileName,
       fileType,
-      widthPx: null,
-      heightPx: null,
+
+      widthPx:
+        null,
+
+      heightPx:
+        null,
+
       requiredWidthPx,
       requiredHeightPx,
-      estimatedDpiX: null,
-      estimatedDpiY: null,
-      status: 'warning',
+
+      estimatedDpiX:
+        null,
+
+      estimatedDpiY:
+        null,
+
+      status:
+        'warning',
+
       message:
         'Dit bestandstype kan niet automatisch op resolutie worden gecontroleerd.',
     });
   }
 
-  return getUploadedImageDimensions(file)
+  return getUploadedImageDimensions(
+    file
+  )
     .then(dimensions => {
       const estimatedDpiX =
         printSpec.exportWidthMm
           ? Math.round(
-            (
-              dimensions.widthPx /
-              printSpec.exportWidthMm
-            ) *
+            dimensions.widthPx /
+            printSpec.exportWidthMm *
             25.4
           )
           : null;
@@ -5866,32 +8547,42 @@ function buildUploadCheck(
       const estimatedDpiY =
         printSpec.exportHeightMm
           ? Math.round(
-            (
-              dimensions.heightPx /
-              printSpec.exportHeightMm
-            ) *
+            dimensions.heightPx /
+            printSpec.exportHeightMm *
             25.4
           )
           : null;
 
-      const minDpi =
+      const minimumDpi =
         Math.min(
-          estimatedDpiX || 0,
-          estimatedDpiY || 0
+          estimatedDpiX ||
+          0,
+
+          estimatedDpiY ||
+          0
         );
 
-      let status = 'good';
+      let status =
+        'good';
 
       let message =
         'De afbeelding heeft voldoende resolutie voor drukwerk op 300 DPI.';
 
-      if (minDpi < 150) {
-        status = 'error';
+      if (
+        minimumDpi <
+        150
+      ) {
+        status =
+          'error';
 
         message =
           `De afbeelding lijkt te laag in resolutie. Advies: minimaal ${requiredWidthPx} × ${requiredHeightPx}px voor 300 DPI.`;
-      } else if (minDpi < 300) {
-        status = 'warning';
+      } else if (
+        minimumDpi <
+        300
+      ) {
+        status =
+          'warning';
 
         message =
           `De afbeelding is bruikbaar, maar lager dan de aanbevolen 300 DPI. Advies: ${requiredWidthPx} × ${requiredHeightPx}px.`;
@@ -5900,10 +8591,13 @@ function buildUploadCheck(
       return {
         fileName,
         fileType,
+
         widthPx:
           dimensions.widthPx,
+
         heightPx:
           dimensions.heightPx,
+
         requiredWidthPx,
         requiredHeightPx,
         estimatedDpiX,
@@ -5915,13 +8609,25 @@ function buildUploadCheck(
     .catch(() => ({
       fileName,
       fileType,
-      widthPx: null,
-      heightPx: null,
+
+      widthPx:
+        null,
+
+      heightPx:
+        null,
+
       requiredWidthPx,
       requiredHeightPx,
-      estimatedDpiX: null,
-      estimatedDpiY: null,
-      status: 'warning',
+
+      estimatedDpiX:
+        null,
+
+      estimatedDpiY:
+        null,
+
+      status:
+        'warning',
+
       message:
         'De resolutie van dit bestand kon niet automatisch worden gecontroleerd.',
     }));
@@ -5973,24 +8679,23 @@ function getUploadPrintSpec(
     );
 
   return {
-    exportWidthMm: widthMm,
-    exportHeightMm: heightMm,
+    exportWidthMm:
+      widthMm,
+
+    exportHeightMm:
+      heightMm,
 
     requiredWidthPx:
       Math.round(
-        (
-          widthMm /
-          25.4
-        ) *
+        widthMm /
+        25.4 *
         300
       ),
 
     requiredHeightPx:
       Math.round(
-        (
-          heightMm /
-          25.4
-        ) *
+        heightMm /
+        25.4 *
         300
       ),
   };
@@ -5999,13 +8704,18 @@ function getUploadPrintSpec(
 function getUploadedImageDimensions(file) {
   return new Promise(
     (resolve, reject) => {
-      const image = new Image();
+      const image =
+        new Image();
 
       const url =
-        URL.createObjectURL(file);
+        URL.createObjectURL(
+          file
+        );
 
       image.onload = () => {
-        URL.revokeObjectURL(url);
+        URL.revokeObjectURL(
+          url
+        );
 
         resolve({
           widthPx:
@@ -6017,7 +8727,9 @@ function getUploadedImageDimensions(file) {
       };
 
       image.onerror = () => {
-        URL.revokeObjectURL(url);
+        URL.revokeObjectURL(
+          url
+        );
 
         reject(
           new Error(
@@ -6026,7 +8738,8 @@ function getUploadedImageDimensions(file) {
         );
       };
 
-      image.src = url;
+      image.src =
+        url;
     }
   );
 }
@@ -6041,8 +8754,12 @@ function getUploadPrepressWarnings(uploadCheck) {
     'manual-check'
   ) {
     return [{
-      type: 'upload-vector-check',
-      level: 'info',
+      type:
+        'upload-vector-check',
+
+      level:
+        'info',
+
       message:
         'Dit bestand moet technisch worden gecontroleerd in Adobe.',
     }];
@@ -6056,7 +8773,8 @@ function getUploadPrepressWarnings(uploadCheck) {
       type:
         'upload-resolution-warning',
 
-      level: 'warning',
+      level:
+        'warning',
 
       message:
         uploadCheck.message ||
@@ -6072,7 +8790,8 @@ function getUploadPrepressWarnings(uploadCheck) {
       type:
         'upload-resolution-error',
 
-      level: 'warning',
+      level:
+        'warning',
 
       message:
         uploadCheck.message ||
@@ -6119,15 +8838,28 @@ function getFileExtension(fileName) {
 
 function getFileTypeFromName(fileName) {
   const extension =
-    getFileExtension(fileName);
+    getFileExtension(
+      fileName
+    );
 
   const map = {
-    pdf: 'application/pdf',
-    ai: 'application/postscript',
-    eps: 'application/postscript',
-    png: 'image/png',
-    jpg: 'image/jpeg',
-    jpeg: 'image/jpeg',
+    pdf:
+      'application/pdf',
+
+    ai:
+      'application/postscript',
+
+    eps:
+      'application/postscript',
+
+    png:
+      'image/png',
+
+    jpg:
+      'image/jpeg',
+
+    jpeg:
+      'image/jpeg',
   };
 
   return map[extension] || '';
@@ -6141,14 +8873,29 @@ function clearUpload() {
   uploadedRillinesPdfDataURL = null;
 
   Session.setDesign({
-    dataURL: null,
-    pdfDataURL: null,
-    rillinesPdfDataURL: null,
-    fileName: null,
-    tab: 'upload',
-    source: null,
-    uploadCheck: null,
-    prepressWarnings: [],
+    dataURL:
+      null,
+
+    pdfDataURL:
+      null,
+
+    rillinesPdfDataURL:
+      null,
+
+    fileName:
+      null,
+
+    tab:
+      'upload',
+
+    source:
+      null,
+
+    uploadCheck:
+      null,
+
+    prepressWarnings:
+      [],
   });
 
   renderDesignPage();
@@ -6158,7 +8905,9 @@ function escHtml(value) {
   return String(value || '')
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
 }
 
 window.clearUpload = clearUpload;

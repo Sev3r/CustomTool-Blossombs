@@ -1,6 +1,6 @@
 /*
  * customer/product-preview.css
- * Live productpreview en zijdeweergaven voor het Fabric-canvas.
+ * Live productpreview en geïntegreerde zijdeweergaven.
  */
 
 #layer-panel {
@@ -10,6 +10,9 @@
 
 #canvas-wrap {
   position: relative;
+}
+
+#canvas-wrap.is-design-side-view {
   overflow: hidden;
 }
 
@@ -27,16 +30,22 @@
   border-radius: 10px;
   background: transparent;
   box-shadow:
-    0 14px 34px rgba(35, 42, 36, 0.18);
+    0 14px 34px
+    rgba(35, 42, 36, 0.18);
   pointer-events: none;
 }
 
+.canvas-toolbar-actions-only {
+  justify-content: flex-end;
+}
+
 .canvas-view-toolbar {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 10px 16px;
-  padding: 10px 14px;
+  display: grid;
+  grid-template-columns:
+    minmax(0, 1fr)
+    auto;
+  align-items: start;
+  gap: 8px 16px;
 }
 
 .canvas-view-toolbar-main {
@@ -47,8 +56,16 @@
   gap: 8px 12px;
 }
 
+.canvas-view-toolbar-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .canvas-view-toolbar-label {
-  color: var(--color-text-secondary);
+  color:
+    var(--color-text-secondary);
   font-size: 10px;
   font-weight: 900;
   letter-spacing: 0.07em;
@@ -65,11 +82,17 @@
 .canvas-view-tab {
   appearance: none;
   padding: 7px 11px;
-  border: 1px solid var(--cream-border);
-  border-radius: var(--radius-pill);
-  background: var(--color-background-primary);
-  color: var(--text-2);
-  font-family: var(--font-body);
+  border:
+    1px solid
+    var(--cream-border);
+  border-radius:
+    var(--radius-pill);
+  background:
+    var(--color-background-primary);
+  color:
+    var(--text-2);
+  font-family:
+    var(--font-body);
   font-size: 11px;
   font-weight: 800;
   cursor: pointer;
@@ -82,29 +105,36 @@
 
 .canvas-view-tab:hover,
 .canvas-view-tab:focus-visible {
-  border-color: var(--green);
-  color: var(--green-dark);
+  border-color:
+    var(--green);
+  color:
+    var(--green-dark);
   outline: none;
 }
 
 .canvas-view-tab:focus-visible {
   box-shadow:
-    0 0 0 3px rgba(92, 122, 92, 0.16);
+    0 0 0 3px
+    rgba(92, 122, 92, 0.16);
 }
 
 .canvas-view-tab.active {
-  border-color: var(--green);
-  background: var(--green-light);
-  color: var(--green-dark);
+  border-color:
+    var(--green);
+  background:
+    var(--green-light);
+  color:
+    var(--green-dark);
 }
 
 .canvas-view-note {
-  flex: 1 1 260px;
+  grid-column: 1 / -1;
   margin: 0;
-  color: var(--text-3);
+  color:
+    var(--text-3);
   font-size: 11px;
   line-height: 1.4;
-  text-align: right;
+  text-align: left;
 }
 
 .design-layer-section {
@@ -121,9 +151,11 @@
   flex-direction: column;
   gap: 10px;
   padding: 12px;
-  background: var(--color-background-primary);
+  background:
+    var(--color-background-primary);
   border-bottom:
-    1px solid var(--color-border-tertiary);
+    1px solid
+    var(--color-border-tertiary);
 }
 
 .product-preview-header {
@@ -135,14 +167,16 @@
 
 .product-preview-header strong {
   display: block;
-  color: var(--green-dark);
+  color:
+    var(--green-dark);
   font-size: 14px;
   line-height: 1.25;
 }
 
 .product-preview-eyebrow {
   margin-bottom: 2px;
-  color: var(--color-text-secondary);
+  color:
+    var(--color-text-secondary);
   font-size: 10px;
   font-weight: 900;
   letter-spacing: 0.08em;
@@ -155,9 +189,11 @@
   flex: 0 0 auto;
   margin-top: 4px;
   border-radius: 50%;
-  background: var(--green);
+  background:
+    var(--green);
   box-shadow:
-    0 0 0 4px rgba(92, 122, 92, 0.12);
+    0 0 0 4px
+    rgba(92, 122, 92, 0.12);
   transition:
     background 0.15s ease,
     box-shadow 0.15s ease;
@@ -165,9 +201,11 @@
 
 .product-preview-panel.is-loading
 .product-preview-live-indicator {
-  background: #d59a25;
+  background:
+    #d59a25;
   box-shadow:
-    0 0 0 4px rgba(213, 154, 37, 0.14);
+    0 0 0 4px
+    rgba(213, 154, 37, 0.14);
 }
 
 .product-preview-tabs {
@@ -181,36 +219,49 @@
   appearance: none;
   min-width: max-content;
   padding: 7px 10px;
-  border: 1px solid var(--cream-border);
-  border-radius: var(--radius-pill);
-  background: #ffffff;
-  color: var(--text-2);
-  font-family: var(--font-body);
+  border:
+    1px solid
+    var(--cream-border);
+  border-radius:
+    var(--radius-pill);
+  background:
+    #ffffff;
+  color:
+    var(--text-2);
+  font-family:
+    var(--font-body);
   font-size: 11px;
   font-weight: 800;
   cursor: pointer;
   transition:
     background 0.15s ease,
     border-color 0.15s ease,
-    color 0.15s ease;
+    color 0.15s ease,
+    box-shadow 0.15s ease;
 }
 
 .product-preview-tab:hover,
 .product-preview-tab:focus-visible {
-  border-color: var(--green);
-  color: var(--green-dark);
+  border-color:
+    var(--green);
+  color:
+    var(--green-dark);
   outline: none;
 }
 
 .product-preview-tab:focus-visible {
   box-shadow:
-    0 0 0 3px rgba(92, 122, 92, 0.16);
+    0 0 0 3px
+    rgba(92, 122, 92, 0.16);
 }
 
 .product-preview-tab.active {
-  border-color: var(--green);
-  background: var(--green-light);
-  color: var(--green-dark);
+  border-color:
+    var(--green);
+  background:
+    var(--green-light);
+  color:
+    var(--green-dark);
 }
 
 .product-preview-stage {
@@ -221,9 +272,13 @@
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  border: 1px solid var(--cream-border);
-  border-radius: var(--radius-sm);
-  background: #ffffff;
+  border:
+    1px solid
+    var(--cream-border);
+  border-radius:
+    var(--radius-sm);
+  background:
+    #ffffff;
 }
 
 .product-preview-canvas {
@@ -240,13 +295,16 @@
   align-items: center;
   justify-content: center;
   padding: 16px;
-  background: rgba(255, 255, 255, 0.72);
-  color: var(--green-dark);
+  background:
+    rgba(255, 255, 255, 0.72);
+  color:
+    var(--green-dark);
   font-size: 11px;
   font-weight: 800;
   text-align: center;
   pointer-events: none;
-  backdrop-filter: blur(1px);
+  backdrop-filter:
+    blur(1px);
 }
 
 .product-preview-loading[hidden] {
@@ -256,19 +314,22 @@
 .product-preview-help,
 .product-preview-status {
   margin: 0;
-  color: var(--text-3);
+  color:
+    var(--text-3);
   font-size: 11px;
   line-height: 1.45;
 }
 
 .product-preview-status {
   min-height: 16px;
-  color: var(--green-dark);
+  color:
+    var(--green-dark);
   font-weight: 700;
 }
 
 .product-preview-status.is-error {
-  color: var(--danger, #c0392b);
+  color:
+    var(--danger, #c0392b);
 }
 
 .upload-preview-column {
@@ -280,9 +341,13 @@
 .upload-preview-column
 .product-preview-panel {
   overflow: hidden;
-  border: 1px solid var(--cream-border);
-  border-radius: var(--radius-card);
-  box-shadow: var(--shadow-card);
+  border:
+    1px solid
+    var(--cream-border);
+  border-radius:
+    var(--radius-card);
+  box-shadow:
+    var(--shadow-card);
 }
 
 .upload-preview-column
@@ -296,15 +361,113 @@
 
 .technical-preview-caption {
   margin-top: 8px;
-  color: var(--text-3);
+  color:
+    var(--text-3);
   font-size: 12px;
   text-align: center;
 }
 
+.fabric-image-dpi-warning {
+  position: fixed;
+  top: 160px;
+  right: 24px;
+  z-index: 1000;
+  width:
+    min(
+      320px,
+      calc(100vw - 48px)
+    );
+  padding: 12px 14px;
+  border-radius: 10px;
+  font-size: 12px;
+  line-height: 1.45;
+  box-shadow:
+    0 10px 30px
+    rgba(0, 0, 0, 0.12);
+}
+
+.fabric-image-dpi-warning[data-level="warning"] {
+  border:
+    1px solid
+    #e6c46a;
+  background:
+    #fff3d8;
+  color:
+    #8a681e;
+}
+
+.fabric-image-dpi-warning[data-level="error"] {
+  border:
+    1px solid
+    #f3b7a8;
+  background:
+    #fce8e3;
+  color:
+    #c0392b;
+}
+
+.upload-format-hint {
+  margin-top: 8px;
+}
+
+.uploaded-file-status {
+  margin-top: 12px;
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-radius: 8px;
+  background:
+    var(--green-light);
+  color:
+    var(--green-dark);
+  font-size: 13px;
+}
+
+.uploaded-file-remove {
+  appearance: none;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: #c0392b;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.upload-check-message {
+  margin-top: 10px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 12px;
+}
+
+.upload-check-message[data-status="good"] {
+  background: #edf2ed;
+  color: #3e5a3e;
+}
+
+.upload-check-message[data-status="warning"],
+.upload-check-message[data-status="manual-check"] {
+  background: #fff3d8;
+  color: #8a681e;
+}
+
+.upload-check-message[data-status="error"] {
+  background: #fce8e3;
+  color: #c0392b;
+}
+
+.design-error {
+  margin-top: 16px;
+  color: #c0392b;
+  font-size: 13px;
+}
+
 @media (max-width: 900px) {
   .canvas-view-toolbar {
-    align-items: stretch;
-    flex-direction: column;
+    grid-template-columns: 1fr;
   }
 
   .canvas-view-toolbar-main {
@@ -312,9 +475,8 @@
     flex-direction: column;
   }
 
-  .canvas-view-note {
-    flex-basis: auto;
-    text-align: left;
+  .canvas-view-toolbar-actions {
+    justify-content: flex-start;
   }
 
   #layer-panel {
@@ -332,6 +494,14 @@
 }
 
 @media (max-width: 640px) {
+  .canvas-view-tabs {
+    width: 100%;
+  }
+
+  .canvas-view-tab {
+    flex: 1 1 auto;
+  }
+
   .product-preview-stage,
   .upload-preview-column
   .product-preview-stage {
