@@ -1,9 +1,7 @@
 /**
  * flow.js
- * SPA router + klikbare progress bar
- * Progressbar + sessie volledig gereset na afronding bestelling.
- * Stap 3 Ontwerp wordt geblokkeerd wanneer gekozen is voor Laat ons ontwerpen.
- * Wacht op DS.init() voordat de flow rendert, zodat producten uit Supabase beschikbaar zijn.
+ * SPA-router met klikbare voortgangsbalk.
+ * Wacht op databronnen en opgeslagen ontwerpdata voordat een stap wordt gerenderd.
  */
 
 const STEPS = [
@@ -18,6 +16,7 @@ let currentStep = 0;
 let highestStep = 0;
 let flowInitialized = false;
 let isNavigating = false;
+let pendingNavigationHash = null;
 
 async function initCustomerFlow() {
   if (flowInitialized) {
@@ -33,6 +32,15 @@ async function initCustomerFlow() {
   if (typeof DS !== 'undefined' && typeof DS.seedDemoData === 'function') {
     DS.seedDemoData();
   }
+
+  if (
+    typeof Session !== 'undefined' &&
+    typeof Session.hydrateDesign === 'function'
+  ) {
+    await Session.hydrateDesign();
+  }
+
+  synchronizeHighestStepFromSession();
 
   flowInitialized = true;
 }
@@ -56,10 +64,63 @@ function showInitialLoadingState() {
   `;
 }
 
+function synchronizeHighestStepFromSession() {
+  if (typeof Session === 'undefined') {
+    highestStep = Math.max(
+      highestStep,
+      0
+    );
+
+    return;
+  }
+
+  const product = Session.getProduct();
+  const options = Session.getOptions();
+  const design = Session.getDesign();
+  const wensen = Session.getWensen();
+
+  let derivedHighestStep = 0;
+
+  if (product) {
+    derivedHighestStep = 1;
+  }
+
+  if (product && options) {
+    derivedHighestStep =
+      options.designChoice === 'laat-ontwerpen'
+        ? 3
+        : 2;
+  }
+
+  if (
+    product &&
+    options?.designChoice !== 'laat-ontwerpen' &&
+    design
+  ) {
+    derivedHighestStep = 4;
+  }
+
+  if (
+    product &&
+    options?.designChoice === 'laat-ontwerpen' &&
+    wensen
+  ) {
+    derivedHighestStep = 4;
+  }
+
+  highestStep = Math.max(
+    highestStep,
+    derivedHighestStep
+  );
+}
+
 function canNavigateToStep(hash) {
   const options = Session.getOptions();
 
-  if (hash === 'design' && options?.designChoice === 'laat-ontwerpen') {
+  if (
+    hash === 'design' &&
+    options?.designChoice === 'laat-ontwerpen'
+  ) {
     return false;
   }
 
@@ -69,138 +130,235 @@ function canNavigateToStep(hash) {
 function getFallbackStep(hash) {
   const options = Session.getOptions();
 
-  if (hash === 'design' && options?.designChoice === 'laat-ontwerpen') {
+  if (
+    hash === 'design' &&
+    options?.designChoice === 'laat-ontwerpen'
+  ) {
     return 'wensen';
   }
 
   return 'select';
 }
 
+function normalizeNavigationTarget(hash) {
+  const requestedHash = hash || 'select';
+
+  const requestedIndex = STEPS.findIndex(
+    step => step.hash === requestedHash
+  );
+
+  if (requestedIndex === -1) {
+    return {
+      hash: 'select',
+      index: 0,
+    };
+  }
+
+  if (!canNavigateToStep(requestedHash)) {
+    const fallbackHash = getFallbackStep(requestedHash);
+
+    const fallbackIndex = STEPS.findIndex(
+      step => step.hash === fallbackHash
+    );
+
+    if (
+      fallbackIndex !== -1 &&
+      fallbackIndex <= highestStep
+    ) {
+      return {
+        hash: fallbackHash,
+        index: fallbackIndex,
+      };
+    }
+
+    return {
+      hash: 'options',
+      index: 1,
+    };
+  }
+
+  return {
+    hash: requestedHash,
+    index: requestedIndex,
+  };
+}
+
+async function renderNavigationTarget(hash) {
+  if (!flowInitialized) {
+    await initCustomerFlow();
+  }
+
+  if (
+    typeof Session !== 'undefined' &&
+    typeof Session.hydrateDesign === 'function'
+  ) {
+    await Session.hydrateDesign();
+  }
+
+  synchronizeHighestStepFromSession();
+
+  const target = normalizeNavigationTarget(hash);
+
+  if (target.index > highestStep) {
+    return;
+  }
+
+  currentStep = target.index;
+
+  document
+    .querySelectorAll('.flow-page')
+    .forEach(element => {
+      element.classList.remove('active');
+    });
+
+  const pageElement = document.getElementById(
+    `page-${target.hash}`
+  );
+
+  if (pageElement) {
+    pageElement.classList.add('active');
+  }
+
+  await STEPS[target.index].render();
+
+  renderProgressBar(
+    target.index
+  );
+
+  window.scrollTo({
+    top: 0,
+    behavior: 'smooth',
+  });
+
+  history.replaceState(
+    null,
+    '',
+    `#${target.hash}`
+  );
+}
+
 async function navigate(hash) {
+  const targetHash = hash || 'select';
+
   if (isNavigating) {
+    pendingNavigationHash = targetHash;
     return;
   }
 
   isNavigating = true;
 
   try {
-    if (!flowInitialized) {
-      await initCustomerFlow();
+    let nextHash = targetHash;
+
+    while (nextHash) {
+      pendingNavigationHash = null;
+
+      await renderNavigationTarget(
+        nextHash
+      );
+
+      nextHash = pendingNavigationHash;
     }
-
-    const targetHash = hash || 'select';
-    const idx = STEPS.findIndex(step => step.hash === targetHash);
-
-    if (idx === -1) {
-      await navigate('select');
-      return;
-    }
-
-    if (!canNavigateToStep(targetHash)) {
-      const fallbackHash = getFallbackStep(targetHash);
-      const fallbackIdx = STEPS.findIndex(step => step.hash === fallbackHash);
-
-      if (fallbackIdx !== -1 && fallbackIdx <= highestStep) {
-        await navigate(fallbackHash);
-        return;
-      }
-
-      await navigate('options');
-      return;
-    }
-
-    if (idx > highestStep) {
-      return;
-    }
-
-    currentStep = idx;
-
-    document.querySelectorAll('.flow-page').forEach(el => {
-      el.classList.remove('active');
-    });
-
-    const pageEl = document.getElementById(`page-${targetHash}`);
-
-    if (pageEl) {
-      pageEl.classList.add('active');
-    }
-
-    await STEPS[idx].render();
-    renderProgressBar(idx);
-
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-    history.replaceState(null, '', `#${targetHash}`);
   } finally {
     isNavigating = false;
   }
 }
 
 async function navigateTo(hash) {
-  const idx = STEPS.findIndex(step => step.hash === hash);
+  const index = STEPS.findIndex(
+    step => step.hash === hash
+  );
 
-  if (idx === -1) {
+  if (index === -1) {
     return;
   }
 
   if (!canNavigateToStep(hash)) {
     const fallbackHash = getFallbackStep(hash);
-    const fallbackIdx = STEPS.findIndex(step => step.hash === fallbackHash);
 
-    if (fallbackIdx !== -1 && fallbackIdx > highestStep) {
-      highestStep = fallbackIdx;
+    const fallbackIndex = STEPS.findIndex(
+      step => step.hash === fallbackHash
+    );
+
+    if (
+      fallbackIndex !== -1 &&
+      fallbackIndex > highestStep
+    ) {
+      highestStep = fallbackIndex;
     }
 
-    await navigate(fallbackHash);
+    await navigate(
+      fallbackHash
+    );
+
     return;
   }
 
-  if (idx > highestStep) {
-    highestStep = idx;
+  if (index > highestStep) {
+    highestStep = index;
   }
 
-  await navigate(hash);
+  await navigate(
+    hash
+  );
 }
 
 async function resetFlow() {
   currentStep = 0;
   highestStep = 0;
+  pendingNavigationHash = null;
 
   if (typeof Session !== 'undefined') {
-    Session.clear();
+    await Promise.resolve(
+      Session.clear()
+    );
   }
 
-  if (typeof fabricCanvas !== 'undefined' && fabricCanvas) {
+  if (
+    typeof fabricCanvas !== 'undefined' &&
+    fabricCanvas
+  ) {
     try {
       fabricCanvas.dispose();
     } catch {
-      // Fabric opruimen mag stil falen bij reset.
+      // Een reeds opgeruimd Fabric-canvas mag een flowreset niet blokkeren.
     }
   }
 
   window.fabricCanvas = null;
 
-  const progressWrap = document.querySelector('.progress-wrap');
+  const progressWrap = document.querySelector(
+    '.progress-wrap'
+  );
 
   if (progressWrap) {
     progressWrap.style.display = '';
   }
 
-  document.querySelectorAll('.flow-page').forEach(el => {
-    el.classList.remove('active');
-  });
+  document
+    .querySelectorAll('.flow-page')
+    .forEach(element => {
+      element.classList.remove('active');
+    });
 
-  await navigateTo('select');
+  await navigateTo(
+    'select'
+  );
 }
 
-function renderProgressBar(activeIdx) {
-  const bar = document.getElementById('progress-bar');
+function renderProgressBar(activeIndex) {
+  const bar = document.getElementById(
+    'progress-bar'
+  );
 
   if (!bar) {
     return;
   }
 
   const options = Session.getOptions();
-  const showWensen = options?.designChoice === 'laat-ontwerpen';
+
+  const showWensen =
+    options?.designChoice === 'laat-ontwerpen';
 
   const visibleSteps = STEPS.filter(step => {
     if (step.hash === 'wensen') {
@@ -210,57 +368,109 @@ function renderProgressBar(activeIdx) {
     return true;
   });
 
-  bar.innerHTML = visibleSteps.map((step, i) => {
-    const globalIdx = STEPS.findIndex(item => item.hash === step.hash);
-    const isDone = globalIdx < activeIdx;
-    const isActive = globalIdx === activeIdx;
-    const isVisited = globalIdx < highestStep || isDone;
-    const isBlocked = !canNavigateToStep(step.hash);
-    const cls = [
-      isDone ? 'done' : '',
-      isActive ? 'active' : '',
-      isBlocked ? 'disabled' : '',
-    ].filter(Boolean).join(' ');
+  bar.innerHTML = visibleSteps
+    .map((step, visibleIndex) => {
+      const globalIndex = STEPS.findIndex(
+        item => item.hash === step.hash
+      );
 
-    const clickable = isVisited && !isActive && !isBlocked;
+      const isDone =
+        globalIndex < activeIndex;
 
-    const line = i < visibleSteps.length - 1
-      ? `<div class="step-line ${isDone ? 'done' : ''}"></div>`
-      : '';
+      const isActive =
+        globalIndex === activeIndex;
 
-    return `
-      <div class="progress-step ${cls}">
-        <div class="step-wrap">
-          <button class="step-circle ${clickable ? 'step-clickable' : ''}"
-                  type="button"
-                  data-step="${escHtml(step.hash)}"
-                  ${clickable ? `title="Naar ${escHtml(step.label)}"` : ''}
-                  ${isBlocked ? 'aria-disabled="true"' : ''}>
-            ${isDone ? checkIcon() : i + 1}
-          </button>
-          <div class="step-label">${escHtml(step.label)}</div>
+      const isVisited =
+        globalIndex < highestStep ||
+        isDone;
+
+      const isBlocked =
+        !canNavigateToStep(step.hash);
+
+      const className = [
+        isDone ? 'done' : '',
+        isActive ? 'active' : '',
+        isBlocked ? 'disabled' : '',
+      ]
+        .filter(Boolean)
+        .join(' ');
+
+      const clickable =
+        isVisited &&
+        !isActive &&
+        !isBlocked;
+
+      const line =
+        visibleIndex < visibleSteps.length - 1
+          ? `<div class="step-line ${isDone ? 'done' : ''}"></div>`
+          : '';
+
+      return `
+        <div class="progress-step ${className}">
+          <div class="step-wrap">
+            <button
+              class="step-circle ${clickable ? 'step-clickable' : ''}"
+              type="button"
+              data-step="${escHtml(step.hash)}"
+              ${clickable ? `title="Naar ${escHtml(step.label)}"` : ''}
+              ${isBlocked ? 'aria-disabled="true"' : ''}
+            >
+              ${isDone ? checkIcon() : visibleIndex + 1}
+            </button>
+
+            <div class="step-label">
+              ${escHtml(step.label)}
+            </div>
+          </div>
         </div>
-      </div>${line}
-    `;
-  }).join('');
 
-  bar.querySelectorAll('.step-circle[data-step]').forEach(button => {
-    button.addEventListener('click', async () => {
-      const step = button.dataset.step;
+        ${line}
+      `;
+    })
+    .join('');
 
-      if (!step || button.getAttribute('aria-disabled') === 'true') {
-        return;
-      }
+  bar
+    .querySelectorAll('.step-circle[data-step]')
+    .forEach(button => {
+      button.addEventListener(
+        'click',
+        async () => {
+          const step = button.dataset.step;
 
-      await navigate(step);
+          if (
+            !step ||
+            button.getAttribute('aria-disabled') === 'true'
+          ) {
+            return;
+          }
+
+          await navigate(
+            step
+          );
+        }
+      );
     });
-  });
 }
 
 function checkIcon() {
-  return `<svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <path d="M2 7L5.5 10.5L12 3.5" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-  </svg>`;
+  return `
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 14 14"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+    >
+      <path
+        d="M2 7L5.5 10.5L12 3.5"
+        stroke="white"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      />
+    </svg>
+  `;
 }
 
 function escHtml(value) {
@@ -270,14 +480,27 @@ function escHtml(value) {
     .replace(/>/g, '&gt;');
 }
 
-document.addEventListener('DOMContentLoaded', async () => {
-  const hash = location.hash.replace('#', '') || 'select';
-  await navigate(hash);
-});
+document.addEventListener(
+  'DOMContentLoaded',
+  async () => {
+    const hash =
+      location.hash.replace('#', '') ||
+      'select';
 
-window.addEventListener('hashchange', async () => {
-  await navigate(location.hash.replace('#', ''));
-});
+    await navigate(
+      hash
+    );
+  }
+);
+
+window.addEventListener(
+  'hashchange',
+  async () => {
+    await navigate(
+      location.hash.replace('#', '')
+    );
+  }
+);
 
 window.navigate = navigate;
 window.navigateTo = navigateTo;

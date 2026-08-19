@@ -21,6 +21,7 @@ const ProductPreview = (() => {
         '_isMargin',
         '_isPreviewGuide',
         '_isCenterGuide',
+        '_isDesignViewGuide',
     ];
 
     const PREVIEW_TYPES = new Set([
@@ -33,6 +34,11 @@ const ProductPreview = (() => {
         'cover',
         'contain',
         'stretch',
+    ]);
+
+    const SOURCE_ORIENTATIONS = new Set([
+        'technical',
+        'editor',
     ]);
 
     const imageCache = new Map();
@@ -54,28 +60,57 @@ const ProductPreview = (() => {
     }
 
     function clamp(value, min, max) {
-        return Math.min(max, Math.max(min, value));
+        return Math.min(
+            max,
+            Math.max(min, value)
+        );
     }
 
     function normalizeRotation(value) {
-        const rotation = finiteNumber(value, 0);
+        const rotation = finiteNumber(
+            value,
+            0
+        );
 
-        return ((rotation % 360) + 360) % 360;
+        return (
+            (
+                rotation %
+                360
+            ) +
+            360
+        ) %
+        360;
     }
 
     function normalizeFile(file) {
-        if (typeof file === 'string' && file.trim()) {
+        if (
+            typeof file === 'string' &&
+            file.trim()
+        ) {
             return {
-                name: 'Afbeelding',
-                type: file.startsWith('data:image/webp')
-                    ? 'image/webp'
-                    : 'image/png',
-                size: 0,
-                dataURL: file,
+                name:
+                    'Afbeelding',
+
+                type:
+                    file.startsWith(
+                        'data:image/webp'
+                    )
+                        ? 'image/webp'
+                        : 'image/png',
+
+                size:
+                    0,
+
+                dataURL:
+                    file,
             };
         }
 
-        if (!file || typeof file !== 'object') {
+        if (
+            !file ||
+            typeof file !==
+            'object'
+        ) {
             return null;
         }
 
@@ -91,12 +126,27 @@ const ProductPreview = (() => {
         }
 
         return {
-            name: String(file.name || 'Afbeelding'),
-            type: String(file.type || 'image/png'),
-            size: Math.max(
-                0,
-                finiteNumber(file.size, 0)
-            ),
+            name:
+                String(
+                    file.name ||
+                    'Afbeelding'
+                ),
+
+            type:
+                String(
+                    file.type ||
+                    'image/png'
+                ),
+
+            size:
+                Math.max(
+                    0,
+                    finiteNumber(
+                        file.size,
+                        0
+                    )
+                ),
+
             dataURL,
         };
     }
@@ -106,86 +156,119 @@ const ProductPreview = (() => {
         spec = {}
     ) {
         return {
-            x_mm: finiteNumber(
-                sourceZone.x_mm,
-                0
-            ),
+            x_mm:
+                finiteNumber(
+                    sourceZone.x_mm,
+                    0
+                ),
 
-            y_mm: finiteNumber(
-                sourceZone.y_mm,
-                0
-            ),
+            y_mm:
+                finiteNumber(
+                    sourceZone.y_mm,
+                    0
+                ),
 
-            width_mm: positiveNumber(
-                sourceZone.width_mm,
+            width_mm:
                 positiveNumber(
-                    spec.finishWidthMm,
-                    100
-                )
-            ),
+                    sourceZone.width_mm,
 
-            height_mm: positiveNumber(
-                sourceZone.height_mm,
+                    positiveNumber(
+                        spec.finishWidthMm,
+                        100
+                    )
+                ),
+
+            height_mm:
                 positiveNumber(
-                    spec.finishHeightMm,
-                    70
-                )
-            ),
+                    sourceZone.height_mm,
 
-            rotation: normalizeRotation(
-                sourceZone.rotation
-            ),
+                    positiveNumber(
+                        spec.finishHeightMm,
+                        70
+                    )
+                ),
 
-            flipX: Boolean(
-                sourceZone.flipX
-            ),
+            rotation:
+                normalizeRotation(
+                    sourceZone.rotation
+                ),
 
-            flipY: Boolean(
-                sourceZone.flipY
-            ),
+            flipX:
+                Boolean(
+                    sourceZone.flipX
+                ),
+
+            flipY:
+                Boolean(
+                    sourceZone.flipY
+                ),
         };
     }
 
     function normalizeSlot(slot = {}) {
         return {
-            xPercent: clamp(
-                finiteNumber(slot.xPercent, 20),
-                -200,
-                300
-            ),
+            xPercent:
+                clamp(
+                    finiteNumber(
+                        slot.xPercent,
+                        20
+                    ),
+                    -200,
+                    300
+                ),
 
-            yPercent: clamp(
-                finiteNumber(slot.yPercent, 10),
-                -200,
-                300
-            ),
+            yPercent:
+                clamp(
+                    finiteNumber(
+                        slot.yPercent,
+                        10
+                    ),
+                    -200,
+                    300
+                ),
 
-            widthPercent: clamp(
-                positiveNumber(slot.widthPercent, 60),
-                0.1,
-                400
-            ),
+            widthPercent:
+                clamp(
+                    positiveNumber(
+                        slot.widthPercent,
+                        60
+                    ),
+                    0.1,
+                    400
+                ),
 
-            heightPercent: clamp(
-                positiveNumber(slot.heightPercent, 55),
-                0.1,
-                400
-            ),
+            heightPercent:
+                clamp(
+                    positiveNumber(
+                        slot.heightPercent,
+                        55
+                    ),
+                    0.1,
+                    400
+                ),
 
-            rotation: finiteNumber(
-                slot.rotation,
-                0
-            ),
+            rotation:
+                finiteNumber(
+                    slot.rotation,
+                    0
+                ),
 
-            borderRadius: clamp(
-                finiteNumber(slot.borderRadius, 0),
-                0,
-                50
-            ),
+            borderRadius:
+                clamp(
+                    finiteNumber(
+                        slot.borderRadius,
+                        0
+                    ),
+                    0,
+                    50
+                ),
 
-            fit: SLOT_FITS.has(slot.fit)
-                ? slot.fit
-                : 'cover',
+            fit:
+                SLOT_FITS.has(
+                    slot.fit
+                )
+                    ? slot.fit
+                    : 'cover',
         };
     }
 
@@ -195,38 +278,45 @@ const ProductPreview = (() => {
         spec = {}
     ) {
         return {
-            id: String(
-                view.id ||
-                `view-${index + 1}`
-            ),
+            id:
+                String(
+                    view.id ||
+                    `view-${index + 1}`
+                ),
 
-            label: String(
-                view.label ||
-                `Weergave ${index + 1}`
-            ),
+            label:
+                String(
+                    view.label ||
+                    `Weergave ${index + 1}`
+                ),
 
-            helpText: String(
-                view.helpText ||
-                ''
-            ),
+            helpText:
+                String(
+                    view.helpText ||
+                    ''
+                ),
 
-            sourceZone: normalizeSourceZone(
-                view.sourceZone,
-                spec
-            ),
+            sourceZone:
+                normalizeSourceZone(
+                    view.sourceZone,
+                    spec
+                ),
 
             mockup: {
-                baseImage: normalizeFile(
-                    view.mockup?.baseImage
-                ),
+                baseImage:
+                    normalizeFile(
+                        view.mockup?.baseImage
+                    ),
 
-                overlayImage: normalizeFile(
-                    view.mockup?.overlayImage
-                ),
+                overlayImage:
+                    normalizeFile(
+                        view.mockup?.overlayImage
+                    ),
 
-                slot: normalizeSlot(
-                    view.mockup?.slot
-                ),
+                slot:
+                    normalizeSlot(
+                        view.mockup?.slot
+                    ),
             },
         };
     }
@@ -235,94 +325,116 @@ const ProductPreview = (() => {
         guide = {},
         index = 0
     ) {
-        if (guide.type === 'line') {
+        if (
+            guide.type ===
+            'line'
+        ) {
             return {
-                id: String(
-                    guide.id ||
-                    `guide-line-${index + 1}`
-                ),
+                id:
+                    String(
+                        guide.id ||
+                        `guide-line-${index + 1}`
+                    ),
 
-                type: 'line',
+                type:
+                    'line',
 
-                label: String(
-                    guide.label ||
-                    'Vouwlijn'
-                ),
+                label:
+                    String(
+                        guide.label ||
+                        'Vouwlijn'
+                    ),
 
-                description: String(
-                    guide.description ||
-                    ''
-                ),
+                description:
+                    String(
+                        guide.description ||
+                        ''
+                    ),
 
-                x1_mm: finiteNumber(
-                    guide.x1_mm,
-                    0
-                ),
+                x1_mm:
+                    finiteNumber(
+                        guide.x1_mm,
+                        0
+                    ),
 
-                y1_mm: finiteNumber(
-                    guide.y1_mm,
-                    0
-                ),
+                y1_mm:
+                    finiteNumber(
+                        guide.y1_mm,
+                        0
+                    ),
 
-                x2_mm: finiteNumber(
-                    guide.x2_mm,
-                    0
-                ),
+                x2_mm:
+                    finiteNumber(
+                        guide.x2_mm,
+                        0
+                    ),
 
-                y2_mm: finiteNumber(
-                    guide.y2_mm,
-                    0
-                ),
+                y2_mm:
+                    finiteNumber(
+                        guide.y2_mm,
+                        0
+                    ),
             };
         }
 
         return {
-            id: String(
-                guide.id ||
-                `guide-label-${index + 1}`
-            ),
+            id:
+                String(
+                    guide.id ||
+                    `guide-label-${index + 1}`
+                ),
 
-            type: 'label',
+            type:
+                'label',
 
-            viewId: guide.viewId
-                ? String(guide.viewId)
-                : null,
+            viewId:
+                guide.viewId
+                    ? String(
+                        guide.viewId
+                    )
+                    : null,
 
-            label: String(
-                guide.label ||
-                'Gebied'
-            ),
+            label:
+                String(
+                    guide.label ||
+                    'Gebied'
+                ),
 
-            description: String(
-                guide.description ||
-                ''
-            ),
+            description:
+                String(
+                    guide.description ||
+                    ''
+                ),
 
-            x_mm: finiteNumber(
-                guide.x_mm,
-                0
-            ),
-
-            y_mm: finiteNumber(
-                guide.y_mm,
-                0
-            ),
-
-            width_mm: Math.max(
-                0,
+            x_mm:
                 finiteNumber(
-                    guide.width_mm,
+                    guide.x_mm,
                     0
-                )
-            ),
+                ),
 
-            height_mm: Math.max(
-                0,
+            y_mm:
                 finiteNumber(
-                    guide.height_mm,
+                    guide.y_mm,
                     0
-                )
-            ),
+                ),
+
+            width_mm:
+                Math.max(
+                    0,
+                    finiteNumber(
+                        guide.width_mm,
+                        0
+                    )
+                ),
+
+            height_mm:
+                Math.max(
+                    0,
+                    finiteNumber(
+                        guide.height_mm,
+                        0
+                    )
+                ),
         };
     }
 
@@ -340,42 +452,51 @@ const ProductPreview = (() => {
             );
         }
 
-        const finishWidthMm = positiveNumber(
-            personalisationType.finish_width_mm ||
-            personalisationType.width_mm ||
-            product.finish_width_mm ||
-            product.width_mm,
-            100
-        );
+        const finishWidthMm =
+            positiveNumber(
+                personalisationType.finish_width_mm ||
+                personalisationType.width_mm ||
+                product.finish_width_mm ||
+                product.width_mm,
+                100
+            );
 
-        const finishHeightMm = positiveNumber(
-            personalisationType.finish_height_mm ||
-            personalisationType.height_mm ||
-            product.finish_height_mm ||
-            product.height_mm,
-            70
-        );
+        const finishHeightMm =
+            positiveNumber(
+                personalisationType.finish_height_mm ||
+                personalisationType.height_mm ||
+                product.finish_height_mm ||
+                product.height_mm,
+                70
+            );
 
-        const bleedMm = Math.max(
-            0,
-            finiteNumber(
-                personalisationType.bleed_mm ??
-                product.bleed_mm,
-                3
-            )
-        );
+        const bleedMm =
+            Math.max(
+                0,
+                finiteNumber(
+                    personalisationType.bleed_mm ??
+                    product.bleed_mm,
+                    3
+                )
+            );
 
-        const exportWidthMm = positiveNumber(
-            personalisationType.export_width_mm ||
-            product.export_width_mm,
-            finishWidthMm + bleedMm * 2
-        );
+        const exportWidthMm =
+            positiveNumber(
+                personalisationType.export_width_mm ||
+                product.export_width_mm,
 
-        const exportHeightMm = positiveNumber(
-            personalisationType.export_height_mm ||
-            product.export_height_mm,
-            finishHeightMm + bleedMm * 2
-        );
+                finishWidthMm +
+                bleedMm * 2
+            );
+
+        const exportHeightMm =
+            positiveNumber(
+                personalisationType.export_height_mm ||
+                product.export_height_mm,
+
+                finishHeightMm +
+                bleedMm * 2
+            );
 
         return {
             finishWidthMm,
@@ -384,21 +505,25 @@ const ProductPreview = (() => {
             exportHeightMm,
             bleedMm,
 
-            trimXmm: Math.max(
-                0,
-                (
-                    exportWidthMm -
-                    finishWidthMm
-                ) / 2
-            ),
+            trimXmm:
+                Math.max(
+                    0,
+                    (
+                        exportWidthMm -
+                        finishWidthMm
+                    ) /
+                    2
+                ),
 
-            trimYmm: Math.max(
-                0,
-                (
-                    exportHeightMm -
-                    finishHeightMm
-                ) / 2
-            ),
+            trimYmm:
+                Math.max(
+                    0,
+                    (
+                        exportHeightMm -
+                        finishHeightMm
+                    ) /
+                    2
+                ),
         };
     }
 
@@ -410,55 +535,67 @@ const ProductPreview = (() => {
             personalisationType.preview ||
             {};
 
-        const spec = getPrintSpec(
-            personalisationType,
-            product
-        );
+        const spec =
+            getPrintSpec(
+                personalisationType,
+                product
+            );
 
-        const views = Array.isArray(
-            rawPreview.views
-        )
-            ? rawPreview.views.map(
-                (view, index) => normalizeView(
-                    view,
-                    index,
-                    spec
-                )
+        const views =
+            Array.isArray(
+                rawPreview.views
             )
-            : [];
+                ? rawPreview.views.map(
+                    (
+                        view,
+                        index
+                    ) =>
+                        normalizeView(
+                            view,
+                            index,
+                            spec
+                        )
+                )
+                : [];
 
-        const defaultViewId = views.some(
-            view =>
-                view.id ===
-                rawPreview.defaultViewId
-        )
-            ? rawPreview.defaultViewId
-            : views[0]?.id || null;
+        const defaultViewId =
+            views.some(
+                view =>
+                    view.id ===
+                    rawPreview.defaultViewId
+            )
+                ? rawPreview.defaultViewId
+                : views[0]?.id ||
+                  null;
 
         return {
             enabled:
-                rawPreview.enabled === true &&
+                rawPreview.enabled ===
+                true &&
                 views.length > 0,
 
-            type: PREVIEW_TYPES.has(
-                rawPreview.type
-            )
-                ? rawPreview.type
-                : views.length > 1
-                    ? 'two-sided-toggle'
-                    : 'single-view',
+            type:
+                PREVIEW_TYPES.has(
+                    rawPreview.type
+                )
+                    ? rawPreview.type
+                    : views.length > 1
+                        ? 'two-sided-toggle'
+                        : 'single-view',
 
             defaultViewId,
-
             views,
 
-            canvasGuides: Array.isArray(
-                rawPreview.canvasGuides
-            )
-                ? rawPreview.canvasGuides.map(
-                    normalizeCanvasGuide
+            canvasGuides:
+                Array.isArray(
+                    rawPreview.canvasGuides
                 )
-                : [],
+                    ? rawPreview
+                        .canvasGuides
+                        .map(
+                            normalizeCanvasGuide
+                        )
+                    : [],
         };
     }
 
@@ -467,21 +604,27 @@ const ProductPreview = (() => {
         viewId = null
     ) {
         if (
-            !Array.isArray(config?.views) ||
+            !Array.isArray(
+                config?.views
+            ) ||
             !config.views.length
         ) {
             return null;
         }
 
-        return config.views.find(
-            view => view.id === viewId
-        ) ||
+        return (
+            config.views.find(
+                view =>
+                    view.id ===
+                    viewId
+            ) ||
             config.views.find(
                 view =>
                     view.id ===
                     config.defaultViewId
             ) ||
-            config.views[0];
+            config.views[0]
+        );
     }
 
     function getImageSource(
@@ -494,55 +637,81 @@ const ProductPreview = (() => {
             return fileOrDataURL;
         }
 
-        return fileOrDataURL?.dataURL ||
+        return (
+            fileOrDataURL?.dataURL ||
             fileOrDataURL?.url ||
             fileOrDataURL?.src ||
-            '';
+            ''
+        );
     }
 
     function loadImage(
         fileOrDataURL
     ) {
-        const src = getImageSource(
-            fileOrDataURL
-        );
+        const src =
+            getImageSource(
+                fileOrDataURL
+            );
 
         if (!src) {
-            return Promise.resolve(null);
+            return Promise.resolve(
+                null
+            );
         }
 
-        if (imageCache.has(src)) {
-            return imageCache.get(src);
+        if (
+            imageCache.has(
+                src
+            )
+        ) {
+            return imageCache.get(
+                src
+            );
         }
 
         const imagePromise =
             new Promise(
-                (resolve, reject) => {
-                    const image = new Image();
+                (
+                    resolve,
+                    reject
+                ) => {
+                    const image =
+                        new Image();
 
-                    image.onload = () => {
-                        resolve(image);
-                    };
+                    image.onload =
+                        () => {
+                            resolve(
+                                image
+                            );
+                        };
 
-                    image.onerror = () => {
-                        imageCache.delete(src);
+                    image.onerror =
+                        () => {
+                            imageCache.delete(
+                                src
+                            );
 
-                        reject(
-                            new Error(
-                                'Previewafbeelding kon niet worden geladen.'
-                            )
-                        );
-                    };
+                            reject(
+                                new Error(
+                                    'Previewafbeelding kon niet worden geladen.'
+                                )
+                            );
+                        };
 
                     if (
-                        !src.startsWith('data:') &&
-                        !src.startsWith('blob:')
+                        !src.startsWith(
+                            'data:'
+                        ) &&
+                        !src.startsWith(
+                            'blob:'
+                        )
                     ) {
                         image.crossOrigin =
                             'anonymous';
                     }
 
-                    image.src = src;
+                    image.src =
+                        src;
                 }
             );
 
@@ -563,15 +732,21 @@ const ProductPreview = (() => {
                 'canvas'
             );
 
-        canvas.width = Math.max(
-            1,
-            Math.round(width)
-        );
+        canvas.width =
+            Math.max(
+                1,
+                Math.round(
+                    width
+                )
+            );
 
-        canvas.height = Math.max(
-            1,
-            Math.round(height)
-        );
+        canvas.height =
+            Math.max(
+                1,
+                Math.round(
+                    height
+                )
+            );
 
         return canvas;
     }
@@ -619,7 +794,9 @@ const ProductPreview = (() => {
             );
 
         const context =
-            transformed.getContext('2d');
+            transformed.getContext(
+                '2d'
+            );
 
         context.imageSmoothingEnabled =
             true;
@@ -641,8 +818,13 @@ const ProductPreview = (() => {
         );
 
         context.scale(
-            sourceZone.flipX ? -1 : 1,
-            sourceZone.flipY ? -1 : 1
+            sourceZone.flipX
+                ? -1
+                : 1,
+
+            sourceZone.flipY
+                ? -1
+                : 1
         );
 
         context.drawImage(
@@ -659,10 +841,16 @@ const ProductPreview = (() => {
     function cropSourceZone(
         source,
         sourceZone,
-        spec
+        spec,
+        {
+            sourceOrientation =
+                'technical',
+        } = {}
     ) {
         const dimensions =
-            getSourceDimensions(source);
+            getSourceDimensions(
+                source
+            );
 
         if (
             !dimensions.width ||
@@ -674,6 +862,7 @@ const ProductPreview = (() => {
         const exportWidthMm =
             positiveNumber(
                 spec.exportWidthMm,
+
                 positiveNumber(
                     spec.finishWidthMm,
                     100
@@ -683,6 +872,7 @@ const ProductPreview = (() => {
         const exportHeightMm =
             positiveNumber(
                 spec.exportHeightMm,
+
                 positiveNumber(
                     spec.finishHeightMm,
                     70
@@ -701,55 +891,69 @@ const ProductPreview = (() => {
                 0
             );
 
-        const sourceX = (
+        const sourceX =
             (
-                trimXmm +
-                sourceZone.x_mm
-            ) /
-            exportWidthMm
-        ) * dimensions.width;
+                (
+                    trimXmm +
+                    sourceZone.x_mm
+                ) /
+                exportWidthMm
+            ) *
+            dimensions.width;
 
-        const sourceY = (
+        const sourceY =
             (
-                trimYmm +
-                sourceZone.y_mm
-            ) /
-            exportHeightMm
-        ) * dimensions.height;
+                (
+                    trimYmm +
+                    sourceZone.y_mm
+                ) /
+                exportHeightMm
+            ) *
+            dimensions.height;
 
-        const sourceWidth = (
-            sourceZone.width_mm /
-            exportWidthMm
-        ) * dimensions.width;
+        const sourceWidth =
+            (
+                sourceZone.width_mm /
+                exportWidthMm
+            ) *
+            dimensions.width;
 
-        const sourceHeight = (
-            sourceZone.height_mm /
-            exportHeightMm
-        ) * dimensions.height;
+        const sourceHeight =
+            (
+                sourceZone.height_mm /
+                exportHeightMm
+            ) *
+            dimensions.height;
 
-        const left = clamp(
-            sourceX,
-            0,
-            dimensions.width
-        );
+        const left =
+            clamp(
+                sourceX,
+                0,
+                dimensions.width
+            );
 
-        const top = clamp(
-            sourceY,
-            0,
-            dimensions.height
-        );
+        const top =
+            clamp(
+                sourceY,
+                0,
+                dimensions.height
+            );
 
-        const right = clamp(
-            sourceX + sourceWidth,
-            0,
-            dimensions.width
-        );
+        const right =
+            clamp(
+                sourceX +
+                sourceWidth,
+                0,
+                dimensions.width
+            );
 
-        const bottom = clamp(
-            sourceY + sourceHeight,
-            0,
-            dimensions.height
-        );
+        const bottom =
+            clamp(
+                sourceY +
+                sourceHeight,
+                0,
+                dimensions.height
+            );
 
         if (
             right <= left ||
@@ -765,7 +969,9 @@ const ProductPreview = (() => {
             );
 
         const context =
-            croppedCanvas.getContext('2d');
+            croppedCanvas.getContext(
+                '2d'
+            );
 
         context.imageSmoothingEnabled =
             true;
@@ -785,9 +991,21 @@ const ProductPreview = (() => {
             croppedCanvas.height
         );
 
-        return applySourceTransform(
-            croppedCanvas,
-            sourceZone
+        const normalizedSourceOrientation =
+            SOURCE_ORIENTATIONS.has(
+                sourceOrientation
+            )
+                ? sourceOrientation
+                : 'technical';
+
+        return (
+            normalizedSourceOrientation ===
+            'technical'
+                ? applySourceTransform(
+                    croppedCanvas,
+                    sourceZone
+                )
+                : croppedCanvas
         );
     }
 
@@ -799,67 +1017,90 @@ const ProductPreview = (() => {
         height,
         radius
     ) {
-        const safeRadius = clamp(
-            radius,
-            0,
-            Math.min(
-                width,
-                height
-            ) / 2
-        );
+        const safeRadius =
+            clamp(
+                radius,
+                0,
+                Math.min(
+                    width,
+                    height
+                ) /
+                2
+            );
 
         context.beginPath();
 
         context.moveTo(
-            x + safeRadius,
+            x +
+            safeRadius,
             y
         );
 
         context.lineTo(
-            x + width - safeRadius,
+            x +
+            width -
+            safeRadius,
             y
         );
 
         context.quadraticCurveTo(
-            x + width,
+            x +
+            width,
             y,
-            x + width,
-            y + safeRadius
+            x +
+            width,
+            y +
+            safeRadius
         );
 
         context.lineTo(
-            x + width,
-            y + height - safeRadius
+            x +
+            width,
+            y +
+            height -
+            safeRadius
         );
 
         context.quadraticCurveTo(
-            x + width,
-            y + height,
-            x + width - safeRadius,
-            y + height
+            x +
+            width,
+            y +
+            height,
+            x +
+            width -
+            safeRadius,
+            y +
+            height
         );
 
         context.lineTo(
-            x + safeRadius,
-            y + height
+            x +
+            safeRadius,
+            y +
+            height
         );
 
         context.quadraticCurveTo(
             x,
-            y + height,
+            y +
+            height,
             x,
-            y + height - safeRadius
+            y +
+            height -
+            safeRadius
         );
 
         context.lineTo(
             x,
-            y + safeRadius
+            y +
+            safeRadius
         );
 
         context.quadraticCurveTo(
             x,
             y,
-            x + safeRadius,
+            x +
+            safeRadius,
             y
         );
 
@@ -882,7 +1123,10 @@ const ProductPreview = (() => {
             return null;
         }
 
-        if (fit === 'stretch') {
+        if (
+            fit ===
+            'stretch'
+        ) {
             return {
                 x: 0,
                 y: 0,
@@ -892,7 +1136,8 @@ const ProductPreview = (() => {
         }
 
         const scale =
-            fit === 'contain'
+            fit ===
+            'contain'
                 ? Math.min(
                     targetWidth /
                     sourceWidth,
@@ -909,23 +1154,27 @@ const ProductPreview = (() => {
                 );
 
         const width =
-            sourceWidth * scale;
+            sourceWidth *
+            scale;
 
         const height =
-            sourceHeight * scale;
+            sourceHeight *
+            scale;
 
         return {
             x:
                 (
                     targetWidth -
                     width
-                ) / 2,
+                ) /
+                2,
 
             y:
                 (
                     targetHeight -
                     height
-                ) / 2,
+                ) /
+                2,
 
             width,
             height,
@@ -1049,7 +1298,8 @@ const ProductPreview = (() => {
                 Math.min(
                     width,
                     height
-                ) * 0.055
+                ) *
+                0.055
             );
 
         const radius =
@@ -1057,7 +1307,8 @@ const ProductPreview = (() => {
                 Math.min(
                     width,
                     height
-                ) * 0.04
+                ) *
+                0.04
             );
 
         context.fillStyle =
@@ -1069,15 +1320,18 @@ const ProductPreview = (() => {
         context.lineWidth =
             Math.max(
                 1,
-                width / 500
+                width /
+                500
             );
 
         createRoundedRectPath(
             context,
             inset,
             inset,
-            width - inset * 2,
-            height - inset * 2,
+            width -
+            inset * 2,
+            height -
+            inset * 2,
             radius
         );
 
@@ -1090,16 +1344,17 @@ const ProductPreview = (() => {
         baseImage,
         requestedWidth
     ) {
-        let width = Math.max(
-            MIN_CANVAS_WIDTH,
+        let width =
+            Math.max(
+                MIN_CANVAS_WIDTH,
 
-            Math.round(
-                finiteNumber(
-                    requestedWidth,
-                    DEFAULT_CANVAS_WIDTH
+                Math.round(
+                    finiteNumber(
+                        requestedWidth,
+                        DEFAULT_CANVAS_WIDTH
+                    )
                 )
-            )
-        );
+            );
 
         const baseWidth =
             baseImage?.naturalWidth ||
@@ -1118,11 +1373,12 @@ const ProductPreview = (() => {
             baseWidth > 0 &&
             baseHeight > 0
         ) {
-            height = Math.round(
-                width *
-                baseHeight /
-                baseWidth
-            );
+            height =
+                Math.round(
+                    width *
+                    baseHeight /
+                    baseWidth
+                );
         }
 
         if (
@@ -1133,13 +1389,15 @@ const ProductPreview = (() => {
                 MAX_CANVAS_HEIGHT /
                 height;
 
-            width = Math.max(
-                MIN_CANVAS_WIDTH,
+            width =
+                Math.max(
+                    MIN_CANVAS_WIDTH,
 
-                Math.round(
-                    width * scale
-                )
-            );
+                    Math.round(
+                        width *
+                        scale
+                    )
+                );
 
             height =
                 MAX_CANVAS_HEIGHT;
@@ -1165,6 +1423,7 @@ const ProductPreview = (() => {
             object?._isMargin ||
             object?._isPreviewGuide ||
             object?._isCenterGuide ||
+            object?._isDesignViewGuide ||
             customPredicate?.(object)
         );
     }
@@ -1178,15 +1437,22 @@ const ProductPreview = (() => {
             typeof fabricCanvas.clone !==
             'function'
         ) {
-            return Promise.resolve(null);
+            return Promise.resolve(
+                null
+            );
         }
 
         return new Promise(
-            (resolve, reject) => {
+            (
+                resolve,
+                reject
+            ) => {
                 try {
                     fabricCanvas.clone(
                         clonedCanvas => {
-                            if (!clonedCanvas) {
+                            if (
+                                !clonedCanvas
+                            ) {
                                 reject(
                                     new Error(
                                         'Fabric-canvas kon niet worden gekloond.'
@@ -1229,7 +1495,14 @@ const ProductPreview = (() => {
                                 });
 
                                 clonedCanvas.setViewportTransform(
-                                    [1, 0, 0, 1, 0, 0]
+                                    [
+                                        1,
+                                        0,
+                                        0,
+                                        1,
+                                        0,
+                                        0,
+                                    ]
                                 );
 
                                 clonedCanvas.discardActiveObject();
@@ -1241,19 +1514,30 @@ const ProductPreview = (() => {
                                         fabricCanvas.getHeight()
                                     );
 
-                                sourceCanvas
-                                    .getContext('2d')
-                                    .drawImage(
-                                        clonedCanvas.lowerCanvasEl,
-                                        0,
-                                        0,
-                                        sourceCanvas.width,
-                                        sourceCanvas.height
+                                const sourceContext =
+                                    sourceCanvas.getContext(
+                                        '2d'
                                     );
+
+                                sourceContext.imageSmoothingEnabled =
+                                    true;
+
+                                sourceContext.imageSmoothingQuality =
+                                    'high';
+
+                                sourceContext.drawImage(
+                                    clonedCanvas.lowerCanvasEl,
+                                    0,
+                                    0,
+                                    sourceCanvas.width,
+                                    sourceCanvas.height
+                                );
 
                                 clonedCanvas.dispose();
 
-                                resolve(sourceCanvas);
+                                resolve(
+                                    sourceCanvas
+                                );
                             } catch (error) {
                                 clonedCanvas.dispose();
                                 reject(error);
@@ -1276,8 +1560,11 @@ const ProductPreview = (() => {
         personalisationType = {},
         viewId = null,
         width = DEFAULT_CANVAS_WIDTH,
+        sourceOrientation = 'technical',
     } = {}) {
-        if (!targetCanvas?.getContext) {
+        if (
+            !targetCanvas?.getContext
+        ) {
             throw new Error(
                 'Een geldig doelcanvas is verplicht voor de productpreview.'
             );
@@ -1296,7 +1583,9 @@ const ProductPreview = (() => {
             );
 
         const context =
-            targetCanvas.getContext('2d');
+            targetCanvas.getContext(
+                '2d'
+            );
 
         if (!view) {
             targetCanvas.width =
@@ -1324,15 +1613,22 @@ const ProductPreview = (() => {
         const [
             baseImage,
             overlayImage,
-        ] = await Promise.all([
-            loadImage(
-                view.mockup.baseImage
-            ).catch(() => null),
+        ] =
+            await Promise.all([
+                loadImage(
+                    view.mockup.baseImage
+                ).catch(
+                    () =>
+                        null
+                ),
 
-            loadImage(
-                view.mockup.overlayImage
-            ).catch(() => null),
-        ]);
+                loadImage(
+                    view.mockup.overlayImage
+                ).catch(
+                    () =>
+                        null
+                ),
+            ]);
 
         setTargetCanvasDimensions(
             targetCanvas,
@@ -1380,7 +1676,10 @@ const ProductPreview = (() => {
                 ? cropSourceZone(
                     source,
                     view.sourceZone,
-                    spec
+                    spec,
+                    {
+                        sourceOrientation,
+                    }
                 )
                 : null;
 
@@ -1406,9 +1705,19 @@ const ProductPreview = (() => {
         return {
             config,
             view,
-            sourceCanvas: croppedSource,
-            hasBaseImage: Boolean(baseImage),
-            hasOverlayImage: Boolean(overlayImage),
+            sourceCanvas:
+                croppedSource,
+
+            hasBaseImage:
+                Boolean(
+                    baseImage
+                ),
+
+            hasOverlayImage:
+                Boolean(
+                    overlayImage
+                ),
+
             hasArtwork,
         };
     }
@@ -1418,6 +1727,7 @@ const ProductPreview = (() => {
     ) {
         return render({
             ...options,
+
             source:
                 options.sourceCanvas ||
                 null,
@@ -1436,7 +1746,8 @@ const ProductPreview = (() => {
 
         return render({
             ...options,
-            source: sourceImage,
+            source:
+                sourceImage,
         });
     }
 
@@ -1454,7 +1765,235 @@ const ProductPreview = (() => {
 
         return render({
             ...options,
-            source: sourceCanvas,
+            source:
+                sourceCanvas,
+
+            sourceOrientation:
+                options.sourceOrientation ||
+                'editor',
+        });
+    }
+
+    function createSourceCanvasFromFabricJSON(
+        fabricJSON,
+        {
+            width,
+            height,
+            backgroundColor = '#FFFFFF',
+            isGuideObject:
+                customGuidePredicate,
+        } = {}
+    ) {
+        if (
+            !window.fabric?.StaticCanvas ||
+            !fabricJSON
+        ) {
+            return Promise.resolve(
+                null
+            );
+        }
+
+        let parsedJSON =
+            fabricJSON;
+
+        if (
+            typeof fabricJSON ===
+            'string'
+        ) {
+            try {
+                parsedJSON =
+                    JSON.parse(
+                        fabricJSON
+                    );
+            } catch (error) {
+                return Promise.reject(
+                    new Error(
+                        `Fabric-ontwerp kon niet worden gelezen: ${error.message}`
+                    )
+                );
+            }
+        }
+
+        const sourceWidth =
+            positiveNumber(
+                width,
+                null
+            );
+
+        const sourceHeight =
+            positiveNumber(
+                height,
+                null
+            );
+
+        if (
+            !sourceWidth ||
+            !sourceHeight
+        ) {
+            return Promise.reject(
+                new Error(
+                    'De afmetingen van het opgeslagen Fabric-ontwerp ontbreken.'
+                )
+            );
+        }
+
+        const element =
+            document.createElement(
+                'canvas'
+            );
+
+        const staticCanvas =
+            new window.fabric.StaticCanvas(
+                element,
+                {
+                    width:
+                        Math.round(
+                            sourceWidth
+                        ),
+
+                    height:
+                        Math.round(
+                            sourceHeight
+                        ),
+
+                    renderOnAddRemove:
+                        false,
+                }
+            );
+
+        return new Promise(
+            (
+                resolve,
+                reject
+            ) => {
+                try {
+                    staticCanvas.loadFromJSON(
+                        parsedJSON,
+                        () => {
+                            try {
+                                staticCanvas
+                                    .getObjects()
+                                    .filter(
+                                        object =>
+                                            isTechnicalGuide(
+                                                object,
+                                                customGuidePredicate
+                                            )
+                                    )
+                                    .forEach(
+                                        object =>
+                                            staticCanvas.remove(
+                                                object
+                                            )
+                                    );
+
+                                staticCanvas.backgroundImage =
+                                    null;
+
+                                staticCanvas.backgroundColor =
+                                    staticCanvas.backgroundColor ||
+                                    backgroundColor ||
+                                    '#FFFFFF';
+
+                                staticCanvas.setDimensions({
+                                    width:
+                                        Math.round(
+                                            sourceWidth
+                                        ),
+
+                                    height:
+                                        Math.round(
+                                            sourceHeight
+                                        ),
+                                });
+
+                                staticCanvas.setViewportTransform(
+                                    [
+                                        1,
+                                        0,
+                                        0,
+                                        1,
+                                        0,
+                                        0,
+                                    ]
+                                );
+
+                                staticCanvas.discardActiveObject();
+                                staticCanvas.renderAll();
+
+                                const sourceCanvas =
+                                    createCanvas(
+                                        sourceWidth,
+                                        sourceHeight
+                                    );
+
+                                const context =
+                                    sourceCanvas.getContext(
+                                        '2d'
+                                    );
+
+                                context.imageSmoothingEnabled =
+                                    true;
+
+                                context.imageSmoothingQuality =
+                                    'high';
+
+                                context.drawImage(
+                                    staticCanvas.lowerCanvasEl,
+                                    0,
+                                    0,
+                                    sourceCanvas.width,
+                                    sourceCanvas.height
+                                );
+
+                                staticCanvas.dispose();
+
+                                resolve(
+                                    sourceCanvas
+                                );
+                            } catch (error) {
+                                staticCanvas.dispose();
+                                reject(error);
+                            }
+                        }
+                    );
+                } catch (error) {
+                    staticCanvas.dispose();
+                    reject(error);
+                }
+            }
+        );
+    }
+
+    async function renderFromFabricJSON(
+        options = {}
+    ) {
+        const sourceCanvas =
+            await createSourceCanvasFromFabricJSON(
+                options.fabricJSON,
+                {
+                    width:
+                        options.sourceWidth,
+
+                    height:
+                        options.sourceHeight,
+
+                    backgroundColor:
+                        options.backgroundColor,
+
+                    isGuideObject:
+                        options.isGuideObject,
+                }
+            );
+
+        return render({
+            ...options,
+            source:
+                sourceCanvas,
+
+            sourceOrientation:
+                options.sourceOrientation ||
+                'editor',
         });
     }
 
@@ -1464,10 +2003,12 @@ const ProductPreview = (() => {
         getView,
         loadImage,
         createSourceCanvasFromFabric,
+        createSourceCanvasFromFabricJSON,
         render,
         renderFromCanvas,
         renderFromDataURL,
         renderFromFabric,
+        renderFromFabricJSON,
     };
 })();
 

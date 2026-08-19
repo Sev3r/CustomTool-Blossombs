@@ -2,8 +2,14 @@
  * step5-review.js
  * Stap 5: Review & bestellen.
  * Gebruikt centrale Pricing helper.
+ * Gebruikt gedeelde ProductPreview-engine voor de klantpreview.
  * Gebruikt gedeelde generateOffertePDF functie uit shared/js/offertePdf.js.
  */
+
+const REVIEW_PRODUCT_PREVIEW_MAX_WIDTH = 720;
+
+let reviewProductPreviewResizeObserver = null;
+let reviewProductPreviewRenderToken = 0;
 
 function renderReviewPage() {
   const el = document.getElementById('page-review');
@@ -20,22 +26,12 @@ function renderReviewPage() {
 
   const isLatOntwerpen = options.designChoice === 'laat-ontwerpen';
   const hasFileCheck = !isLatOntwerpen && options.addons?.includes('bestandscontrole');
-  const persType = options.persType || null;
-  const clipShape = persType?.clipShape || null;
-
-  const designPreviewHTML = design?.dataURL ? `
-    <div style="margin-bottom:16px">
-      <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
-                  color:var(--text-3);margin-bottom:8px">Uw ontwerp</div>
-      <div style="border-radius:${clipShape?.startsWith('circle') ? '50%' : 'var(--radius-sm)'};
-                  overflow:hidden;border:1px solid var(--cream-border);
-                  display:inline-block;max-width:100%">
-        <img src="${design.dataURL}" alt="Uw ontwerp"
-             style="width:100%;max-width:280px;display:block;
-                    ${clipShape ? `clip-path:${clipShape}` : ''}">
-      </div>
-    </div>
-  ` : '';
+  const persType = getSelectedPersonalisationType(product, options);
+  const previewConfig = getReviewProductPreviewConfig(product, persType);
+  const designPreviewHTML = renderReviewProductPreviewHTML(
+    previewConfig,
+    design
+  );
 
   el.innerHTML = `
     <h1 class="page-title">Plaats uw bestelling</h1>
@@ -161,14 +157,15 @@ function renderReviewPage() {
 
       <div class="review-section">
         <div class="review-section-title">Uw bestelling</div>
+
         <div class="review-section-body">
           ${designPreviewHTML}
 
-          ${!design?.dataURL ? `
+          ${!designPreviewHTML ? `
             <div class="order-summary-product">
               ${product.imageProduct
-        ? `<img src="${escHtml(product.imageProduct)}" alt="${escHtml(product.name)}">`
-        : 'Product'}
+                ? `<img src="${escHtml(product.imageProduct)}" alt="${escHtml(product.name)}">`
+                : 'Product'}
             </div>
           ` : ''}
 
@@ -199,7 +196,11 @@ function renderReviewPage() {
             <span>${isLatOntwerpen ? '+ € 75,00' : 'Eigen ontwerp'}</span>
           </div>
 
-          <div class="summary-row" id="summary-bc" style="${hasFileCheck ? '' : 'display:none'}">
+          <div
+            class="summary-row"
+            id="summary-bc"
+            style="${hasFileCheck ? '' : 'display:none'}"
+          >
             <span class="label">Bestandscontrole</span>
             <span>+ € 15,00</span>
           </div>
@@ -214,7 +215,11 @@ function renderReviewPage() {
             <span id="summary-incl">—</span>
           </div>
 
-          <button class="btn btn-outline" type="button" id="btn-review-pdf">
+          <button
+            class="btn btn-outline"
+            type="button"
+            id="btn-review-pdf"
+          >
             Download offerte PDF
           </button>
         </div>
@@ -222,24 +227,47 @@ function renderReviewPage() {
     </div>
 
     <div class="flow-nav">
-      <button class="btn btn-outline"
+      <button
+        class="btn btn-outline"
         type="button"
-        onclick="navigateTo('${isLatOntwerpen ? 'wensen' : 'design'}')">← Terug</button>
-      <button class="btn btn-green" type="button" id="btn-bestellen">Aanvraag versturen →</button>
+        onclick="navigateTo('${isLatOntwerpen ? 'wensen' : 'design'}')"
+      >
+        ← Terug
+      </button>
+
+      <button
+        class="btn btn-green"
+        type="button"
+        id="btn-bestellen"
+      >
+        Aanvraag versturen →
+      </button>
     </div>
   `;
 
   updateSummaryPrice();
 
-  document.getElementById('r-bestandscontrole')?.addEventListener('change', () => {
-    updateSummaryPrice();
-
-    const summaryBc = document.getElementById('summary-bc');
-
-    if (summaryBc) {
-      summaryBc.style.display = document.getElementById('r-bestandscontrole').checked ? '' : 'none';
-    }
+  initializeReviewProductPreview({
+    product,
+    persType,
+    design,
+    config: previewConfig,
   });
+
+  document
+    .getElementById('r-bestandscontrole')
+    ?.addEventListener('change', () => {
+      updateSummaryPrice();
+
+      const summaryBc = document.getElementById('summary-bc');
+
+      if (summaryBc) {
+        summaryBc.style.display =
+          document.getElementById('r-bestandscontrole')?.checked
+            ? ''
+            : 'none';
+      }
+    });
 
   [
     'r-company',
@@ -256,180 +284,1070 @@ function renderReviewPage() {
     'r-btw',
     'r-factuuradres',
   ].forEach(id => {
-    document.getElementById(id)?.addEventListener('input', () => {
-      Session.setKlant(collectKlant());
-    });
-  });
-
-  document.getElementById('btn-review-pdf')?.addEventListener('click', () => {
-    const klant = collectKlant();
-    const previewOrder = buildOrder(product, options, design, wensen, klant, `CONCEPT-${Date.now()}`, 'concept');
-    const pricing = getCurrentPricing(product, options);
-
-    generateOffertePDF(previewOrder, product, pricing);
-  });
-
-  document.getElementById('btn-bestellen')?.addEventListener('click', () => {
-    const klant = collectKlant();
-
-    if (!klant.naam || !klant.email || !klant.straat || !klant.huisnummer || !klant.postcode || !klant.plaats || !klant.factuuradres) {
-      document.getElementById('review-error').style.display = 'block';
-
-      ['r-naam', 'r-email', 'r-straat', 'r-huisnummer', 'r-postcode', 'r-plaats', 'r-factuuradres'].forEach(id => {
-        const field = document.getElementById(id);
-
-        if (field) {
-          field.classList.toggle('required-error', !field.value.trim());
-        }
+    document
+      .getElementById(id)
+      ?.addEventListener('input', () => {
+        Session.setKlant(collectKlant());
       });
+  });
 
+  document
+    .getElementById('btn-review-pdf')
+    ?.addEventListener('click', () => {
+      const klant = collectKlant();
+
+      const previewOrder = buildOrder(
+        product,
+        options,
+        design,
+        wensen,
+        klant,
+        `CONCEPT-${Date.now()}`,
+        'concept'
+      );
+
+      const pricing = getCurrentPricing(
+        product,
+        options
+      );
+
+      generateOffertePDF(
+        previewOrder,
+        product,
+        pricing
+      );
+    });
+
+  document
+    .getElementById('btn-bestellen')
+    ?.addEventListener('click', () => {
+      const klant = collectKlant();
+
+      if (
+        !klant.naam ||
+        !klant.email ||
+        !klant.straat ||
+        !klant.huisnummer ||
+        !klant.postcode ||
+        !klant.plaats ||
+        !klant.factuuradres
+      ) {
+        const reviewError =
+          document.getElementById('review-error');
+
+        if (reviewError) {
+          reviewError.style.display = 'block';
+        }
+
+        [
+          'r-naam',
+          'r-email',
+          'r-straat',
+          'r-huisnummer',
+          'r-postcode',
+          'r-plaats',
+          'r-factuuradres',
+        ].forEach(id => {
+          const field = document.getElementById(id);
+
+          if (field) {
+            field.classList.toggle(
+              'required-error',
+              !field.value.trim()
+            );
+          }
+        });
+
+        return;
+      }
+
+      Session.setKlant(klant);
+
+      placeOrder(
+        product,
+        options,
+        design,
+        wensen,
+        klant
+      );
+    });
+}
+
+function getReviewProductPreviewConfig(
+  product,
+  persType
+) {
+  if (
+    !window.ProductPreview?.normalizeConfig ||
+    !persType
+  ) {
+    return null;
+  }
+
+  const config = ProductPreview.normalizeConfig(
+    persType,
+    product || {}
+  );
+
+  return config?.enabled &&
+    Array.isArray(config.views) &&
+    config.views.length
+    ? config
+    : null;
+}
+
+function renderReviewProductPreviewHTML(
+  config,
+  design
+) {
+  if (
+    !config ||
+    !design
+  ) {
+    return '';
+  }
+
+  const initialView = ProductPreview.getView(
+    config,
+    design.previewViewId ||
+      config.defaultViewId ||
+      null
+  );
+
+  if (!initialView) {
+    return '';
+  }
+
+  const showTabs = config.views.length > 1;
+
+  return `
+    <section
+      class="product-preview-panel review-product-preview-panel"
+      data-review-product-preview
+    >
+      <div class="product-preview-header">
+        <div>
+          <div class="product-preview-eyebrow">
+            Uw ontwerp
+          </div>
+
+          <strong>
+            Preview van het eindproduct
+          </strong>
+        </div>
+
+        <span
+          class="product-preview-live-indicator"
+          aria-hidden="true"
+        ></span>
+      </div>
+
+      ${showTabs ? `
+        <div
+          class="product-preview-tabs"
+          role="tablist"
+          aria-label="Productzijde"
+        >
+          ${config.views.map(view => {
+            const isActive =
+              view.id === initialView.id;
+
+            return `
+              <button
+                class="product-preview-tab ${isActive ? 'active' : ''}"
+                type="button"
+                role="tab"
+                aria-selected="${isActive ? 'true' : 'false'}"
+                tabindex="${isActive ? '0' : '-1'}"
+                data-review-preview-view-id="${escHtml(view.id)}"
+              >
+                ${escHtml(view.label)}
+              </button>
+            `;
+          }).join('')}
+        </div>
+      ` : ''}
+
+      <div
+        class="product-preview-stage"
+        data-review-product-preview-stage
+      >
+        <canvas
+          class="product-preview-canvas"
+          id="review-product-preview-canvas"
+          aria-label="${escHtml(initialView.label || 'Productvoorbeeld')}"
+        ></canvas>
+
+        <div
+          class="product-preview-loading"
+          id="review-product-preview-loading"
+          hidden
+        >
+          Preview wordt bijgewerkt…
+        </div>
+      </div>
+
+      <p
+        class="product-preview-help"
+        id="review-product-preview-help"
+      >
+        ${escHtml(
+          initialView.helpText ||
+          'Deze preview laat zien hoe uw ontwerp op het eindproduct wordt weergegeven.'
+        )}
+      </p>
+
+      <p
+        class="product-preview-status"
+        id="review-product-preview-status"
+        aria-live="polite"
+      ></p>
+    </section>
+  `;
+}
+
+function cleanupReviewProductPreview() {
+  reviewProductPreviewResizeObserver?.disconnect();
+  reviewProductPreviewResizeObserver = null;
+  reviewProductPreviewRenderToken += 1;
+}
+
+function initializeReviewProductPreview({
+  product,
+  persType,
+  design,
+  config,
+}) {
+  cleanupReviewProductPreview();
+
+  const panel = document.querySelector(
+    '[data-review-product-preview]'
+  );
+
+  const targetCanvas = document.getElementById(
+    'review-product-preview-canvas'
+  );
+
+  if (
+    !panel ||
+    !targetCanvas ||
+    !config ||
+    !design ||
+    !window.ProductPreview
+  ) {
+    return;
+  }
+
+  let activeViewId =
+    ProductPreview.getView(
+      config,
+      design.previewViewId ||
+        config.defaultViewId ||
+        null
+    )?.id ||
+    null;
+
+  const syncControls = () => {
+    const activeView = ProductPreview.getView(
+      config,
+      activeViewId
+    );
+
+    if (!activeView) {
       return;
     }
 
-    Session.setKlant(klant);
-    placeOrder(product, options, design, wensen, klant);
+    activeViewId = activeView.id;
+
+    document
+      .querySelectorAll(
+        '[data-review-preview-view-id]'
+      )
+      .forEach(button => {
+        const isActive =
+          button.dataset.reviewPreviewViewId ===
+          activeView.id;
+
+        button.classList.toggle(
+          'active',
+          isActive
+        );
+
+        button.setAttribute(
+          'aria-selected',
+          String(isActive)
+        );
+
+        button.tabIndex =
+          isActive
+            ? 0
+            : -1;
+      });
+
+    targetCanvas.setAttribute(
+      'aria-label',
+      activeView.label ||
+        'Productvoorbeeld'
+    );
+
+    const help = document.getElementById(
+      'review-product-preview-help'
+    );
+
+    if (help) {
+      help.textContent =
+        activeView.helpText ||
+        'Deze preview laat zien hoe uw ontwerp op het eindproduct wordt weergegeven.';
+    }
+  };
+
+  const renderPreview = async () => {
+    const activeView = ProductPreview.getView(
+      config,
+      activeViewId
+    );
+
+    if (!activeView) {
+      return;
+    }
+
+    const token =
+      ++reviewProductPreviewRenderToken;
+
+    setReviewProductPreviewLoading(true);
+    setReviewProductPreviewStatus('');
+
+    try {
+      const stage = document.querySelector(
+        '[data-review-product-preview-stage]'
+      );
+
+      const stageWidth =
+        stage?.getBoundingClientRect?.().width ||
+        360;
+
+      const renderWidth = Math.min(
+        REVIEW_PRODUCT_PREVIEW_MAX_WIDTH,
+        Math.max(
+          240,
+          Math.round(stageWidth)
+        )
+      );
+
+      const result =
+        await renderReviewProductPreviewSource({
+          targetCanvas,
+          product,
+          persType,
+          design,
+          viewId: activeView.id,
+          width: renderWidth,
+        });
+
+      if (
+        token !==
+        reviewProductPreviewRenderToken
+      ) {
+        return;
+      }
+
+      if (
+        design.source === 'upload' &&
+        !isRasterDataURL(design.dataURL)
+      ) {
+        setReviewProductPreviewStatus(
+          'Het aangeleverde bestand wordt technisch gecontroleerd. De productmockup wordt zonder bestandsinhoud weergegeven.'
+        );
+
+        return;
+      }
+
+      setReviewProductPreviewStatus(
+        result?.hasArtwork === false
+          ? 'De productmockup is beschikbaar, maar er kon geen ontwerpinhoud worden weergegeven.'
+          : ''
+      );
+    } catch (error) {
+      if (
+        token !==
+        reviewProductPreviewRenderToken
+      ) {
+        return;
+      }
+
+      console.error(
+        'Productpreview in stap 5 kon niet worden opgebouwd.',
+        error
+      );
+
+      setReviewProductPreviewStatus(
+        'De productpreview kon niet worden opgebouwd.',
+        true
+      );
+    } finally {
+      if (
+        token ===
+        reviewProductPreviewRenderToken
+      ) {
+        setReviewProductPreviewLoading(false);
+      }
+    }
+  };
+
+  document
+    .querySelectorAll(
+      '[data-review-preview-view-id]'
+    )
+    .forEach(button => {
+      button.addEventListener(
+        'click',
+        () => {
+          const viewId =
+            button.dataset.reviewPreviewViewId;
+
+          if (
+            !config.views.some(
+              view => view.id === viewId
+            )
+          ) {
+            return;
+          }
+
+          activeViewId = viewId;
+
+          syncControls();
+          renderPreview();
+        }
+      );
+    });
+
+  if (
+    typeof ResizeObserver === 'function'
+  ) {
+    const stage = document.querySelector(
+      '[data-review-product-preview-stage]'
+    );
+
+    if (stage) {
+      let resizeFrame = null;
+
+      reviewProductPreviewResizeObserver =
+        new ResizeObserver(() => {
+          if (resizeFrame) {
+            cancelAnimationFrame(
+              resizeFrame
+            );
+          }
+
+          resizeFrame =
+            requestAnimationFrame(() => {
+              resizeFrame = null;
+              renderPreview();
+            });
+        });
+
+      reviewProductPreviewResizeObserver.observe(
+        stage
+      );
+    }
+  }
+
+  syncControls();
+  renderPreview();
+}
+
+async function renderReviewProductPreviewSource({
+  targetCanvas,
+  product,
+  persType,
+  design,
+  viewId,
+  width,
+}) {
+  if (
+    design.source === 'fabric' &&
+    design.fabricJSON &&
+    typeof ProductPreview.renderFromFabricJSON ===
+      'function'
+  ) {
+    const sourceWidth = Number(
+      design.fabricCanvasWidth ||
+      0
+    );
+
+    const sourceHeight = Number(
+      design.fabricCanvasHeight ||
+      0
+    );
+
+    if (
+      sourceWidth > 0 &&
+      sourceHeight > 0
+    ) {
+      return ProductPreview.renderFromFabricJSON({
+        fabricJSON:
+          design.fabricJSON,
+
+        sourceWidth,
+        sourceHeight,
+
+        backgroundColor:
+          design.backgroundColor ||
+          '#FFFFFF',
+
+        targetCanvas,
+        product,
+
+        personalisationType:
+          persType || {},
+
+        viewId,
+        width,
+      });
+    }
+  }
+
+  if (
+    isRasterDataURL(
+      design.dataURL
+    )
+  ) {
+    return ProductPreview.renderFromDataURL({
+      sourceDataURL:
+        design.dataURL,
+
+      targetCanvas,
+      product,
+
+      personalisationType:
+        persType || {},
+
+      viewId,
+      width,
+
+      sourceOrientation:
+        'technical',
+    });
+  }
+
+  return ProductPreview.render({
+    source: null,
+    targetCanvas,
+    product,
+
+    personalisationType:
+      persType || {},
+
+    viewId,
+    width,
   });
 }
 
+function setReviewProductPreviewLoading(
+  loading
+) {
+  const panel = document.querySelector(
+    '[data-review-product-preview]'
+  );
+
+  const loadingElement =
+    document.getElementById(
+      'review-product-preview-loading'
+    );
+
+  panel?.classList.toggle(
+    'is-loading',
+    loading
+  );
+
+  if (loadingElement) {
+    loadingElement.hidden =
+      !loading;
+  }
+}
+
+function setReviewProductPreviewStatus(
+  message,
+  isError = false
+) {
+  const status = document.getElementById(
+    'review-product-preview-status'
+  );
+
+  if (!status) {
+    return;
+  }
+
+  status.textContent =
+    message ||
+    '';
+
+  status.classList.toggle(
+    'is-error',
+    isError
+  );
+}
+
+function isRasterDataURL(dataURL) {
+  return (
+    typeof dataURL === 'string' &&
+    dataURL.startsWith('data:image/')
+  );
+}
+
 function collectKlant() {
-  const straat = document.getElementById('r-straat')?.value.trim() || '';
-  const huisnummer = document.getElementById('r-huisnummer')?.value.trim() || '';
-  const postcode = document.getElementById('r-postcode')?.value.trim() || '';
-  const plaats = document.getElementById('r-plaats')?.value.trim() || '';
-  const land = document.getElementById('r-land')?.value.trim() || '';
+  const straat =
+    document.getElementById('r-straat')?.value.trim() ||
+    '';
+
+  const huisnummer =
+    document.getElementById('r-huisnummer')?.value.trim() ||
+    '';
+
+  const postcode =
+    document.getElementById('r-postcode')?.value.trim() ||
+    '';
+
+  const plaats =
+    document.getElementById('r-plaats')?.value.trim() ||
+    '';
+
+  const land =
+    document.getElementById('r-land')?.value.trim() ||
+    '';
+
   const adres = [
-    [straat, huisnummer].filter(Boolean).join(' '),
-    [postcode, plaats].filter(Boolean).join(' '),
+    [
+      straat,
+      huisnummer,
+    ]
+      .filter(Boolean)
+      .join(' '),
+
+    [
+      postcode,
+      plaats,
+    ]
+      .filter(Boolean)
+      .join(' '),
+
     land,
-  ].filter(Boolean).join(', ');
+  ]
+    .filter(Boolean)
+    .join(', ');
 
   return {
-    companyName: document.getElementById('r-company')?.value.trim() || '',
-    naam: document.getElementById('r-naam')?.value.trim() || '',
-    achternaam: document.getElementById('r-achternaam')?.value.trim() || '',
-    email: document.getElementById('r-email')?.value.trim() || '',
-    telefoon: document.getElementById('r-tel')?.value.trim() || '',
+    companyName:
+      document.getElementById('r-company')?.value.trim() ||
+      '',
+
+    naam:
+      document.getElementById('r-naam')?.value.trim() ||
+      '',
+
+    achternaam:
+      document.getElementById('r-achternaam')?.value.trim() ||
+      '',
+
+    email:
+      document.getElementById('r-email')?.value.trim() ||
+      '',
+
+    telefoon:
+      document.getElementById('r-tel')?.value.trim() ||
+      '',
+
     straat,
     huisnummer,
     postcode,
     plaats,
     land,
     adres,
-    factuuradres: document.getElementById('r-factuuradres')?.value.trim() || '',
-    kvk: document.getElementById('r-kvk')?.value.trim() || '',
-    btw: document.getElementById('r-btw')?.value.trim() || '',
+
+    factuuradres:
+      document.getElementById('r-factuuradres')?.value.trim() ||
+      '',
+
+    kvk:
+      document.getElementById('r-kvk')?.value.trim() ||
+      '',
+
+    btw:
+      document.getElementById('r-btw')?.value.trim() ||
+      '',
   };
 }
 
 function getCurrentOptions(options) {
-  const isLatOntwerpen = options.designChoice === 'laat-ontwerpen';
+  const isLatOntwerpen =
+    options.designChoice ===
+    'laat-ontwerpen';
 
   if (isLatOntwerpen) {
     return {
       ...options,
-      addons: (options.addons || []).filter(addon => addon !== 'bestandscontrole'),
+
+      addons:
+        (options.addons || []).filter(
+          addon =>
+            addon !==
+            'bestandscontrole'
+        ),
     };
   }
 
-  const hasFileCheck = document.getElementById('r-bestandscontrole')?.checked;
+  const hasFileCheck =
+    document.getElementById(
+      'r-bestandscontrole'
+    )?.checked;
 
   return {
     ...options,
-    addons: hasFileCheck
-      ? [...new Set([...(options.addons || []), 'bestandscontrole'])]
-      : (options.addons || []).filter(addon => addon !== 'bestandscontrole'),
+
+    addons:
+      hasFileCheck
+        ? [
+          ...new Set([
+            ...(options.addons || []),
+            'bestandscontrole',
+          ]),
+        ]
+        : (options.addons || []).filter(
+          addon =>
+            addon !==
+            'bestandscontrole'
+        ),
   };
 }
 
-function getCurrentPricing(product, options) {
-  const currentOptions = getCurrentOptions(options);
-  return Pricing.calculateOrderPricing(product, currentOptions);
+function getCurrentPricing(
+  product,
+  options
+) {
+  const currentOptions =
+    getCurrentOptions(options);
+
+  return Pricing.calculateOrderPricing(
+    product,
+    currentOptions
+  );
 }
 
 function updateSummaryPrice() {
-  const product = Session.getProduct();
-  const options = Session.getOptions();
+  const product =
+    Session.getProduct();
 
-  if (!product || !options) {
+  const options =
+    Session.getOptions();
+
+  if (
+    !product ||
+    !options
+  ) {
     return;
   }
 
-  const pricing = getCurrentPricing(product, options);
+  const pricing =
+    getCurrentPricing(
+      product,
+      options
+    );
 
-  document.getElementById('summary-unit-price').textContent = pricing.unitPrice ? formatEuro(pricing.unitPrice) : '—';
-  document.getElementById('summary-excl').textContent = formatEuro(pricing.totalExcl);
-  document.getElementById('summary-incl').textContent = formatEuro(pricing.totalIncl);
+  const unitPrice =
+    document.getElementById(
+      'summary-unit-price'
+    );
+
+  const totalExcl =
+    document.getElementById(
+      'summary-excl'
+    );
+
+  const totalIncl =
+    document.getElementById(
+      'summary-incl'
+    );
+
+  if (unitPrice) {
+    unitPrice.textContent =
+      pricing.unitPrice
+        ? formatEuro(pricing.unitPrice)
+        : '—';
+  }
+
+  if (totalExcl) {
+    totalExcl.textContent =
+      formatEuro(
+        pricing.totalExcl
+      );
+  }
+
+  if (totalIncl) {
+    totalIncl.textContent =
+      formatEuro(
+        pricing.totalIncl
+      );
+  }
 }
 
-async function placeOrder(product, options, design, wensen, klant) {
-  const orderNumber = `BLS-${Date.now()}`;
-  const order = buildOrder(product, options, design, wensen, klant, orderNumber, null);
-  const pricing = getCurrentPricing(product, options);
+async function placeOrder(
+  product,
+  options,
+  design,
+  wensen,
+  klant
+) {
+  const orderNumber =
+    `BLS-${Date.now()}`;
 
-  if (typeof DS !== 'undefined') {
-    if (typeof DS.init === 'function') {
+  const order =
+    buildOrder(
+      product,
+      options,
+      design,
+      wensen,
+      klant,
+      orderNumber,
+      null
+    );
+
+  const pricing =
+    getCurrentPricing(
+      product,
+      options
+    );
+
+  if (
+    typeof DS !==
+    'undefined'
+  ) {
+    if (
+      typeof DS.init ===
+      'function'
+    ) {
       await DS.init();
     }
 
-    if (typeof DS.saveOrderAsync === 'function') {
-      await DS.saveOrderAsync(order);
+    if (
+      typeof DS.saveOrderAsync ===
+      'function'
+    ) {
+      await DS.saveOrderAsync(
+        order
+      );
     } else {
       DS.saveOrder(order);
     }
   }
 
-  renderConfirmPage(order, product, pricing);
+  renderConfirmPage(
+    order,
+    product,
+    pricing
+  );
 }
 
-function buildOrder(product, options, design, wensen, klant, orderNumber, forcedStatus) {
-  const finalOptions = getCurrentOptions(options);
-  const pricing = Pricing.calculateOrderPricing(product, finalOptions);
-  const isLatOntwerpen = finalOptions.designChoice === 'laat-ontwerpen';
-  const hasFileCheck = finalOptions.addons?.includes('bestandscontrole');
-  const persType = getSelectedPersonalisationType(product, finalOptions);
-  const printSpec = buildOrderPrintSpec(product, persType);
-  const blockedZonesSnapshot = getBlockedZonesSnapshot(persType);
-  const prepressWarnings = Array.isArray(design?.prepressWarnings) ? design.prepressWarnings : [];
-  const uploadCheck = design?.uploadCheck || null;
+function buildOrder(
+  product,
+  options,
+  design,
+  wensen,
+  klant,
+  orderNumber,
+  forcedStatus
+) {
+  const finalOptions =
+    getCurrentOptions(options);
+
+  const pricing =
+    Pricing.calculateOrderPricing(
+      product,
+      finalOptions
+    );
+
+  const isLatOntwerpen =
+    finalOptions.designChoice ===
+    'laat-ontwerpen';
+
+  const hasFileCheck =
+    finalOptions.addons?.includes(
+      'bestandscontrole'
+    );
+
+  const persType =
+    getSelectedPersonalisationType(
+      product,
+      finalOptions
+    );
+
+  const printSpec =
+    buildOrderPrintSpec(
+      product,
+      persType
+    );
+
+  const blockedZonesSnapshot =
+    getBlockedZonesSnapshot(
+      persType
+    );
+
+  const prepressWarnings =
+    Array.isArray(
+      design?.prepressWarnings
+    )
+      ? design.prepressWarnings
+      : [];
+
+  const uploadCheck =
+    design?.uploadCheck ||
+    null;
 
   return {
     orderNumber,
-    createdAt: new Date().toISOString(),
-    companyName: klant.companyName || '',
-    customerName: `${klant.naam || ''} ${klant.achternaam || ''}`.trim(),
-    customerEmail: klant.email || '',
-    deliveryAddress: klant.adres || '',
-    billingAddress: klant.factuuradres || '',
-    invoiceAddress: klant.factuuradres || '',
-    addressStreet: klant.straat || '',
-    addressHouseNumber: klant.huisnummer || '',
-    addressPostalCode: klant.postcode || '',
-    addressCity: klant.plaats || '',
-    addressCountry: klant.land || '',
-    telefoon: klant.telefoon || '',
-    kvk: klant.kvk || '',
-    vatNumber: klant.btw || '',
-    productId: product.id,
-    productName: product.name,
-    persTypeId: persType?.id || null,
-    persTypeLabel: persType?.label || null,
-    persTypeDims: persType ? `${persType.width_mm}×${persType.height_mm}mm` : null,
-    quantity: pricing.quantity,
-    unitPrice: pricing.unitPrice,
-    designFile: design?.fileName || '',
-    designDataURL: design?.dataURL || '',
-    designPdfDataURL: design?.pdfDataURL || (design?.dataURL?.startsWith('data:application/pdf') ? design.dataURL : ''),
-    designRillinesPdfDataURL: design?.rillinesPdfDataURL || '',
-    wensen: wensen || null,
-    quoteAmount: pricing.totalIncl,
-    workType: isLatOntwerpen ? 'ontwerp' : (hasFileCheck ? 'bestandscheck' : null),
-    status: forcedStatus || 'offerte-aanvraag',
-    confirmationSent: false,
-    deliveryDate: '',
-    shippingDate: '',
-    officialOrderNumber: '',
-    notes: wensen?.opmerkingen || '',
-    addons: finalOptions.addons || [],
+
+    createdAt:
+      new Date().toISOString(),
+
+    companyName:
+      klant.companyName ||
+      '',
+
+    customerName:
+      `${klant.naam || ''} ${klant.achternaam || ''}`.trim(),
+
+    customerEmail:
+      klant.email ||
+      '',
+
+    deliveryAddress:
+      klant.adres ||
+      '',
+
+    billingAddress:
+      klant.factuuradres ||
+      '',
+
+    invoiceAddress:
+      klant.factuuradres ||
+      '',
+
+    addressStreet:
+      klant.straat ||
+      '',
+
+    addressHouseNumber:
+      klant.huisnummer ||
+      '',
+
+    addressPostalCode:
+      klant.postcode ||
+      '',
+
+    addressCity:
+      klant.plaats ||
+      '',
+
+    addressCountry:
+      klant.land ||
+      '',
+
+    telefoon:
+      klant.telefoon ||
+      '',
+
+    kvk:
+      klant.kvk ||
+      '',
+
+    vatNumber:
+      klant.btw ||
+      '',
+
+    productId:
+      product.id,
+
+    productName:
+      product.name,
+
+    persTypeId:
+      persType?.id ||
+      null,
+
+    persTypeLabel:
+      persType?.label ||
+      null,
+
+    persTypeDims:
+      persType
+        ? `${persType.width_mm}×${persType.height_mm}mm`
+        : null,
+
+    quantity:
+      pricing.quantity,
+
+    unitPrice:
+      pricing.unitPrice,
+
+    designFile:
+      design?.fileName ||
+      '',
+
+    designDataURL:
+      design?.dataURL ||
+      '',
+
+    designPdfDataURL:
+      design?.pdfDataURL ||
+      (
+        design?.dataURL?.startsWith(
+          'data:application/pdf'
+        )
+          ? design.dataURL
+          : ''
+      ),
+
+    designRillinesPdfDataURL:
+      design?.rillinesPdfDataURL ||
+      '',
+
+    wensen:
+      wensen ||
+      null,
+
+    quoteAmount:
+      pricing.totalIncl,
+
+    workType:
+      isLatOntwerpen
+        ? 'ontwerp'
+        : hasFileCheck
+          ? 'bestandscheck'
+          : null,
+
+    status:
+      forcedStatus ||
+      'offerte-aanvraag',
+
+    confirmationSent:
+      false,
+
+    deliveryDate:
+      '',
+
+    shippingDate:
+      '',
+
+    officialOrderNumber:
+      '',
+
+    notes:
+      wensen?.opmerkingen ||
+      '',
+
+    addons:
+      finalOptions.addons ||
+      [],
+
     printSpec,
     blockedZonesSnapshot,
     prepressWarnings,
@@ -437,11 +1355,33 @@ function buildOrder(product, options, design, wensen, klant, orderNumber, forced
   };
 }
 
-function getSelectedPersonalisationType(product, options) {
-  const sessionPersType = options?.persType || null;
-  const persTypeId = options?.persTypeId || sessionPersType?.id || null;
-  const productPersTypes = Array.isArray(product?.personalisatieTypes) ? product.personalisatieTypes : [];
-  const productPersType = productPersTypes.find(type => type.id === persTypeId) || null;
+function getSelectedPersonalisationType(
+  product,
+  options
+) {
+  const sessionPersType =
+    options?.persType ||
+    null;
+
+  const persTypeId =
+    options?.persTypeId ||
+    sessionPersType?.id ||
+    null;
+
+  const productPersTypes =
+    Array.isArray(
+      product?.personalisatieTypes
+    )
+      ? product.personalisatieTypes
+      : [];
+
+  const productPersType =
+    productPersTypes.find(
+      type =>
+        type.id ===
+        persTypeId
+    ) ||
+    null;
 
   if (productPersType) {
     return productPersType;
@@ -451,26 +1391,108 @@ function getSelectedPersonalisationType(product, options) {
     return sessionPersType;
   }
 
-  return productPersTypes.find(type => type.active !== false) || productPersTypes[0] || null;
+  return (
+    productPersTypes.find(
+      type =>
+        type.active !==
+        false
+    ) ||
+    productPersTypes[0] ||
+    null
+  );
 }
 
-function buildOrderPrintSpec(product, persType) {
-  const spec = getNormalizedPrintSpec(product, persType);
+function buildOrderPrintSpec(
+  product,
+  persType
+) {
+  const spec =
+    getNormalizedPrintSpec(
+      product,
+      persType
+    );
 
   if (!spec) {
     return null;
   }
 
-  const finishWidthMm = getPositiveNumber(spec.finishWidthMm, persType?.finish_width_mm, persType?.width_mm, product?.finish_width_mm, product?.width_mm);
-  const finishHeightMm = getPositiveNumber(spec.finishHeightMm, persType?.finish_height_mm, persType?.height_mm, product?.finish_height_mm, product?.height_mm);
-  const bleedMm = getPositiveNumber(spec.bleedMm, persType?.bleed_mm, product?.bleed_mm, 3);
-  const exportWidthMm = getPositiveNumber(spec.exportWidthMm, persType?.export_width_mm, product?.export_width_mm, finishWidthMm ? finishWidthMm + bleedMm * 2 : null);
-  const exportHeightMm = getPositiveNumber(spec.exportHeightMm, persType?.export_height_mm, product?.export_height_mm, finishHeightMm ? finishHeightMm + bleedMm * 2 : null);
-  const safeMarginMm = getPositiveNumber(spec.safeMarginMm, persType?.safe_margin_mm, persType?.margin_mm, product?.safe_margin_mm, product?.margin_mm, 3);
-  const trimXmm = getNumberOrNull(spec.trimXmm);
-  const trimYmm = getNumberOrNull(spec.trimYmm);
-  const trimRightMm = getNumberOrNull(spec.trimRightMm);
-  const trimBottomMm = getNumberOrNull(spec.trimBottomMm);
+  const finishWidthMm =
+    getPositiveNumber(
+      spec.finishWidthMm,
+      persType?.finish_width_mm,
+      persType?.width_mm,
+      product?.finish_width_mm,
+      product?.width_mm
+    );
+
+  const finishHeightMm =
+    getPositiveNumber(
+      spec.finishHeightMm,
+      persType?.finish_height_mm,
+      persType?.height_mm,
+      product?.finish_height_mm,
+      product?.height_mm
+    );
+
+  const bleedMm =
+    getPositiveNumber(
+      spec.bleedMm,
+      persType?.bleed_mm,
+      product?.bleed_mm,
+      3
+    );
+
+  const exportWidthMm =
+    getPositiveNumber(
+      spec.exportWidthMm,
+      persType?.export_width_mm,
+      product?.export_width_mm,
+      finishWidthMm
+        ? finishWidthMm +
+          bleedMm * 2
+        : null
+    );
+
+  const exportHeightMm =
+    getPositiveNumber(
+      spec.exportHeightMm,
+      persType?.export_height_mm,
+      product?.export_height_mm,
+      finishHeightMm
+        ? finishHeightMm +
+          bleedMm * 2
+        : null
+    );
+
+  const safeMarginMm =
+    getPositiveNumber(
+      spec.safeMarginMm,
+      persType?.safe_margin_mm,
+      persType?.margin_mm,
+      product?.safe_margin_mm,
+      product?.margin_mm,
+      3
+    );
+
+  const trimXmm =
+    getNumberOrNull(
+      spec.trimXmm
+    );
+
+  const trimYmm =
+    getNumberOrNull(
+      spec.trimYmm
+    );
+
+  const trimRightMm =
+    getNumberOrNull(
+      spec.trimRightMm
+    );
+
+  const trimBottomMm =
+    getNumberOrNull(
+      spec.trimBottomMm
+    );
 
   return {
     finishWidthMm,
@@ -479,42 +1501,156 @@ function buildOrderPrintSpec(product, persType) {
     exportWidthMm,
     exportHeightMm,
     safeMarginMm,
-    dpi: getPositiveNumber(spec.dpi, 300),
-    minDpi: getPositiveNumber(spec.minDpi, 150),
-    personalisationTypeId: persType?.id || null,
-    personalisationTypeLabel: persType?.label || null,
+
+    dpi:
+      getPositiveNumber(
+        spec.dpi,
+        300
+      ),
+
+    minDpi:
+      getPositiveNumber(
+        spec.minDpi,
+        150
+      ),
+
+    personalisationTypeId:
+      persType?.id ||
+      null,
+
+    personalisationTypeLabel:
+      persType?.label ||
+      null,
+
     trimBox: {
-      x: trimXmm,
-      y: trimYmm,
-      width: finishWidthMm,
-      height: finishHeightMm,
-      right: trimRightMm,
-      bottom: trimBottomMm,
+      x:
+        trimXmm,
+
+      y:
+        trimYmm,
+
+      width:
+        finishWidthMm,
+
+      height:
+        finishHeightMm,
+
+      right:
+        trimRightMm,
+
+      bottom:
+        trimBottomMm,
     },
+
     bleedBox: {
       x: 0,
       y: 0,
-      width: exportWidthMm,
-      height: exportHeightMm,
-      right: exportWidthMm,
-      bottom: exportHeightMm,
+
+      width:
+        exportWidthMm,
+
+      height:
+        exportHeightMm,
+
+      right:
+        exportWidthMm,
+
+      bottom:
+        exportHeightMm,
     },
   };
 }
 
-function getNormalizedPrintSpec(product, persType) {
-  if (window.PrintSpecs?.normalizePrintSpec) {
-    return PrintSpecs.normalizePrintSpec(persType || {}, product || {});
+function getNormalizedPrintSpec(
+  product,
+  persType
+) {
+  if (
+    window.PrintSpecs?.normalizePrintSpec
+  ) {
+    return PrintSpecs.normalizePrintSpec(
+      persType || {},
+      product || {}
+    );
   }
 
-  const bleedMm = getPositiveNumber(persType?.bleed_mm, product?.bleed_mm, 3) || 3;
-  const finishWidthMm = getPositiveNumber(persType?.finish_width_mm, product?.finish_width_mm, persType?.width_mm, product?.width_mm, 100) || 100;
-  const finishHeightMm = getPositiveNumber(persType?.finish_height_mm, product?.finish_height_mm, persType?.height_mm, product?.height_mm, 70) || 70;
-  const exportWidthMm = getPositiveNumber(persType?.export_width_mm, product?.export_width_mm, finishWidthMm + bleedMm * 2) || finishWidthMm + bleedMm * 2;
-  const exportHeightMm = getPositiveNumber(persType?.export_height_mm, product?.export_height_mm, finishHeightMm + bleedMm * 2) || finishHeightMm + bleedMm * 2;
-  const safeMarginMm = getPositiveNumber(persType?.safe_margin_mm, persType?.margin_mm, product?.safe_margin_mm, product?.margin_mm, 3) || 3;
-  const trimXmm = Math.max(0, (exportWidthMm - finishWidthMm) / 2);
-  const trimYmm = Math.max(0, (exportHeightMm - finishHeightMm) / 2);
+  const bleedMm =
+    getPositiveNumber(
+      persType?.bleed_mm,
+      product?.bleed_mm,
+      3
+    ) ||
+    3;
+
+  const finishWidthMm =
+    getPositiveNumber(
+      persType?.finish_width_mm,
+      product?.finish_width_mm,
+      persType?.width_mm,
+      product?.width_mm,
+      100
+    ) ||
+    100;
+
+  const finishHeightMm =
+    getPositiveNumber(
+      persType?.finish_height_mm,
+      product?.finish_height_mm,
+      persType?.height_mm,
+      product?.height_mm,
+      70
+    ) ||
+    70;
+
+  const exportWidthMm =
+    getPositiveNumber(
+      persType?.export_width_mm,
+      product?.export_width_mm,
+      finishWidthMm +
+      bleedMm * 2
+    ) ||
+    finishWidthMm +
+    bleedMm * 2;
+
+  const exportHeightMm =
+    getPositiveNumber(
+      persType?.export_height_mm,
+      product?.export_height_mm,
+      finishHeightMm +
+      bleedMm * 2
+    ) ||
+    finishHeightMm +
+    bleedMm * 2;
+
+  const safeMarginMm =
+    getPositiveNumber(
+      persType?.safe_margin_mm,
+      persType?.margin_mm,
+      product?.safe_margin_mm,
+      product?.margin_mm,
+      3
+    ) ||
+    3;
+
+  const trimXmm =
+    Math.max(
+      0,
+      (
+        exportWidthMm -
+        finishWidthMm
+      ) /
+      2
+    );
+
+  const trimYmm =
+    Math.max(
+      0,
+      (
+        exportHeightMm -
+        finishHeightMm
+      ) /
+      2
+    );
 
   return {
     dpi: 300,
@@ -527,74 +1663,194 @@ function getNormalizedPrintSpec(product, persType) {
     safeMarginMm,
     trimXmm,
     trimYmm,
-    trimRightMm: trimXmm + finishWidthMm,
-    trimBottomMm: trimYmm + finishHeightMm,
+
+    trimRightMm:
+      trimXmm +
+      finishWidthMm,
+
+    trimBottomMm:
+      trimYmm +
+      finishHeightMm,
   };
 }
 
-function getBlockedZonesSnapshot(persType) {
-  if (!Array.isArray(persType?.blockedZones)) {
+function getBlockedZonesSnapshot(
+  persType
+) {
+  if (
+    !Array.isArray(
+      persType?.blockedZones
+    )
+  ) {
     return [];
   }
 
   return persType.blockedZones
-    .map(zone => sanitizeBlockedZone(zone))
+    .map(
+      zone =>
+        sanitizeBlockedZone(zone)
+    )
     .filter(Boolean);
 }
 
-function sanitizeBlockedZone(zone) {
-  if (!zone || typeof zone !== 'object') {
+function sanitizeBlockedZone(
+  zone
+) {
+  if (
+    !zone ||
+    typeof zone !==
+    'object'
+  ) {
     return null;
   }
 
   const base = {
-    id: zone.id || null,
-    type: zone.type || null,
-    label: zone.label || '',
-    margin_mm: getNumberOrNull(zone.margin_mm) || 0,
+    id:
+      zone.id ||
+      null,
+
+    type:
+      zone.type ||
+      null,
+
+    label:
+      zone.label ||
+      '',
+
+    margin_mm:
+      getNumberOrNull(
+        zone.margin_mm
+      ) ||
+      0,
   };
 
-  if (zone.type === 'line') {
+  if (
+    zone.type ===
+    'line'
+  ) {
     return {
       ...base,
-      type: 'line',
-      x1_mm: getNumberOrNull(zone.x1_mm) || 0,
-      y1_mm: getNumberOrNull(zone.y1_mm) || 0,
-      x2_mm: getNumberOrNull(zone.x2_mm) || 0,
-      y2_mm: getNumberOrNull(zone.y2_mm) || 0,
-      line_width_mm: getPositiveNumber(zone.line_width_mm, 0.3) || 0.3,
+
+      type:
+        'line',
+
+      x1_mm:
+        getNumberOrNull(
+          zone.x1_mm
+        ) ||
+        0,
+
+      y1_mm:
+        getNumberOrNull(
+          zone.y1_mm
+        ) ||
+        0,
+
+      x2_mm:
+        getNumberOrNull(
+          zone.x2_mm
+        ) ||
+        0,
+
+      y2_mm:
+        getNumberOrNull(
+          zone.y2_mm
+        ) ||
+        0,
+
+      line_width_mm:
+        getPositiveNumber(
+          zone.line_width_mm,
+          0.3
+        ) ||
+        0.3,
     };
   }
 
-  if (zone.type === 'rect') {
+  if (
+    zone.type ===
+    'rect'
+  ) {
     return {
       ...base,
-      type: 'rect',
-      x_mm: getNumberOrNull(zone.x_mm) || 0,
-      y_mm: getNumberOrNull(zone.y_mm) || 0,
-      width_mm: getPositiveNumber(zone.width_mm) || 0,
-      height_mm: getPositiveNumber(zone.height_mm) || 0,
+
+      type:
+        'rect',
+
+      x_mm:
+        getNumberOrNull(
+          zone.x_mm
+        ) ||
+        0,
+
+      y_mm:
+        getNumberOrNull(
+          zone.y_mm
+        ) ||
+        0,
+
+      width_mm:
+        getPositiveNumber(
+          zone.width_mm
+        ) ||
+        0,
+
+      height_mm:
+        getPositiveNumber(
+          zone.height_mm
+        ) ||
+        0,
     };
   }
 
-  if (zone.type === 'circle') {
+  if (
+    zone.type ===
+    'circle'
+  ) {
     return {
       ...base,
-      type: 'circle',
-      x_mm: getNumberOrNull(zone.x_mm) || 0,
-      y_mm: getNumberOrNull(zone.y_mm) || 0,
-      diameter_mm: getPositiveNumber(zone.diameter_mm) || 0,
+
+      type:
+        'circle',
+
+      x_mm:
+        getNumberOrNull(
+          zone.x_mm
+        ) ||
+        0,
+
+      y_mm:
+        getNumberOrNull(
+          zone.y_mm
+        ) ||
+        0,
+
+      diameter_mm:
+        getPositiveNumber(
+          zone.diameter_mm
+        ) ||
+        0,
     };
   }
 
   return null;
 }
 
-function getPositiveNumber(...values) {
-  for (const value of values) {
-    const number = Number(value);
+function getPositiveNumber(
+  ...values
+) {
+  for (
+    const value of values
+  ) {
+    const number =
+      Number(value);
 
-    if (Number.isFinite(number) && number > 0) {
+    if (
+      Number.isFinite(
+        number
+      ) &&
+      number > 0
+    ) {
       return number;
     }
   }
@@ -602,101 +1858,262 @@ function getPositiveNumber(...values) {
   return null;
 }
 
-function getNumberOrNull(value) {
-  const number = Number(value);
+function getNumberOrNull(
+  value
+) {
+  const number =
+    Number(value);
 
-  return Number.isFinite(number) ? number : null;
+  return Number.isFinite(
+    number
+  )
+    ? number
+    : null;
 }
 
-function renderConfirmPage(order, product, pricing) {
-  document.querySelectorAll('.flow-page').forEach(el => el.classList.remove('active'));
+function renderConfirmPage(
+  order,
+  product,
+  pricing
+) {
+  document
+    .querySelectorAll(
+      '.flow-page'
+    )
+    .forEach(el => {
+      el.classList.remove(
+        'active'
+      );
+    });
 
-  const confirmEl = document.getElementById('page-confirm');
-  confirmEl.classList.add('active');
+  const confirmEl =
+    document.getElementById(
+      'page-confirm'
+    );
 
-  const progressWrap = document.querySelector('.progress-wrap');
+  if (!confirmEl) {
+    return;
+  }
+
+  confirmEl.classList.add(
+    'active'
+  );
+
+  const progressWrap =
+    document.querySelector(
+      '.progress-wrap'
+    );
 
   if (progressWrap) {
-    progressWrap.style.display = 'none';
+    progressWrap.style.display =
+      'none';
   }
 
   confirmEl.innerHTML = `
     <div class="confirm-page">
       <div class="confirm-icon">
-        <svg width="56" height="56" viewBox="0 0 56 56" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <circle cx="28" cy="28" r="26" stroke="#5C7A5C" stroke-width="2.5" fill="#EDF2ED"/>
-          <path d="M16 28L23 35L40 18" stroke="#5C7A5C" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+        <svg
+          width="56"
+          height="56"
+          viewBox="0 0 56 56"
+          fill="none"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <circle
+            cx="28"
+            cy="28"
+            r="26"
+            stroke="#5C7A5C"
+            stroke-width="2.5"
+            fill="#EDF2ED"
+          />
+
+          <path
+            d="M16 28L23 35L40 18"
+            stroke="#5C7A5C"
+            stroke-width="3"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          />
         </svg>
       </div>
 
-      <div class="confirm-number">Uw aanvraagnummer</div>
-      <div class="confirm-num-value">${escHtml(order.orderNumber)}</div>
-
-      <p class="confirm-text">
-        Bedankt. We hebben uw offerteaanvraag ontvangen.<br><br>
-        Een van onze medewerkers neemt zo snel mogelijk contact op via
-        <strong>${escHtml(order.customerEmail)}</strong> om uw bestelling te bevestigen.<br><br>
-        <em style="color:var(--text-3)">Geschatte offerte: ${formatEuro(pricing.totalIncl)} incl. BTW</em>
-      </p>
-
-      <div style="margin-top:32px;padding:20px;background:var(--cream-dark);
-                  border-radius:var(--radius-card);border:1px solid var(--cream-border)">
-        <div style="font-size:13px;font-weight:600;margin-bottom:8px">Uw offerte</div>
-        <p style="font-size:13px;color:var(--text-2);margin-bottom:16px">
-          Download uw offerte als PDF. U ontvangt ook een bevestiging per e-mail
-          zodra onze medewerker uw bestelling heeft verwerkt.
-        </p>
-        <button class="btn btn-green" type="button" id="btn-download-pdf">Download offerte PDF</button>
+      <div class="confirm-number">
+        Uw aanvraagnummer
       </div>
 
-      <div style="margin-top:32px;display:flex;gap:12px;justify-content:center;flex-wrap:wrap">
-        <a href="/" class="btn btn-outline">Terug naar tijdelijk hoofdmenu</a>
-        <button class="btn btn-outline" type="button" onclick="resetFlow()">Nieuwe bestelling plaatsen</button>
+      <div class="confirm-num-value">
+        ${escHtml(order.orderNumber)}
+      </div>
+
+      <p class="confirm-text">
+        Bedankt. We hebben uw offerteaanvraag ontvangen.
+        <br><br>
+        Een van onze medewerkers neemt zo snel mogelijk contact op via
+        <strong>${escHtml(order.customerEmail)}</strong>
+        om uw bestelling te bevestigen.
+        <br><br>
+        <em style="color:var(--text-3)">
+          Geschatte offerte:
+          ${formatEuro(pricing.totalIncl)}
+          incl. BTW
+        </em>
+      </p>
+
+      <div
+        style="
+          margin-top:32px;
+          padding:20px;
+          background:var(--cream-dark);
+          border-radius:var(--radius-card);
+          border:1px solid var(--cream-border);
+        "
+      >
+        <div
+          style="
+            font-size:13px;
+            font-weight:600;
+            margin-bottom:8px;
+          "
+        >
+          Uw offerte
+        </div>
+
+        <p
+          style="
+            font-size:13px;
+            color:var(--text-2);
+            margin-bottom:16px;
+          "
+        >
+          Download uw offerte als PDF.
+          U ontvangt ook een bevestiging per e-mail zodra onze medewerker uw bestelling heeft verwerkt.
+        </p>
+
+        <button
+          class="btn btn-green"
+          type="button"
+          id="btn-download-pdf"
+        >
+          Download offerte PDF
+        </button>
+      </div>
+
+      <div
+        style="
+          margin-top:32px;
+          display:flex;
+          gap:12px;
+          justify-content:center;
+          flex-wrap:wrap;
+        "
+      >
+        <a
+          href="/"
+          class="btn btn-outline"
+        >
+          Terug naar tijdelijk hoofdmenu
+        </a>
+
+        <button
+          class="btn btn-outline"
+          type="button"
+          onclick="resetFlow()"
+        >
+          Nieuwe bestelling plaatsen
+        </button>
       </div>
     </div>
   `;
 
-  document.getElementById('btn-download-pdf')?.addEventListener('click', () => {
-    generateOffertePDF(order, product, pricing);
-  });
+  document
+    .getElementById(
+      'btn-download-pdf'
+    )
+    ?.addEventListener(
+      'click',
+      () => {
+        generateOffertePDF(
+          order,
+          product,
+          pricing
+        );
+      }
+    );
 
   clearStoredDesignData();
   Session.clear();
 }
 
 function clearStoredDesignData() {
-  Object.keys(localStorage)
-    .filter(key => key.startsWith('cot_design_state'))
-    .forEach(key => localStorage.removeItem(key));
+  Object.keys(
+    localStorage
+  )
+    .filter(
+      key =>
+        key.startsWith(
+          'cot_design_state'
+        )
+    )
+    .forEach(
+      key =>
+        localStorage.removeItem(
+          key
+        )
+    );
 
-  sessionStorage.removeItem('cot_session');
+  sessionStorage.removeItem(
+    'cot_session'
+  );
 }
 
 function startNieuweOrder() {
   clearStoredDesignData();
 
-  const progressWrap = document.querySelector('.progress-wrap');
+  const progressWrap =
+    document.querySelector(
+      '.progress-wrap'
+    );
 
   if (progressWrap) {
-    progressWrap.style.display = '';
+    progressWrap.style.display =
+      '';
   }
 
   navigateTo('select');
 }
 
 function formatEuro(value) {
-  if (value === null || value === undefined || Number.isNaN(Number(value))) {
+  if (
+    value === null ||
+    value === undefined ||
+    Number.isNaN(
+      Number(value)
+    )
+  ) {
     return '—';
   }
 
-  return `€ ${Number(value).toFixed(2).replace('.', ',')}`;
+  return `€ ${Number(value)
+    .toFixed(2)
+    .replace('.', ',')}`;
 }
 
 function escHtml(value) {
   return String(value || '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
+    .replace(
+      /&/g,
+      '&amp;'
+    )
+    .replace(
+      /</g,
+      '&lt;'
+    )
+    .replace(
+      />/g,
+      '&gt;'
+    );
 }
 
-window.startNieuweOrder = startNieuweOrder;
+window.startNieuweOrder =
+  startNieuweOrder;

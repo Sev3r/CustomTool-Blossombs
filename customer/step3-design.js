@@ -20,15 +20,15 @@ let uploadedRillinesPdfDataURL = null;
 let activeDesignTab = 'tool';
 let fabricInitToken = 0;
 let fabricInitTimer = null;
-let canvasZoom = 1;
+let canvasZoom = 1.1;
 
-const CANVAS_ZOOM_MIN = 0.5;
-const CANVAS_ZOOM_MAX = 3;
+const CANVAS_ZOOM_MIN = 0.65;
+const CANVAS_ZOOM_MAX = 2.5;
 const CANVAS_ZOOM_STEP = 0.1;
 
-const DESIGN_VIEW_SHEET_ID = 'sheet';
-const DESIGN_VIEW_ORIENTATION_VERSION = 1;
+const DESIGN_VIEW_ORIENTATION_VERSION = 2;
 const DESIGN_VIEW_VIEWPORT_PADDING_PX = 20;
+const DESIGN_VIEW_VISIBLE_MARGIN_PX = 12;
 const DESIGN_VIEW_VIEWPORT_EPSILON = 0.001;
 const DESIGN_VIEW_GUIDE_FLAG = '_isDesignViewGuide';
 
@@ -96,7 +96,11 @@ function renderDesignPage() {
   const stateKey =
     `${DESIGN_STATE_KEY}_${product.id}_${activePersonalisation?.id || 'standaard'}`;
 
-  const savedState = loadDesignState(stateKey);
+  const savedState = {
+    ...savedDesign,
+    ...(loadDesignState(stateKey) || {}),
+  };
+
   const previewConfig = getDesignViewConfig(
     activePersonalisation,
     product
@@ -264,7 +268,11 @@ function renderDesignPage() {
 
           <div class="side-section">
             <div class="side-label">Elementkleur</div>
-            <div class="color-row" id="color-swatches"></div>
+
+            <div
+              class="color-row"
+              id="color-swatches"
+            ></div>
 
             <div class="custom-color-row">
               <label for="custom-element-color">
@@ -445,12 +453,15 @@ function renderDesignPage() {
             >
 
             <div class="upload-icon">📁</div>
+
             <div class="upload-title">
               Sleep uw bestand hierheen
             </div>
+
             <div class="upload-sub">
               of klik om te bladeren
             </div>
+
             <div class="upload-sub upload-format-hint">
               PNG, JPG, PDF, AI, EPS.
               Minimaal 300 DPI aanbevolen.
@@ -627,9 +638,10 @@ function getDesignViewConfig(
     activePersonalisation?.preview ||
     {};
 
-  const views = Array.isArray(preview.views)
-    ? preview.views
-    : [];
+  const views =
+    Array.isArray(preview.views)
+      ? preview.views
+      : [];
 
   return {
     enabled:
@@ -659,7 +671,6 @@ function resolveInitialDesignViewId(
   storedViewId = null
 ) {
   if (
-    storedViewId === DESIGN_VIEW_SHEET_ID ||
     config?.views?.some(
       view => view.id === storedViewId
     )
@@ -671,7 +682,7 @@ function resolveInitialDesignViewId(
     !config?.enabled ||
     !config.views?.length
   ) {
-    return DESIGN_VIEW_SHEET_ID;
+    return null;
   }
 
   return (
@@ -714,18 +725,6 @@ function renderDesignViewToolbar(
     `;
   }
 
-  const buttons = [
-    ...config.views.map(view => ({
-      id: view.id,
-      label: view.label || 'Zijde',
-    })),
-
-    {
-      id: DESIGN_VIEW_SHEET_ID,
-      label: 'Volledig drukvel',
-    },
-  ];
-
   return `
     <div
       id="canvas-toolbar"
@@ -733,7 +732,7 @@ function renderDesignViewToolbar(
     >
       <div class="canvas-view-toolbar-main">
         <span class="canvas-view-toolbar-label">
-          Bewerkingsweergave
+          Productzijde
         </span>
 
         <div
@@ -741,9 +740,9 @@ function renderDesignViewToolbar(
           role="tablist"
           aria-label="Te bewerken productzijde"
         >
-          ${buttons.map(button => {
+          ${config.views.map(view => {
             const isActive =
-              button.id === activeViewId;
+              view.id === activeViewId;
 
             return `
               <button
@@ -752,9 +751,9 @@ function renderDesignViewToolbar(
                 role="tab"
                 aria-selected="${String(isActive)}"
                 tabindex="${isActive ? '0' : '-1'}"
-                data-design-view-id="${escHtml(button.id)}"
+                data-design-view-id="${escHtml(view.id)}"
               >
-                ${escHtml(button.label)}
+                ${escHtml(view.label || 'Zijde')}
               </button>
             `;
           }).join('')}
@@ -796,39 +795,41 @@ function initializeDesignViewContext({
 }) {
   destroyDesignViewContext();
 
-  const config = getDesignViewConfig(
-    activePers,
-    product
-  );
+  const config =
+    getDesignViewConfig(
+      activePers,
+      product
+    );
 
-  const spec = window.ProductPreview?.getPrintSpec
-    ? ProductPreview.getPrintSpec(
-      activePers || {},
-      product || {}
-    )
-    : window.PrintSpecs?.normalizePrintSpec
-      ? PrintSpecs.normalizePrintSpec(
+  const spec =
+    window.ProductPreview?.getPrintSpec
+      ? ProductPreview.getPrintSpec(
         activePers || {},
         product || {}
       )
-      : {
-        exportWidthMm:
-          Number(
-            activePers?.width_mm ||
-            product?.width_mm ||
-            100
-          ),
+      : window.PrintSpecs?.normalizePrintSpec
+        ? PrintSpecs.normalizePrintSpec(
+          activePers || {},
+          product || {}
+        )
+        : {
+          exportWidthMm:
+            Number(
+              activePers?.width_mm ||
+              product?.width_mm ||
+              100
+            ),
 
-        exportHeightMm:
-          Number(
-            activePers?.height_mm ||
-            product?.height_mm ||
-            70
-          ),
+          exportHeightMm:
+            Number(
+              activePers?.height_mm ||
+              product?.height_mm ||
+              70
+            ),
 
-        trimXmm: 0,
-        trimYmm: 0,
-      };
+          trimXmm: 0,
+          trimYmm: 0,
+        };
 
   designViewContext = {
     product,
@@ -964,17 +965,10 @@ function setActiveDesignView(
   viewId,
   synchronizePreview = false
 ) {
-  if (!designViewContext) {
-    return;
-  }
-
-  const isValid =
-    viewId === DESIGN_VIEW_SHEET_ID ||
-    Boolean(
-      getDesignViewById(viewId)
-    );
-
-  if (!isValid) {
+  if (
+    !designViewContext ||
+    !getDesignViewById(viewId)
+  ) {
     return;
   }
 
@@ -984,13 +978,11 @@ function setActiveDesignView(
   persistDesignState(
     designViewContext.stateKey,
     {
-      editorViewId: viewId,
+      editorViewId:
+        viewId,
 
-      ...(viewId !== DESIGN_VIEW_SHEET_ID
-        ? {
-          previewViewId: viewId,
-        }
-        : {}),
+      previewViewId:
+        viewId,
     }
   );
 
@@ -1004,10 +996,7 @@ function setActiveDesignView(
     );
   }
 
-  if (
-    synchronizePreview &&
-    viewId !== DESIGN_VIEW_SHEET_ID
-  ) {
+  if (synchronizePreview) {
     const previewButton = [
       ...document.querySelectorAll(
         '[data-product-preview-view-id]'
@@ -1062,25 +1051,11 @@ function updateDesignViewToolbarState() {
     return;
   }
 
-  if (
-    designViewContext.activeViewId ===
-    DESIGN_VIEW_SHEET_ID
-  ) {
-    note.textContent =
-      'Technische controleweergave. Gedraaide zijden staan zoals ze worden gedrukt.';
-
-    return;
-  }
-
   const view =
     getActiveDesignView();
 
-  const rotation =
-    getDesignViewRotation(view);
-
-  note.textContent = rotation
-    ? `Je bewerkt nu: ${view?.label || 'productzijde'}. Deze zijde wordt alleen in de editor rechtop getoond.`
-    : `Je bewerkt nu: ${view?.label || 'productzijde'}. Alleen dit ontwerpgebied is actief.`;
+  note.textContent =
+    `Je ontwerpt ${view?.label || 'deze productzijde'} zoals deze op het eindproduct verschijnt. De technische draairichting wordt automatisch in het drukbestand verwerkt.`;
 }
 
 function getDesignViewById(viewId) {
@@ -1096,16 +1071,19 @@ function getDesignViewById(viewId) {
 }
 
 function getActiveDesignView() {
-  if (
-    !designViewContext ||
-    designViewContext.activeViewId ===
-      DESIGN_VIEW_SHEET_ID
-  ) {
+  if (!designViewContext?.config.enabled) {
     return null;
   }
 
-  return getDesignViewById(
-    designViewContext.activeViewId
+  return (
+    getDesignViewById(
+      designViewContext.activeViewId
+    ) ||
+    getDesignViewById(
+      designViewContext.config.defaultViewId
+    ) ||
+    designViewContext.config.views[0] ||
+    null
   );
 }
 
@@ -1260,25 +1238,6 @@ function createDesignViewViewport(
   canvas,
   bounds
 ) {
-  const radians =
-    bounds.rotation *
-    Math.PI /
-    180;
-
-  const swapsDimensions =
-    bounds.rotation === 90 ||
-    bounds.rotation === 270;
-
-  const visibleWidth =
-    swapsDimensions
-      ? bounds.height
-      : bounds.width;
-
-  const visibleHeight =
-    swapsDimensions
-      ? bounds.width
-      : bounds.height;
-
   const scale =
     Math.min(
       Math.max(
@@ -1286,59 +1245,27 @@ function createDesignViewViewport(
         canvas.getWidth() -
         DESIGN_VIEW_VIEWPORT_PADDING_PX * 2
       ) /
-      visibleWidth,
+      bounds.width,
 
       Math.max(
         1,
         canvas.getHeight() -
         DESIGN_VIEW_VIEWPORT_PADDING_PX * 2
       ) /
-      visibleHeight
-    );
-
-  const cosine =
-    Math.cos(radians);
-
-  const sine =
-    Math.sin(radians);
-
-  const a =
-    scale *
-    cosine;
-
-  const b =
-    scale *
-    sine;
-
-  const c =
-    -scale *
-    sine;
-
-  const d =
-    scale *
-    cosine;
-
-  const e =
-    canvas.getWidth() / 2 -
-    (
-      a * bounds.centerX +
-      c * bounds.centerY
-    );
-
-  const f =
-    canvas.getHeight() / 2 -
-    (
-      b * bounds.centerX +
-      d * bounds.centerY
+      bounds.height
     );
 
   return [
-    a,
-    b,
-    c,
-    d,
-    e,
-    f,
+    scale,
+    0,
+    0,
+    scale,
+
+    canvas.getWidth() / 2 -
+      scale * bounds.centerX,
+
+    canvas.getHeight() / 2 -
+      scale * bounds.centerY,
   ];
 }
 
@@ -1365,7 +1292,9 @@ function hasExpectedDesignViewport(canvas) {
       ];
 
   const bounds =
-    getDesignViewBounds(canvas);
+    getDesignViewBounds(
+      canvas
+    );
 
   const expected =
     bounds
@@ -1431,49 +1360,32 @@ function applyActiveDesignView(
     return;
   }
 
-  removeDesignViewGuides(canvas);
+  removeDesignViewGuides(
+    canvas
+  );
+
   restoreTechnicalGuideVisibility(
     canvas
   );
 
-  if (!isDesignSideViewActive()) {
-    canvas.setViewportTransform([
-      1,
-      0,
-      0,
-      1,
-      0,
-      0,
-    ]);
-
-    canvas.calcOffset();
-
-    removeDesignViewClip(canvas);
-    restoreDesignObjectInteractivity(
-      canvas
-    );
-
-    setCanvasZoomControlsVisible(true);
-    applyCanvasZoom();
-
-    if (updateLayers) {
-      updateLayerPanel();
-    }
-
-    updateDesignViewToolbarState();
-    canvas.requestRenderAll();
-
-    return;
-  }
+  const view =
+    getActiveDesignView();
 
   const bounds =
-    getDesignViewBounds(canvas);
+    getDesignViewBounds(
+      canvas,
+      view
+    );
 
-  if (!bounds) {
+  if (
+    !view ||
+    !bounds
+  ) {
     return;
   }
 
-  canvasZoom = 1;
+  designViewContext.activeViewId =
+    view.id;
 
   clearCanvasContainerTransform(
     canvas
@@ -1488,7 +1400,15 @@ function applyActiveDesignView(
 
   canvas.calcOffset();
 
-  hideTechnicalGuides(canvas);
+  hideTechnicalGuides(
+    canvas
+  );
+
+  normalizeActiveDesignViewObjects(
+    canvas,
+    view,
+    bounds
+  );
 
   updateDesignObjectInteractivity(
     canvas
@@ -1504,13 +1424,18 @@ function applyActiveDesignView(
     bounds
   );
 
-  setCanvasZoomControlsVisible(false);
+  setCanvasZoomControlsVisible(
+    true
+  );
+
+  applyCanvasZoom();
 
   if (updateLayers) {
     updateLayerPanel();
   }
 
   updateDesignViewToolbarState();
+
   canvas.requestRenderAll();
 }
 
@@ -1565,28 +1490,8 @@ function prepareNewObjectForActiveDesignView(
     return;
   }
 
-  const activeView =
-    getActiveDesignView();
-
-  const defaultView =
-    !activeView &&
-    designViewContext?.config.enabled
-      ? (
-        getDesignViewById(
-          designViewContext
-            .config
-            .defaultViewId
-        ) ||
-        designViewContext
-          .config
-          .views[0] ||
-        null
-      )
-      : null;
-
   const view =
-    activeView ||
-    defaultView;
+    getActiveDesignView();
 
   const bounds =
     getDesignViewBounds(
@@ -1611,20 +1516,11 @@ function prepareNewObjectForActiveDesignView(
       originY:
         'center',
 
-      angle:
-        normalizeDesignRotation(
-          Number(
-            object.angle ||
-            0
-          ) -
-          bounds.rotation
-        ),
-
       _designViewId:
         view.id,
 
       _designViewRotation:
-        bounds.rotation,
+        getDesignViewRotation(view),
 
       _designOrientationVersion:
         DESIGN_VIEW_ORIENTATION_VERSION,
@@ -1699,8 +1595,10 @@ function hydrateDesignObjectMetadata(canvas) {
     !canvas ||
     !designViewContext?.config.enabled
   ) {
-    return;
+    return false;
   }
+
+  let migrated = false;
 
   canvas
     .getObjects()
@@ -1722,31 +1620,108 @@ function hydrateDesignObjectMetadata(canvas) {
             object
           );
 
+      const fallbackView =
+        getActiveDesignView() ||
+        designViewContext
+          .config
+          .views[0] ||
+        null;
+
       const view =
         getDesignViewById(
           inferredViewId
+        ) ||
+        fallbackView;
+
+      if (!view) {
+        return;
+      }
+
+      const bounds =
+        getDesignViewBounds(
+          canvas,
+          view
         );
 
-      object._designViewId =
-        inferredViewId;
+      const configuredRotation =
+        getDesignViewRotation(
+          view
+        );
 
-      object._designViewRotation =
-        getDesignViewRotation(view);
+      const orientationVersion =
+        Number(
+          object._designOrientationVersion ||
+          0
+        );
+
+      const centerBefore =
+        object.getCenterPoint?.();
+
+      const rotatedCenter =
+        getRotatedPointAroundDesignBounds(
+          centerBefore,
+          bounds,
+          configuredRotation
+        );
+
+      const shouldRecoverLegacyPlacement =
+        Boolean(
+          bounds &&
+          configuredRotation &&
+          centerBefore &&
+          !isPointInsideDesignBounds(
+            centerBefore,
+            bounds
+          ) &&
+          isPointInsideDesignBounds(
+            rotatedCenter,
+            bounds
+          )
+        );
 
       if (
-        !Number.isFinite(
-          Number(
-            object
-              ._designOrientationVersion
-          )
+        (
+          orientationVersion === 1 ||
+          shouldRecoverLegacyPlacement
+        ) &&
+        bounds &&
+        configuredRotation
+      ) {
+        migrateLegacyDesignObjectToVisualOrientation(
+          object,
+          bounds,
+          configuredRotation
+        );
+
+        migrated = true;
+      }
+
+      if (
+        bounds &&
+        fitDesignObjectInsideBounds(
+          object,
+          bounds
         )
       ) {
-        object._designOrientationVersion =
-          0;
+        migrated = true;
       }
+
+      object._designViewId =
+        view.id;
+
+      object._designViewRotation =
+        configuredRotation;
+
+      object._designOrientationVersion =
+        DESIGN_VIEW_ORIENTATION_VERSION;
+
+      object._designOriginalVisible =
+        true;
 
       object.setCoords?.();
     });
+
+  return migrated;
 }
 
 function assignObjectToCurrentDesignView(
@@ -1781,13 +1756,11 @@ function assignObjectToCurrentDesignView(
     nextViewId;
 
   object._designViewRotation =
-    getDesignViewRotation(view);
+    getDesignViewRotation(
+      view
+    );
 
   object._designOrientationVersion =
-    Number(
-      object
-        ._designOrientationVersion
-    ) ||
     DESIGN_VIEW_ORIENTATION_VERSION;
 
   object.setCoords?.();
@@ -1847,36 +1820,21 @@ function constrainObjectToActiveDesignView(
   object
 ) {
   const bounds =
-    getDesignViewBounds(canvas);
-
-  const center =
-    object?.getCenterPoint?.();
+    getDesignViewBounds(
+      canvas
+    );
 
   if (
     !bounds ||
-    !center ||
     !object ||
     isGuideObject(object)
   ) {
     return;
   }
 
-  object.setPositionByOrigin(
-    new fabric.Point(
-      clamp(
-        center.x,
-        bounds.left,
-        bounds.right
-      ),
-
-      clamp(
-        center.y,
-        bounds.top,
-        bounds.bottom
-      )
-    ),
-    'center',
-    'center'
+  fitDesignObjectInsideBounds(
+    object,
+    bounds
   );
 
   object._designViewId =
@@ -1886,13 +1844,315 @@ function constrainObjectToActiveDesignView(
     bounds.rotation;
 
   object._designOrientationVersion =
-    Number(
-      object
-        ._designOrientationVersion
-    ) ||
     DESIGN_VIEW_ORIENTATION_VERSION;
 
   object.setCoords?.();
+}
+
+function fitDesignObjectInsideBounds(
+  object,
+  bounds,
+  {
+    scaleDown = true,
+    padding = 2,
+  } = {}
+) {
+  if (
+    !object ||
+    !bounds
+  ) {
+    return false;
+  }
+
+  object.setCoords?.();
+
+  let objectBounds =
+    object.getBoundingRect(
+      true,
+      true
+    );
+
+  const maximumWidth =
+    Math.max(
+      1,
+      bounds.width -
+      padding * 2
+    );
+
+  const maximumHeight =
+    Math.max(
+      1,
+      bounds.height -
+      padding * 2
+    );
+
+  let changed = false;
+
+  if (
+    scaleDown &&
+    (
+      objectBounds.width >
+      maximumWidth ||
+      objectBounds.height >
+      maximumHeight
+    )
+  ) {
+    const scaleFactor =
+      Math.min(
+        maximumWidth /
+        Math.max(
+          1,
+          objectBounds.width
+        ),
+
+        maximumHeight /
+        Math.max(
+          1,
+          objectBounds.height
+        )
+      );
+
+    if (
+      Number.isFinite(scaleFactor) &&
+      scaleFactor > 0 &&
+      scaleFactor < 1
+    ) {
+      object.scaleX =
+        Number(
+          object.scaleX ||
+          1
+        ) *
+        scaleFactor;
+
+      object.scaleY =
+        Number(
+          object.scaleY ||
+          1
+        ) *
+        scaleFactor;
+
+      object.setCoords?.();
+
+      objectBounds =
+        object.getBoundingRect(
+          true,
+          true
+        );
+
+      changed = true;
+    }
+  }
+
+  let offsetX = 0;
+  let offsetY = 0;
+
+  const minimumLeft =
+    bounds.left +
+    padding;
+
+  const minimumTop =
+    bounds.top +
+    padding;
+
+  const maximumRight =
+    bounds.right -
+    padding;
+
+  const maximumBottom =
+    bounds.bottom -
+    padding;
+
+  if (
+    objectBounds.left <
+    minimumLeft
+  ) {
+    offsetX =
+      minimumLeft -
+      objectBounds.left;
+  } else if (
+    objectBounds.left +
+    objectBounds.width >
+    maximumRight
+  ) {
+    offsetX =
+      maximumRight -
+      (
+        objectBounds.left +
+        objectBounds.width
+      );
+  }
+
+  if (
+    objectBounds.top <
+    minimumTop
+  ) {
+    offsetY =
+      minimumTop -
+      objectBounds.top;
+  } else if (
+    objectBounds.top +
+    objectBounds.height >
+    maximumBottom
+  ) {
+    offsetY =
+      maximumBottom -
+      (
+        objectBounds.top +
+        objectBounds.height
+      );
+  }
+
+  if (
+    offsetX ||
+    offsetY
+  ) {
+    object.set({
+      left:
+        Number(
+          object.left ||
+          0
+        ) +
+        offsetX,
+
+      top:
+        Number(
+          object.top ||
+          0
+        ) +
+        offsetY,
+    });
+
+    object.setCoords?.();
+
+    changed = true;
+  }
+
+  return changed;
+}
+
+function isPointInsideDesignBounds(
+  point,
+  bounds
+) {
+  return Boolean(
+    point &&
+    bounds &&
+    point.x >= bounds.left &&
+    point.x <= bounds.right &&
+    point.y >= bounds.top &&
+    point.y <= bounds.bottom
+  );
+}
+
+function getRotatedPointAroundDesignBounds(
+  point,
+  bounds,
+  rotation
+) {
+  if (
+    !point ||
+    !bounds
+  ) {
+    return null;
+  }
+
+  const radians =
+    normalizeDesignRotation(
+      rotation
+    ) *
+    Math.PI /
+    180;
+
+  const offsetX =
+    point.x -
+    bounds.centerX;
+
+  const offsetY =
+    point.y -
+    bounds.centerY;
+
+  return new fabric.Point(
+    bounds.centerX +
+    offsetX *
+    Math.cos(radians) -
+    offsetY *
+    Math.sin(radians),
+
+    bounds.centerY +
+    offsetX *
+    Math.sin(radians) +
+    offsetY *
+    Math.cos(radians)
+  );
+}
+
+function migrateLegacyDesignObjectToVisualOrientation(
+  object,
+  bounds,
+  rotation
+) {
+  if (
+    !object ||
+    !bounds
+  ) {
+    return;
+  }
+
+  const currentCenter =
+    object.getCenterPoint?.();
+
+  const rotatedCenter =
+    getRotatedPointAroundDesignBounds(
+      currentCenter,
+      bounds,
+      rotation
+    );
+
+  object.angle =
+    normalizeDesignRotation(
+      Number(object.angle || 0) +
+      normalizeDesignRotation(rotation)
+    );
+
+  if (rotatedCenter) {
+    object.setPositionByOrigin(
+      rotatedCenter,
+      'center',
+      'center'
+    );
+  }
+
+  object.setCoords?.();
+}
+
+function normalizeActiveDesignViewObjects(
+  canvas,
+  view,
+  bounds
+) {
+  if (
+    !canvas ||
+    !view ||
+    !bounds
+  ) {
+    return;
+  }
+
+  canvas
+    .getObjects()
+    .filter(object => (
+      !isGuideObject(object) &&
+      getObjectDesignViewId(
+        canvas,
+        object
+      ) === view.id
+    ))
+    .forEach(object => {
+      fitDesignObjectInsideBounds(
+        object,
+        bounds
+      );
+    });
 }
 
 function updateDesignObjectInteractivity(canvas) {
@@ -1912,11 +2172,18 @@ function updateDesignObjectInteractivity(canvas) {
       object._designOriginalEvented ??=
         object.evented !== false;
 
+      object._designOriginalVisible =
+        true;
+
       const belongsToActiveView =
         getObjectDesignViewId(
           canvas,
           object
         ) === activeView?.id;
+
+      object.visible =
+        belongsToActiveView &&
+        object._designOriginalVisible;
 
       object.selectable =
         belongsToActiveView &&
@@ -1928,7 +2195,11 @@ function updateDesignObjectInteractivity(canvas) {
     });
 }
 
-function restoreDesignObjectInteractivity(canvas) {
+function restoreAllDesignObjectsForCanonicalRender(canvas) {
+  if (!canvas) {
+    return;
+  }
+
   canvas
     .getObjects()
     .filter(
@@ -1936,14 +2207,16 @@ function restoreDesignObjectInteractivity(canvas) {
         !isGuideObject(object)
     )
     .forEach(object => {
+      object.visible =
+        object._designOriginalVisible !==
+        false;
+
       object.selectable =
-        object
-          ._designOriginalSelectable !==
+        object._designOriginalSelectable !==
         false;
 
       object.evented =
-        object
-          ._designOriginalEvented !==
+        object._designOriginalEvented !==
         false;
     });
 }
@@ -1951,11 +2224,10 @@ function restoreDesignObjectInteractivity(canvas) {
 function hideTechnicalGuides(canvas) {
   canvas
     .getObjects()
-    .filter(
-      object =>
-        isGuideObject(object) &&
-        !object[DESIGN_VIEW_GUIDE_FLAG]
-    )
+    .filter(object => (
+      isGuideObject(object) &&
+      !object[DESIGN_VIEW_GUIDE_FLAG]
+    ))
     .forEach(object => {
       object.visible = false;
     });
@@ -1964,11 +2236,10 @@ function hideTechnicalGuides(canvas) {
 function restoreTechnicalGuideVisibility(canvas) {
   canvas
     .getObjects()
-    .filter(
-      object =>
-        isGuideObject(object) &&
-        !object[DESIGN_VIEW_GUIDE_FLAG]
-    )
+    .filter(object => (
+      isGuideObject(object) &&
+      !object[DESIGN_VIEW_GUIDE_FLAG]
+    ))
     .forEach(object => {
       object.visible = true;
     });
@@ -2070,12 +2341,23 @@ function addDesignViewGuides(
 
   guides.forEach(guide => {
     guide.set({
-      strokeUniform: true,
-      selectable: false,
-      evented: false,
-      objectCaching: false,
-      excludeFromExport: true,
-      _isGuide: true,
+      strokeUniform:
+        true,
+
+      selectable:
+        false,
+
+      evented:
+        false,
+
+      objectCaching:
+        false,
+
+      excludeFromExport:
+        true,
+
+      _isGuide:
+        true,
 
       [DESIGN_VIEW_GUIDE_FLAG]:
         true,
@@ -2208,18 +2490,46 @@ function applyDesignViewClip(
       bounds
     );
 
+  const visibleLeft =
+    Math.max(
+      0,
+      screenBounds.left -
+      DESIGN_VIEW_VISIBLE_MARGIN_PX
+    );
+
+  const visibleTop =
+    Math.max(
+      0,
+      screenBounds.top -
+      DESIGN_VIEW_VISIBLE_MARGIN_PX
+    );
+
+  const visibleRight =
+    Math.min(
+      canvas.getWidth(),
+      screenBounds.right +
+      DESIGN_VIEW_VISIBLE_MARGIN_PX
+    );
+
+  const visibleBottom =
+    Math.min(
+      canvas.getHeight(),
+      screenBounds.bottom +
+      DESIGN_VIEW_VISIBLE_MARGIN_PX
+    );
+
   const rightInset =
     Math.max(
       0,
       canvas.getWidth() -
-      screenBounds.right
+      visibleRight
     );
 
   const bottomInset =
     Math.max(
       0,
       canvas.getHeight() -
-      screenBounds.bottom
+      visibleBottom
     );
 
   container.classList.add(
@@ -2227,17 +2537,15 @@ function applyDesignViewClip(
   );
 
   container.style.clipPath =
-    `inset(${screenBounds.top}px ${rightInset}px ${bottomInset}px ${screenBounds.left}px round 10px)`;
+    `inset(${visibleTop}px ${rightInset}px ${bottomInset}px ${visibleLeft}px round 10px)`;
+
+  container.style.overflow =
+    'hidden';
 
   document
     .getElementById('canvas-wrap')
     ?.classList
     .add('is-design-side-view');
-
-  updateDesignViewOutline(
-    canvas,
-    screenBounds
-  );
 }
 
 function removeDesignViewClip(canvas) {
@@ -2251,6 +2559,7 @@ function removeDesignViewClip(canvas) {
     );
 
     container.style.clipPath = '';
+    container.style.overflow = '';
   }
 
   document
@@ -2265,66 +2574,6 @@ function removeDesignViewClip(canvas) {
     ?.remove();
 }
 
-function updateDesignViewOutline(
-  canvas,
-  screenBounds
-) {
-  const canvasWrap =
-    document.getElementById(
-      'canvas-wrap'
-    );
-
-  const container =
-    canvas.wrapperEl ||
-    canvas.lowerCanvasEl?.parentElement;
-
-  if (
-    !canvasWrap ||
-    !container
-  ) {
-    return;
-  }
-
-  let outline =
-    canvasWrap.querySelector(
-      '[data-canvas-editor-outline]'
-    );
-
-  if (!outline) {
-    outline =
-      document.createElement(
-        'div'
-      );
-
-    outline.className =
-      'canvas-editor-outline';
-
-    outline.dataset.canvasEditorOutline =
-      'true';
-
-    canvasWrap.appendChild(
-      outline
-    );
-  }
-
-  Object.assign(
-    outline.style,
-    {
-      left:
-        `${container.offsetLeft + screenBounds.left}px`,
-
-      top:
-        `${container.offsetTop + screenBounds.top}px`,
-
-      width:
-        `${screenBounds.width}px`,
-
-      height:
-        `${screenBounds.height}px`,
-    }
-  );
-}
-
 function isOutsideActiveDesignViewMargin(object) {
   if (
     !fabricCanvas ||
@@ -2334,19 +2583,49 @@ function isOutsideActiveDesignViewMargin(object) {
     return null;
   }
 
+  const view =
+    getActiveDesignView();
+
+  if (!view) {
+    return null;
+  }
+
+  return isObjectOutsideDesignViewMargin(
+    fabricCanvas,
+    object,
+    view,
+    designViewContext?.margin || 0
+  );
+}
+
+function isObjectOutsideDesignViewMargin(
+  canvas,
+  object,
+  view,
+  fallbackMargin = 0
+) {
+  if (
+    !canvas ||
+    !object ||
+    !view
+  ) {
+    return false;
+  }
+
   const bounds =
     getDesignViewBounds(
-      fabricCanvas
+      canvas,
+      view
     );
 
   if (!bounds) {
-    return null;
+    return false;
   }
 
   const safeMargin =
     Math.min(
-      designViewContext?.margin ||
-      0,
+      designViewContext?.margin ??
+      fallbackMargin,
 
       bounds.width / 3,
       bounds.height / 3
@@ -2360,22 +2639,22 @@ function isOutsideActiveDesignViewMargin(object) {
 
   return (
     objectBounds.left <
-      bounds.left +
-      safeMargin ||
+    bounds.left +
+    safeMargin ||
 
     objectBounds.top <
-      bounds.top +
-      safeMargin ||
+    bounds.top +
+    safeMargin ||
 
     objectBounds.left +
-      objectBounds.width >
-      bounds.right -
-      safeMargin ||
+    objectBounds.width >
+    bounds.right -
+    safeMargin ||
 
     objectBounds.top +
-      objectBounds.height >
-      bounds.bottom -
-      safeMargin
+    objectBounds.height >
+    bounds.bottom -
+    safeMargin
   );
 }
 
@@ -2419,6 +2698,26 @@ function withCanonicalDesignCanvas(
       })
     );
 
+  const designObjectStates =
+    canvas
+      .getObjects()
+      .filter(
+        object =>
+          !isGuideObject(object)
+      )
+      .map(object => ({
+        object,
+
+        visible:
+          object.visible,
+
+        selectable:
+          object.selectable,
+
+        evented:
+          object.evented,
+      }));
+
   designViewCanonicalDepth += 1;
 
   canvas.setViewportTransform([
@@ -2431,6 +2730,10 @@ function withCanonicalDesignCanvas(
   ]);
 
   canvas.calcOffset();
+
+  restoreAllDesignObjectsForCanonicalRender(
+    canvas
+  );
 
   if (hideGuides) {
     guideStates.forEach(
@@ -2460,6 +2763,30 @@ function withCanonicalDesignCanvas(
       }
     );
 
+    designObjectStates.forEach(
+      ({
+        object,
+        visible,
+        selectable,
+        evented,
+      }) => {
+        if (
+          canvas
+            .getObjects()
+            .includes(object)
+        ) {
+          object.visible =
+            visible;
+
+          object.selectable =
+            selectable;
+
+          object.evented =
+            evented;
+        }
+      }
+    );
+
     canvas.setViewportTransform(
       previousViewport
     );
@@ -2475,7 +2802,8 @@ function withCanonicalDesignCanvas(
     applyActiveDesignView(
       canvas,
       {
-        updateLayers: false,
+        updateLayers:
+          false,
       }
     );
 
@@ -2524,7 +2852,9 @@ function bindDesignTabs(
   stateKey
 ) {
   document
-    .querySelectorAll('.design-tab')
+    .querySelectorAll(
+      '.design-tab'
+    )
     .forEach(tab => {
       tab.addEventListener(
         'click',
@@ -2625,6 +2955,7 @@ function bindUploadZone(
     'dragover',
     event => {
       event.preventDefault();
+
       zone.classList.add(
         'dragover'
       );
@@ -2688,26 +3019,104 @@ function bindDesignNextButton(
   activePers,
   stateKey
 ) {
-  document
-    .getElementById(
+  const button =
+    document.getElementById(
       'btn-design-next'
-    )
-    ?.addEventListener(
-      'click',
-      () => {
-        const error =
-          document.getElementById(
-            'design-error'
-          );
+    );
 
+  if (!button) {
+    return;
+  }
+
+  let isSubmitting = false;
+
+  const setButtonBusy = busy => {
+    button.disabled =
+      busy;
+
+    button.setAttribute(
+      'aria-busy',
+      String(busy)
+    );
+
+    button.textContent =
+      busy
+        ? 'Bezig…'
+        : 'Verder →';
+  };
+
+  const showError = message => {
+    const error =
+      document.getElementById(
+        'design-error'
+      );
+
+    if (!error) {
+      return;
+    }
+
+    error.textContent =
+      message;
+
+    error.hidden =
+      false;
+
+    error.scrollIntoView({
+      behavior:
+        'smooth',
+
+      block:
+        'center',
+    });
+  };
+
+  const saveDesignToSession =
+    async design => {
+      await Promise.resolve(
+        Session.setDesign(
+          design
+        )
+      );
+
+      if (
+        typeof Session.flushDesignStorage ===
+        'function'
+      ) {
+        await Session.flushDesignStorage();
+      }
+    };
+
+  button.addEventListener(
+    'click',
+    async () => {
+      if (isSubmitting) {
+        return;
+      }
+
+      isSubmitting = true;
+
+      setButtonBusy(
+        true
+      );
+
+      const error =
+        document.getElementById(
+          'design-error'
+        );
+
+      if (error) {
+        error.hidden = true;
+      }
+
+      try {
         if (
           activeDesignTab ===
           'upload'
         ) {
           if (!uploadedDataURL) {
-            if (error) {
-              error.hidden = false;
-            }
+            showError(
+              'Upload eerst een bestand om verder te gaan.'
+            );
 
             return;
           }
@@ -2748,22 +3157,28 @@ function bindDesignNextButton(
               ),
           };
 
-          Session.setDesign(
+          await saveDesignToSession(
             designData
           );
 
           persistDesignState(
             stateKey,
-            designData
+            {
+              tab:
+                'upload',
+
+              fileName:
+                uploadedFileName,
+
+              uploadCheck:
+                uploadedCheck,
+            }
           );
         } else {
           if (!fabricCanvas) {
-            if (error) {
-              error.textContent =
-                'De ontwerptool is nog niet geladen. Probeer het opnieuw.';
-
-              error.hidden = false;
-            }
+            showError(
+              'De ontwerptool is nog niet geladen. Probeer het opnieuw.'
+            );
 
             return;
           }
@@ -2787,16 +3202,17 @@ function bindDesignNextButton(
                 ),
 
               {
-                hideGuides: false,
+                hideGuides:
+                  false,
               }
             );
 
           const editorViewId =
             designViewContext
               ?.activeViewId ||
-            DESIGN_VIEW_SHEET_ID;
+            null;
 
-          Session.setDesign({
+          const designData = {
             dataURL:
               snapshot.dataURL,
 
@@ -2818,10 +3234,15 @@ function bindDesignNextButton(
             backgroundColor:
               snapshot.backgroundColor,
 
+            fabricCanvasWidth:
+              snapshot.fabricCanvasWidth,
+
+            fabricCanvasHeight:
+              snapshot.fabricCanvasHeight,
+
             editorViewId,
 
-            ...(editorViewId !==
-              DESIGN_VIEW_SHEET_ID
+            ...(editorViewId
               ? {
                 previewViewId:
                   editorViewId,
@@ -2829,31 +3250,33 @@ function bindDesignNextButton(
               : {}),
 
             prepressWarnings,
-            uploadCheck: null,
-          });
+
+            uploadCheck:
+              null,
+          };
+
+          await saveDesignToSession(
+            designData
+          );
 
           persistDesignState(
             stateKey,
             {
-              dataURL:
-                snapshot.dataURL,
-
-              pdfDataURL:
-                snapshot.pdfDataURL,
-
-              rillinesPdfDataURL:
-                snapshot.rillinesPdfDataURL,
-
               fabricJSON:
                 snapshot.json,
 
               backgroundColor:
                 snapshot.backgroundColor,
 
+              fabricCanvasWidth:
+                snapshot.fabricCanvasWidth,
+
+              fabricCanvasHeight:
+                snapshot.fabricCanvasHeight,
+
               editorViewId,
 
-              ...(editorViewId !==
-                DESIGN_VIEW_SHEET_ID
+              ...(editorViewId
                 ? {
                   previewViewId:
                     editorViewId,
@@ -2864,18 +3287,35 @@ function bindDesignNextButton(
                 'tool',
 
               prepressWarnings,
-              uploadCheck: null,
+
+              uploadCheck:
+                null,
             }
           );
         }
 
-        if (error) {
-          error.hidden = true;
-        }
+        await navigateTo(
+          'review'
+        );
+      } catch (submitError) {
+        console.error(
+          'Ontwerp verwerken of doorgaan naar de volgende stap is mislukt.',
+          submitError
+        );
 
-        navigateTo('review');
+        showError(
+          submitError?.message ||
+          'Het ontwerp kon niet worden verwerkt. Probeer het opnieuw.'
+        );
+      } finally {
+        isSubmitting = false;
+
+        setButtonBusy(
+          false
+        );
       }
-    );
+    }
+  );
 }
 
 function bindFontSelector(
@@ -2911,6 +3351,7 @@ function bindFontSelector(
 
         canvas.renderAll();
         fabricSaveHistory();
+
         autoSaveCanvasState(
           stateKey
         );
@@ -3048,18 +3489,21 @@ function syncFontSizeControls(object) {
 
   const availableSizes = [
     ...select.options,
-  ].map(option => (
-    Number(option.value)
-  ));
+  ].map(
+    option =>
+      Number(option.value)
+  );
 
   const closestSize =
     availableSizes.reduce(
       (closest, size) => (
         Math.abs(
-          size - fontSize
+          size -
+          fontSize
         ) <
         Math.abs(
-          closest - fontSize
+          closest -
+          fontSize
         )
           ? size
           : closest
@@ -3125,8 +3569,10 @@ function getResponsiveCanvasSize(
   const scale =
     Math.min(
       1,
+
       availableWidth /
       printWidthPx,
+
       availableHeight /
       printHeightPx
     );
@@ -3166,25 +3612,20 @@ function applyCanvasZoom() {
     return;
   }
 
-  if (isDesignSideViewActive()) {
-    container.style.transform =
-      'none';
-
-    container.style.transformOrigin =
-      'center center';
-
-    return;
-  }
-
   container.style.transform =
     `scale(${canvasZoom})`;
 
   container.style.transformOrigin =
     'center center';
+
+  requestAnimationFrame(() => {
+    fabricCanvas?.calcOffset();
+    fabricCanvas?.requestRenderAll();
+  });
 }
 
 function setCanvasZoom(nextZoom) {
-  canvasZoom =
+  const clampedZoom =
     Math.min(
       CANVAS_ZOOM_MAX,
       Math.max(
@@ -3193,7 +3634,47 @@ function setCanvasZoom(nextZoom) {
       )
     );
 
+  if (
+    Math.abs(
+      clampedZoom -
+      canvasZoom
+    ) <
+    0.001
+  ) {
+    return;
+  }
+
+  canvasZoom =
+    clampedZoom;
+
   applyCanvasZoom();
+  updateCanvasZoomControls();
+}
+
+function updateCanvasZoomControls() {
+  const zoomInButton =
+    document.getElementById(
+      'btn-canvas-zoom-in'
+    );
+
+  const zoomOutButton =
+    document.getElementById(
+      'btn-canvas-zoom-out'
+    );
+
+  if (zoomInButton) {
+    zoomInButton.disabled =
+      canvasZoom >=
+      CANVAS_ZOOM_MAX -
+      0.001;
+  }
+
+  if (zoomOutButton) {
+    zoomOutButton.disabled =
+      canvasZoom <=
+      CANVAS_ZOOM_MIN +
+      0.001;
+  }
 }
 
 function bindCanvasZoomControls() {
@@ -3224,6 +3705,8 @@ function bindCanvasZoomControls() {
         );
       }
     );
+
+  updateCanvasZoomControls();
 }
 
 function scheduleFabricInit(
@@ -3343,12 +3826,23 @@ function destroyFabricCanvas() {
     });
 
   const canvas =
-    document.getElementById('c');
+    document.getElementById(
+      'c'
+    );
 
   if (canvas) {
-    canvas.removeAttribute('style');
-    canvas.removeAttribute('width');
-    canvas.removeAttribute('height');
+    canvas.removeAttribute(
+      'style'
+    );
+
+    canvas.removeAttribute(
+      'width'
+    );
+
+    canvas.removeAttribute(
+      'height'
+    );
+
     canvas.className = '';
   }
 }
@@ -3369,7 +3863,9 @@ function initFabricTool(
   }
 
   const canvasElement =
-    document.getElementById('c');
+    document.getElementById(
+      'c'
+    );
 
   const canvasWrap =
     document.getElementById(
@@ -3393,7 +3889,7 @@ function initFabricTool(
   }
 
   fabricHistory = [];
-  canvasZoom = 1;
+  canvasZoom = 1.1;
   fabricActiveColor = '#1D9E75';
 
   fabricBackgroundColor =
@@ -3485,7 +3981,8 @@ function initFabricTool(
     canvasWidth,
     canvasHeight,
     activePers,
-    product
+    product,
+    stateKey
   );
 
   bindFabricEvents(
@@ -3526,7 +4023,7 @@ function initFabricTool(
     if (
       fabricCanvas &&
       token ===
-        fabricInitToken
+      fabricInitToken
     ) {
       redrawGuides(
         fabricCanvas,
@@ -3537,9 +4034,16 @@ function initFabricTool(
         canvasHeight
       );
 
-      hydrateDesignObjectMetadata(
-        fabricCanvas
-      );
+      const metadataChanged =
+        hydrateDesignObjectMetadata(
+          fabricCanvas
+        );
+
+      if (metadataChanged) {
+        autoSaveCanvasState(
+          stateKey
+        );
+      }
 
       updateFabricImageDpiWarning(
         fabricCanvas,
@@ -3617,13 +4121,17 @@ function bindFabricDocumentHandlers() {
         return;
       }
 
-      fabricCanvas.remove(object);
+      fabricCanvas.remove(
+        object
+      );
 
       updateFabricImageDpiWarning(
         fabricCanvas,
+
         window
           ._currentDesignGuideState
           ?.activePers,
+
         window
           ._currentDesignGuideState
           ?.product
@@ -3992,11 +4500,10 @@ function drawMarginRect(
 ) {
   canvas
     .getObjects()
-    .filter(
-      object =>
-        object._isMargin &&
-        !object._isBlockedZone
-    )
+    .filter(object => (
+      object._isMargin &&
+      !object._isBlockedZone
+    ))
     .forEach(object => {
       canvas.remove(object);
     });
@@ -4209,8 +4716,13 @@ function drawBlockedZones(
             true,
         });
 
-      canvas.add(safeCircle);
-      canvas.add(holeCircle);
+      canvas.add(
+        safeCircle
+      );
+
+      canvas.add(
+        holeCircle
+      );
 
       return;
     }
@@ -4325,8 +4837,13 @@ function drawBlockedZones(
             true,
         });
 
-      canvas.add(safeRect);
-      canvas.add(blockedRect);
+      canvas.add(
+        safeRect
+      );
+
+      canvas.add(
+        blockedRect
+      );
 
       return;
     }
@@ -4351,7 +4868,9 @@ function drawBlockedZones(
         );
 
       if (safeZone) {
-        canvas.add(safeZone);
+        canvas.add(
+          safeZone
+        );
       }
 
       const foldLine =
@@ -4398,11 +4917,16 @@ function drawBlockedZones(
           }
         );
 
-      canvas.add(foldLine);
+      canvas.add(
+        foldLine
+      );
     }
   });
 
-  bringGuidesToFront(canvas);
+  bringGuidesToFront(
+    canvas
+  );
+
   canvas.renderAll();
 }
 
@@ -4659,7 +5183,9 @@ function redrawGuides(
     return;
   }
 
-  removeGuideObjects(canvas);
+  removeGuideObjects(
+    canvas
+  );
 
   drawMarginRect(
     canvas,
@@ -4683,7 +5209,10 @@ function redrawGuides(
     canvasHeight
   );
 
-  bringGuidesToFront(canvas);
+  bringGuidesToFront(
+    canvas
+  );
+
   canvas.renderAll();
 
   window._currentDesignGuideState = {
@@ -4700,7 +5229,8 @@ function redrawGuides(
     applyActiveDesignView(
       canvas,
       {
-        updateLayers: false,
+        updateLayers:
+          false,
       }
     );
   }
@@ -4771,9 +5301,7 @@ function isGuideObject(object) {
   );
 }
 
-function getContrastingGuideColor(
-  backgroundColor
-) {
+function getContrastingGuideColor(backgroundColor) {
   const hex =
     normalizeHexColor(
       backgroundColor
@@ -4866,10 +5394,16 @@ function getBlockedCircleCanvasData(
   }
 
   const xMm =
-    Number(zone.x_mm || 0);
+    Number(
+      zone.x_mm ||
+      0
+    );
 
   const yMm =
-    Number(zone.y_mm || 0);
+    Number(
+      zone.y_mm ||
+      0
+    );
 
   const diameterMm =
     Number(
@@ -4955,10 +5489,16 @@ function getBlockedRectCanvasData(
   }
 
   const xMm =
-    Number(zone.x_mm || 0);
+    Number(
+      zone.x_mm ||
+      0
+    );
 
   const yMm =
-    Number(zone.y_mm || 0);
+    Number(
+      zone.y_mm ||
+      0
+    );
 
   const rectWidthMm =
     Number(
@@ -5124,7 +5664,9 @@ function getBlockedLineCanvasData(
       y1Mm
     );
 
-  if (deltaYmm <= 0.01) {
+  if (
+    deltaYmm <= 0.01
+  ) {
     const centerYmm =
       (
         y1Mm +
@@ -5221,12 +5763,14 @@ function restoreCanvasStateOrDefault(
   canvasWidth,
   canvasHeightValue,
   activePers,
-  product
+  product,
+  stateKey
 ) {
   const redrawAfterRestore = () => {
-    hydrateDesignObjectMetadata(
-      canvas
-    );
+    const metadataChanged =
+      hydrateDesignObjectMetadata(
+        canvas
+      );
 
     redrawGuides(
       canvas,
@@ -5254,7 +5798,14 @@ function restoreCanvasStateOrDefault(
     updateLayerPanel();
 
     fabricHistory = [];
+
     fabricSaveHistory();
+
+    if (metadataChanged) {
+      autoSaveCanvasState(
+        stateKey
+      );
+    }
   };
 
   if (savedState?.fabricJSON) {
@@ -5335,16 +5886,25 @@ function addDefaultText(
     }
   );
 
-  canvas.add(demo);
+  canvas.add(
+    demo
+  );
+
   canvas.renderAll();
+
   updateLayerPanel();
 }
 
 function isCenterSnappableObject(object) {
   return Boolean(
     object &&
-    object.type === 'image' &&
-    !isGuideObject(object)
+    !isGuideObject(object) &&
+    object.visible !== false &&
+    object.selectable !== false &&
+    !(
+      object.type === 'i-text' &&
+      object.isEditing
+    )
   );
 }
 
@@ -5356,24 +5916,35 @@ function getCanvasCenterPoint(canvas) {
 
   return new fabric.Point(
     bounds?.centerX ??
-      canvas.getWidth() / 2,
+    canvas.getWidth() / 2,
 
     bounds?.centerY ??
-      canvas.getHeight() / 2
+    canvas.getHeight() / 2
   );
 }
 
 function getCenterSnapThreshold(canvas) {
-  const zoom =
+  const viewportZoom =
     typeof canvas.getZoom ===
-      'function'
+    'function'
       ? canvas.getZoom() ||
         1
       : 1;
 
+  const presentationZoom =
+    Number.isFinite(
+      Number(canvasZoom)
+    ) &&
+    Number(canvasZoom) > 0
+      ? Number(canvasZoom)
+      : 1;
+
   return (
     CENTER_SNAP_THRESHOLD_PX /
-    zoom
+    (
+      viewportZoom *
+      presentationZoom
+    )
   );
 }
 
@@ -5383,9 +5954,7 @@ function applyCenterSnap(
 ) {
   if (
     !canvas ||
-    !isCenterSnappableObject(
-      object
-    )
+    !isCenterSnappableObject(object)
   ) {
     removeCenterSnapGuides(
       canvas
@@ -5570,6 +6139,9 @@ function getCenterGuideObjectOptions() {
     objectCaching:
       false,
 
+    strokeUniform:
+      true,
+
     excludeFromExport:
       true,
 
@@ -5604,6 +6176,7 @@ function removeCenterSnapGuides(canvas) {
   );
 
   canvas._centerSnapGuides = [];
+
   canvas.requestRenderAll();
 }
 
@@ -5616,7 +6189,12 @@ function bindFabricEvents(
   activePers,
   product
 ) {
-  const checkMargin = object => {
+  const checkMargin = (
+    object,
+    {
+      redraw = true,
+    } = {}
+  ) => {
     if (
       !object ||
       isGuideObject(object)
@@ -5671,15 +6249,17 @@ function bindFabricEvents(
         ? 'flex'
         : 'none';
 
-    redrawGuides(
-      canvas,
-      activePers,
-      product,
-      margin,
-      canvasWidth,
-      canvasHeight,
-      hasWarning
-    );
+    if (redraw) {
+      redrawGuides(
+        canvas,
+        activePers,
+        product,
+        margin,
+        canvasWidth,
+        canvasHeight,
+        hasWarning
+      );
+    }
   };
 
   canvas.on(
@@ -5698,8 +6278,7 @@ function bindFabricEvents(
       if (
         !Number.isFinite(
           Number(
-            object
-              ._designOrientationVersion
+            object._designOrientationVersion
           )
         )
       ) {
@@ -5824,6 +6403,28 @@ function bindFabricEvents(
 
   canvas.on(
     'text:changed',
+    event => {
+      assignObjectToCurrentDesignView(
+        canvas,
+        event.target
+      );
+
+      checkMargin(
+        event.target,
+        {
+          redraw:
+            false,
+        }
+      );
+
+      updateLayerPanel();
+
+      canvas.requestRenderAll();
+    }
+  );
+
+  canvas.on(
+    'text:editing:exited',
     event => {
       assignObjectToCurrentDesignView(
         canvas,
@@ -5997,7 +6598,9 @@ function bindFabricButtons(
                   }
                 );
 
-                canvas.add(image);
+                canvas.add(
+                  image
+                );
 
                 canvas.setActiveObject(
                   image
@@ -6072,7 +6675,9 @@ function bindFabricButtons(
           }
         );
 
-        canvas.add(text);
+        canvas.add(
+          text
+        );
 
         canvas.setActiveObject(
           text
@@ -6188,23 +6793,25 @@ function bindFabricButtons(
 
         fabricSaveHistory();
         updateLayerPanel();
-        clearDesignState(stateKey);
+
+        clearDesignState(
+          stateKey
+        );
+
+        const editorViewId =
+          designViewContext
+            ?.activeViewId ||
+          null;
 
         persistDesignState(
           stateKey,
           {
-            editorViewId:
-              designViewContext
-                ?.activeViewId ||
-              DESIGN_VIEW_SHEET_ID,
+            editorViewId,
 
-            ...(designViewContext
-              ?.activeViewId !==
-              DESIGN_VIEW_SHEET_ID
+            ...(editorViewId
               ? {
                 previewViewId:
-                  designViewContext
-                    .activeViewId,
+                  editorViewId,
               }
               : {}),
           }
@@ -6267,11 +6874,10 @@ function createFabricImageUploadMeta(
 function restoreFabricImageUploadMeta(canvas) {
   canvas
     .getObjects()
-    .filter(
-      object =>
-        object.type === 'image' &&
-        object._uploadMeta
-    )
+    .filter(object => (
+      object.type === 'image' &&
+      object._uploadMeta
+    ))
     .forEach(object => {
       object._uploadMeta = {
         fileName:
@@ -6394,7 +7000,7 @@ function getSelectedFabricImageForDpiWarning(
   if (
     activeObject.type === 'activeSelection' &&
     typeof activeObject.getObjects ===
-      'function'
+    'function'
   ) {
     return (
       activeObject
@@ -6615,14 +7221,16 @@ function isOutsideMargin(
   return (
     bounds.left < margin ||
     bounds.top < margin ||
+
     bounds.left +
-      bounds.width >
-      canvasWidth -
-      margin ||
+    bounds.width >
+    canvasWidth -
+    margin ||
+
     bounds.top +
-      bounds.height >
-      canvasHeight -
-      margin
+    bounds.height >
+    canvasHeight -
+    margin
   );
 }
 
@@ -6783,20 +7391,20 @@ function isRectOverlappingRect(
 ) {
   return (
     rectA.left <
-      rectB.left +
-      rectB.width &&
+    rectB.left +
+    rectB.width &&
 
     rectA.left +
-      rectA.width >
-      rectB.left &&
+    rectA.width >
+    rectB.left &&
 
     rectA.top <
-      rectB.top +
-      rectB.height &&
+    rectB.top +
+    rectB.height &&
 
     rectA.top +
-      rectA.height >
-      rectB.top
+    rectA.height >
+    rectB.top
   );
 }
 
@@ -7049,15 +7657,35 @@ function collectCanvasPrepressWarnings(
       );
 
   const outsideMarginCount =
-    editableObjects.filter(
-      object =>
-        isOutsideMargin(
-          object,
-          margin,
-          canvasWidth,
-          canvasHeight
-        )
-    ).length;
+    editableObjects.filter(object => {
+      if (
+        designViewContext?.config.enabled
+      ) {
+        const view =
+          getDesignViewById(
+            getObjectDesignViewId(
+              canvas,
+              object
+            )
+          );
+
+        if (view) {
+          return isObjectOutsideDesignViewMargin(
+            canvas,
+            object,
+            view,
+            margin
+          );
+        }
+      }
+
+      return isOutsideMargin(
+        object,
+        margin,
+        canvasWidth,
+        canvasHeight
+      );
+    }).length;
 
   const blockedZoneCount =
     editableObjects.filter(
@@ -7273,18 +7901,23 @@ function updateLayerPanel() {
 
             updateFabricImageDpiWarning(
               fabricCanvas,
+
               window
                 ._currentDesignGuideState
                 ?.activePers,
+
               window
                 ._currentDesignGuideState
                 ?.product,
+
               object
             );
           }
         );
 
-        panel.appendChild(item);
+        panel.appendChild(
+          item
+        );
       }
     );
 }
@@ -7368,7 +8001,8 @@ function bindLayerDragAndDrop(
         targetItem.dataset.objectId;
 
       if (
-        draggedId === targetId
+        draggedId ===
+        targetId
       ) {
         return;
       }
@@ -7480,7 +8114,9 @@ function reorderCanvasObjectsFromLayerDrop(
         typeof object.moveTo ===
         'function'
       ) {
-        object.moveTo(index);
+        object.moveTo(
+          index
+        );
       }
     }
   );
@@ -7491,7 +8127,9 @@ function reorderCanvasObjectsFromLayerDrop(
   canvas.backgroundImage =
     backgroundImage;
 
-  bringGuidesToFront(canvas);
+  bringGuidesToFront(
+    canvas
+  );
 
   if (
     activeObject &&
@@ -7561,7 +8199,9 @@ function fabricSaveHistory() {
     return;
   }
 
-  fabricHistory.push(json);
+  fabricHistory.push(
+    json
+  );
 
   if (
     fabricHistory.length > 20
@@ -7570,84 +8210,571 @@ function fabricSaveHistory() {
   }
 }
 
+function createTechnicalDesignCanvas(
+  canvas = fabricCanvas
+) {
+  if (!canvas) {
+    return null;
+  }
+
+  const sourceCanvas =
+    captureCanonicalDesignSourceCanvas(
+      canvas
+    );
+
+  return composeTechnicalDesignCanvas(
+    sourceCanvas,
+    designViewContext?.config,
+    designViewContext?.spec
+  );
+}
+
+function captureCanonicalDesignSourceCanvas(canvas) {
+  return withCanonicalDesignCanvas(
+    canvas,
+    () => {
+      const sourceCanvas =
+        document.createElement(
+          'canvas'
+        );
+
+      sourceCanvas.width =
+        canvas.getWidth();
+
+      sourceCanvas.height =
+        canvas.getHeight();
+
+      const sourceContext =
+        sourceCanvas.getContext(
+          '2d'
+        );
+
+      sourceContext.imageSmoothingEnabled =
+        true;
+
+      sourceContext.imageSmoothingQuality =
+        'high';
+
+      sourceContext.drawImage(
+        canvas.lowerCanvasEl,
+        0,
+        0,
+        sourceCanvas.width,
+        sourceCanvas.height
+      );
+
+      return sourceCanvas;
+    }
+  );
+}
+
+function composeTechnicalDesignCanvas(
+  sourceCanvas,
+  config,
+  spec
+) {
+  if (!sourceCanvas) {
+    return null;
+  }
+
+  const outputCanvas =
+    document.createElement(
+      'canvas'
+    );
+
+  outputCanvas.width =
+    sourceCanvas.width;
+
+  outputCanvas.height =
+    sourceCanvas.height;
+
+  const outputContext =
+    outputCanvas.getContext(
+      '2d'
+    );
+
+  outputContext.imageSmoothingEnabled =
+    true;
+
+  outputContext.imageSmoothingQuality =
+    'high';
+
+  outputContext.drawImage(
+    sourceCanvas,
+    0,
+    0
+  );
+
+  if (
+    !config?.enabled ||
+    !Array.isArray(config.views) ||
+    !spec
+  ) {
+    return outputCanvas;
+  }
+
+  config.views.forEach(view => {
+    const bounds =
+      getDesignViewPixelBounds(
+        view,
+        spec,
+        sourceCanvas.width,
+        sourceCanvas.height
+      );
+
+    if (!bounds) {
+      return;
+    }
+
+    const sourceZone =
+      view.sourceZone ||
+      {};
+
+    const rotation =
+      normalizeDesignRotation(
+        sourceZone.rotation
+      );
+
+    const flipX =
+      Boolean(
+        sourceZone.flipX
+      );
+
+    const flipY =
+      Boolean(
+        sourceZone.flipY
+      );
+
+    if (
+      rotation === 0 &&
+      !flipX &&
+      !flipY
+    ) {
+      return;
+    }
+
+    const artworkCanvas =
+      document.createElement(
+        'canvas'
+      );
+
+    artworkCanvas.width =
+      bounds.width;
+
+    artworkCanvas.height =
+      bounds.height;
+
+    const artworkContext =
+      artworkCanvas.getContext(
+        '2d'
+      );
+
+    artworkContext.imageSmoothingEnabled =
+      true;
+
+    artworkContext.imageSmoothingQuality =
+      'high';
+
+    artworkContext.drawImage(
+      sourceCanvas,
+      bounds.left,
+      bounds.top,
+      bounds.width,
+      bounds.height,
+      0,
+      0,
+      bounds.width,
+      bounds.height
+    );
+
+    const transformedCanvas =
+      applyInverseDesignViewTransform(
+        artworkCanvas,
+        {
+          rotation,
+          flipX,
+          flipY,
+        }
+      );
+
+    outputContext.clearRect(
+      bounds.left,
+      bounds.top,
+      bounds.width,
+      bounds.height
+    );
+
+    outputContext.drawImage(
+      transformedCanvas,
+      0,
+      0,
+      transformedCanvas.width,
+      transformedCanvas.height,
+      bounds.left,
+      bounds.top,
+      bounds.width,
+      bounds.height
+    );
+  });
+
+  return outputCanvas;
+}
+
+function getDesignViewPixelBounds(
+  view,
+  spec,
+  canvasWidth,
+  canvasHeight
+) {
+  if (
+    !view?.sourceZone ||
+    !spec ||
+    !canvasWidth ||
+    !canvasHeight
+  ) {
+    return null;
+  }
+
+  const sourceZone =
+    view.sourceZone;
+
+  const exportWidthMm =
+    Number(
+      spec.exportWidthMm ||
+      spec.finishWidthMm ||
+      0
+    );
+
+  const exportHeightMm =
+    Number(
+      spec.exportHeightMm ||
+      spec.finishHeightMm ||
+      0
+    );
+
+  if (
+    !exportWidthMm ||
+    !exportHeightMm
+  ) {
+    return null;
+  }
+
+  const rawLeft =
+    (
+      (
+        Number(spec.trimXmm || 0) +
+        Number(sourceZone.x_mm || 0)
+      ) /
+      exportWidthMm
+    ) *
+    canvasWidth;
+
+  const rawTop =
+    (
+      (
+        Number(spec.trimYmm || 0) +
+        Number(sourceZone.y_mm || 0)
+      ) /
+      exportHeightMm
+    ) *
+    canvasHeight;
+
+  const rawWidth =
+    (
+      Number(
+        sourceZone.width_mm ||
+        0
+      ) /
+      exportWidthMm
+    ) *
+    canvasWidth;
+
+  const rawHeight =
+    (
+      Number(
+        sourceZone.height_mm ||
+        0
+      ) /
+      exportHeightMm
+    ) *
+    canvasHeight;
+
+  const left =
+    clamp(
+      Math.round(rawLeft),
+      0,
+      canvasWidth
+    );
+
+  const top =
+    clamp(
+      Math.round(rawTop),
+      0,
+      canvasHeight
+    );
+
+  const right =
+    clamp(
+      Math.round(
+        rawLeft +
+        rawWidth
+      ),
+      0,
+      canvasWidth
+    );
+
+  const bottom =
+    clamp(
+      Math.round(
+        rawTop +
+        rawHeight
+      ),
+      0,
+      canvasHeight
+    );
+
+  if (
+    right <= left ||
+    bottom <= top
+  ) {
+    return null;
+  }
+
+  return {
+    left,
+    top,
+
+    width:
+      right -
+      left,
+
+    height:
+      bottom -
+      top,
+  };
+}
+
+function applyInverseDesignViewTransform(
+  sourceCanvas,
+  {
+    rotation = 0,
+    flipX = false,
+    flipY = false,
+  } = {}
+) {
+  const normalizedRotation =
+    normalizeDesignRotation(
+      rotation
+    );
+
+  const swapsDimensions =
+    normalizedRotation === 90 ||
+    normalizedRotation === 270;
+
+  const transformedCanvas =
+    document.createElement(
+      'canvas'
+    );
+
+  transformedCanvas.width =
+    swapsDimensions
+      ? sourceCanvas.height
+      : sourceCanvas.width;
+
+  transformedCanvas.height =
+    swapsDimensions
+      ? sourceCanvas.width
+      : sourceCanvas.height;
+
+  const context =
+    transformedCanvas.getContext(
+      '2d'
+    );
+
+  context.imageSmoothingEnabled =
+    true;
+
+  context.imageSmoothingQuality =
+    'high';
+
+  context.save();
+
+  context.translate(
+    transformedCanvas.width / 2,
+    transformedCanvas.height / 2
+  );
+
+  context.scale(
+    flipX
+      ? -1
+      : 1,
+
+    flipY
+      ? -1
+      : 1
+  );
+
+  context.rotate(
+    -normalizedRotation *
+    Math.PI /
+    180
+  );
+
+  context.drawImage(
+    sourceCanvas,
+    -sourceCanvas.width / 2,
+    -sourceCanvas.height / 2
+  );
+
+  context.restore();
+
+  return transformedCanvas;
+}
+
 function snapshotCanvas(
   canvas,
   product,
   activePers
 ) {
-  return withCanonicalDesignCanvas(
-    canvas,
+  const technicalCanvas =
+    createTechnicalDesignCanvas(
+      canvas
+    );
 
-    () => {
-      const printWidthPx =
-        activePers?.width_px ||
-        product.width_px ||
-        1181;
+  if (!technicalCanvas) {
+    throw new Error(
+      'Het technische drukbestand kon niet worden opgebouwd.'
+    );
+  }
 
-      const displayWidthPx =
-        canvas.getWidth();
+  const spec =
+    designViewContext?.spec ||
+    window.ProductPreview?.getPrintSpec?.(
+      activePers || {},
+      product || {}
+    ) ||
+    null;
 
-      const multiplier =
-        printWidthPx /
-        displayWidthPx;
+  const printWidthPx =
+    Number(
+      spec?.exportWidthPx ||
+      activePers?.width_px ||
+      product.width_px ||
+      technicalCanvas.width
+    );
 
-      const dataURL =
-        canvas.toDataURL({
-          format:
-            'png',
+  const printHeightPx =
+    Number(
+      spec?.exportHeightPx ||
+      activePers?.height_px ||
+      product.height_px ||
+      Math.round(
+        printWidthPx *
+        technicalCanvas.height /
+        technicalCanvas.width
+      )
+    );
 
-          multiplier,
+  const exportCanvas =
+    document.createElement(
+      'canvas'
+    );
 
-          enableRetinaScaling:
-            false,
-        });
+  exportCanvas.width =
+    Math.max(
+      1,
+      Math.round(
+        printWidthPx
+      )
+    );
 
-      const json =
-        JSON.stringify(
-          canvas.toJSON(
-            FABRIC_SERIALIZABLE_PROPERTIES
-          )
-        );
+  exportCanvas.height =
+    Math.max(
+      1,
+      Math.round(
+        printHeightPx
+      )
+    );
 
-      const backgroundColor =
-        canvas.backgroundColor ||
-        fabricBackgroundColor;
+  const exportContext =
+    exportCanvas.getContext(
+      '2d'
+    );
 
-      const finishWidthMm =
-        activePers?.width_mm ||
-        product.width_mm ||
-        100;
+  exportContext.imageSmoothingEnabled =
+    true;
 
-      const finishHeightMm =
-        activePers?.height_mm ||
-        product.height_mm ||
-        70;
+  exportContext.imageSmoothingQuality =
+    'high';
 
-      const pdfDataURL =
-        generatePrintPDF(
-          dataURL,
-          finishWidthMm,
-          finishHeightMm
-        );
-
-      const rillinesPdfDataURL =
-        generatePrintPDFWithRillines(
-          dataURL,
-          finishWidthMm,
-          finishHeightMm,
-          activePers,
-          product
-        );
-
-      return {
-        dataURL,
-        json,
-        backgroundColor,
-        pdfDataURL,
-        rillinesPdfDataURL,
-      };
-    }
+  exportContext.drawImage(
+    technicalCanvas,
+    0,
+    0,
+    exportCanvas.width,
+    exportCanvas.height
   );
+
+  const dataURL =
+    exportCanvas.toDataURL(
+      'image/png'
+    );
+
+  const json =
+    withCanonicalDesignCanvas(
+      canvas,
+
+      () => JSON.stringify(
+        canvas.toJSON(
+          FABRIC_SERIALIZABLE_PROPERTIES
+        )
+      )
+    );
+
+  const backgroundColor =
+    canvas.backgroundColor ||
+    fabricBackgroundColor;
+
+  const finishWidthMm =
+    activePers?.width_mm ||
+    product.width_mm ||
+    100;
+
+  const finishHeightMm =
+    activePers?.height_mm ||
+    product.height_mm ||
+    70;
+
+  const pdfDataURL =
+    generatePrintPDF(
+      dataURL,
+      finishWidthMm,
+      finishHeightMm
+    );
+
+  const rillinesPdfDataURL =
+    generatePrintPDFWithRillines(
+      dataURL,
+      finishWidthMm,
+      finishHeightMm,
+      activePers,
+      product
+    );
+
+  return {
+    dataURL,
+    json,
+    backgroundColor,
+
+    fabricCanvasWidth:
+      canvas.getWidth(),
+
+    fabricCanvasHeight:
+      canvas.getHeight(),
+
+    pdfDataURL,
+    rillinesPdfDataURL,
+  };
 }
 
 function generatePrintPDF(
@@ -7844,13 +8971,13 @@ function drawCropMarks(
 
   pdf.line(
     geometry.trimX1 -
-      geometry.gapMm -
-      geometry.markMm,
+    geometry.gapMm -
+    geometry.markMm,
 
     geometry.trimY1,
 
     geometry.trimX1 -
-      geometry.gapMm,
+    geometry.gapMm,
 
     geometry.trimY1
   );
@@ -7859,24 +8986,24 @@ function drawCropMarks(
     geometry.trimX1,
 
     geometry.trimY1 -
-      geometry.gapMm -
-      geometry.markMm,
+    geometry.gapMm -
+    geometry.markMm,
 
     geometry.trimX1,
 
     geometry.trimY1 -
-      geometry.gapMm
+    geometry.gapMm
   );
 
   pdf.line(
     geometry.trimX2 +
-      geometry.gapMm,
+    geometry.gapMm,
 
     geometry.trimY1,
 
     geometry.trimX2 +
-      geometry.gapMm +
-      geometry.markMm,
+    geometry.gapMm +
+    geometry.markMm,
 
     geometry.trimY1
   );
@@ -7885,24 +9012,24 @@ function drawCropMarks(
     geometry.trimX2,
 
     geometry.trimY1 -
-      geometry.gapMm -
-      geometry.markMm,
+    geometry.gapMm -
+    geometry.markMm,
 
     geometry.trimX2,
 
     geometry.trimY1 -
-      geometry.gapMm
+    geometry.gapMm
   );
 
   pdf.line(
     geometry.trimX1 -
-      geometry.gapMm -
-      geometry.markMm,
+    geometry.gapMm -
+    geometry.markMm,
 
     geometry.trimY2,
 
     geometry.trimX1 -
-      geometry.gapMm,
+    geometry.gapMm,
 
     geometry.trimY2
   );
@@ -7911,24 +9038,24 @@ function drawCropMarks(
     geometry.trimX1,
 
     geometry.trimY2 +
-      geometry.gapMm,
+    geometry.gapMm,
 
     geometry.trimX1,
 
     geometry.trimY2 +
-      geometry.gapMm +
-      geometry.markMm
+    geometry.gapMm +
+    geometry.markMm
   );
 
   pdf.line(
     geometry.trimX2 +
-      geometry.gapMm,
+    geometry.gapMm,
 
     geometry.trimY2,
 
     geometry.trimX2 +
-      geometry.gapMm +
-      geometry.markMm,
+    geometry.gapMm +
+    geometry.markMm,
 
     geometry.trimY2
   );
@@ -7937,13 +9064,13 @@ function drawCropMarks(
     geometry.trimX2,
 
     geometry.trimY2 +
-      geometry.gapMm,
+    geometry.gapMm,
 
     geometry.trimX2,
 
     geometry.trimY2 +
-      geometry.gapMm +
-      geometry.markMm
+    geometry.gapMm +
+    geometry.markMm
   );
 }
 
@@ -8158,6 +9285,11 @@ function autoSaveCanvasState(stateKey) {
       )
     );
 
+  const editorViewId =
+    designViewContext
+      ?.activeViewId ||
+    null;
+
   persistDesignState(
     stateKey,
     {
@@ -8168,18 +9300,18 @@ function autoSaveCanvasState(stateKey) {
         fabricCanvas.backgroundColor ||
         fabricBackgroundColor,
 
-      editorViewId:
-        designViewContext
-          ?.activeViewId ||
-        DESIGN_VIEW_SHEET_ID,
+      fabricCanvasWidth:
+        fabricCanvas.getWidth(),
 
-      ...(designViewContext
-        ?.activeViewId !==
-        DESIGN_VIEW_SHEET_ID
+      fabricCanvasHeight:
+        fabricCanvas.getHeight(),
+
+      editorViewId,
+
+      ...(editorViewId
         ? {
           previewViewId:
-            designViewContext
-              .activeViewId,
+            editorViewId,
         }
         : {}),
     }
@@ -8212,12 +9344,28 @@ function persistDesignState(
         '{}'
       );
 
+    const lightCurrent = {
+      ...current,
+    };
+
+    const lightData = {
+      ...(data || {}),
+    };
+
+    [
+      'dataURL',
+      'pdfDataURL',
+      'rillinesPdfDataURL',
+    ].forEach(field => {
+      delete lightCurrent[field];
+      delete lightData[field];
+    });
+
     localStorage.setItem(
       stateKey,
-
       JSON.stringify({
-        ...current,
-        ...data,
+        ...lightCurrent,
+        ...lightData,
 
         savedAt:
           Date.now(),
@@ -8243,7 +9391,9 @@ function loadDesignState(stateKey) {
     }
 
     const state =
-      JSON.parse(raw);
+      JSON.parse(
+        raw
+      );
 
     if (
       Date.now() -
@@ -8289,42 +9439,94 @@ async function handleUpload(
       product
     );
 
-  const reader =
-    new FileReader();
+  const dataURL =
+    await new Promise(
+      (resolve, reject) => {
+        const reader =
+          new FileReader();
 
-  reader.onload = event => {
-    uploadedDataURL =
-      event.target.result;
+        reader.onload =
+          event => {
+            resolve(
+              event.target.result
+            );
+          };
 
-    uploadedFileName =
-      file.name;
+        reader.onerror =
+          () => {
+            reject(
+              reader.error ||
+              new Error(
+                'Het bestand kon niet worden gelezen.'
+              )
+            );
+          };
 
-    uploadedCheck =
-      uploadCheckResult;
+        reader.readAsDataURL(
+          file
+        );
+      }
+    );
 
-    const generatedUploadPdfs =
-      buildUploadPdfData(
-        uploadedDataURL,
-        activePers,
-        product
-      );
+  uploadedDataURL =
+    dataURL;
 
-    uploadedPdfDataURL =
-      generatedUploadPdfs.pdfDataURL;
+  uploadedFileName =
+    file.name;
 
-    uploadedRillinesPdfDataURL =
-      generatedUploadPdfs.rillinesPdfDataURL;
+  uploadedCheck =
+    uploadCheckResult;
 
-    const data = {
-      dataURL:
-        uploadedDataURL,
+  const generatedUploadPdfs =
+    buildUploadPdfData(
+      uploadedDataURL,
+      activePers,
+      product
+    );
 
-      pdfDataURL:
-        uploadedPdfDataURL,
+  uploadedPdfDataURL =
+    generatedUploadPdfs.pdfDataURL;
 
-      rillinesPdfDataURL:
-        uploadedRillinesPdfDataURL,
+  uploadedRillinesPdfDataURL =
+    generatedUploadPdfs.rillinesPdfDataURL;
 
+  const designData = {
+    dataURL:
+      uploadedDataURL,
+
+    pdfDataURL:
+      uploadedPdfDataURL,
+
+    rillinesPdfDataURL:
+      uploadedRillinesPdfDataURL,
+
+    fileName:
+      uploadedFileName,
+
+    tab:
+      'upload',
+
+    source:
+      'upload',
+
+    uploadCheck:
+      uploadedCheck,
+
+    prepressWarnings:
+      getUploadPrepressWarnings(
+        uploadedCheck
+      ),
+  };
+
+  await Promise.resolve(
+    Session.setDesign(
+      designData
+    )
+  );
+
+  persistDesignState(
+    stateKey,
+    {
       fileName:
         uploadedFileName,
 
@@ -8338,24 +9540,11 @@ async function handleUpload(
         uploadedCheck,
 
       prepressWarnings:
-        getUploadPrepressWarnings(
-          uploadedCheck
-        ),
-    };
-
-    Session.setDesign(data);
-
-    persistDesignState(
-      stateKey,
-      data
-    );
-
-    renderDesignPage();
-  };
-
-  reader.readAsDataURL(
-    file
+        designData.prepressWarnings,
+    }
   );
+
+  renderDesignPage();
 }
 
 function buildUploadPdfData(
@@ -8865,38 +10054,33 @@ function getFileTypeFromName(fileName) {
   return map[extension] || '';
 }
 
-function clearUpload() {
+async function clearUpload() {
   uploadedDataURL = null;
   uploadedFileName = null;
   uploadedCheck = null;
   uploadedPdfDataURL = null;
   uploadedRillinesPdfDataURL = null;
 
-  Session.setDesign({
-    dataURL:
-      null,
+  if (
+    typeof Session.clearDesign ===
+    'function'
+  ) {
+    await Session.clearDesign();
+  } else {
+    await Promise.resolve(
+      Session.setDesign(
+        null
+      )
+    );
+  }
 
-    pdfDataURL:
-      null,
-
-    rillinesPdfDataURL:
-      null,
-
-    fileName:
-      null,
-
-    tab:
-      'upload',
-
-    source:
-      null,
-
-    uploadCheck:
-      null,
-
-    prepressWarnings:
-      [],
-  });
+  if (
+    window._currentDesignStateKey
+  ) {
+    clearDesignState(
+      window._currentDesignStateKey
+    );
+  }
 
   renderDesignPage();
 }
@@ -8910,4 +10094,5 @@ function escHtml(value) {
     .replace(/'/g, '&#039;');
 }
 
-window.clearUpload = clearUpload;
+window.clearUpload =
+  clearUpload;
