@@ -20,7 +20,7 @@ let uploadedRillinesPdfDataURL = null;
 let activeDesignTab = 'tool';
 let fabricInitToken = 0;
 let fabricInitTimer = null;
-let canvasZoom = 1.1;
+let canvasZoom = 1;
 
 const CANVAS_ZOOM_MIN = 0.65;
 const CANVAS_ZOOM_MAX = 2.5;
@@ -28,7 +28,6 @@ const CANVAS_ZOOM_STEP = 0.1;
 
 const DESIGN_VIEW_ORIENTATION_VERSION = 2;
 const DESIGN_VIEW_VIEWPORT_PADDING_PX = 20;
-const DESIGN_VIEW_VISIBLE_MARGIN_PX = 12;
 const DESIGN_VIEW_VIEWPORT_EPSILON = 0.001;
 const DESIGN_VIEW_GUIDE_FLAG = '_isDesignViewGuide';
 
@@ -839,6 +838,9 @@ function initializeDesignViewContext({
     spec,
     margin,
 
+    mockupDimensions:
+      new Map(),
+
     activeViewId:
       resolveInitialDesignViewId(
         config,
@@ -850,6 +852,83 @@ function initializeDesignViewContext({
     pageAbortController:
       new AbortController(),
   };
+
+  hydrateDesignViewMockupDimensions(
+    designViewContext
+  );
+}
+
+async function hydrateDesignViewMockupDimensions(context) {
+  if (
+    !context?.config?.enabled ||
+    !window.ProductPreview?.loadImage
+  ) {
+    return;
+  }
+
+  await Promise.all(
+    context.config.views.map(
+      async view => {
+        const baseImage =
+          await ProductPreview
+            .loadImage(
+              view.mockup?.baseImage
+            )
+            .catch(
+              () => null
+            );
+
+        if (
+          designViewContext !== context ||
+          !baseImage
+        ) {
+          return;
+        }
+
+        const width =
+          Number(
+            baseImage.naturalWidth ||
+            baseImage.width ||
+            0
+          );
+
+        const height =
+          Number(
+            baseImage.naturalHeight ||
+            baseImage.height ||
+            0
+          );
+
+        if (
+          width > 0 &&
+          height > 0
+        ) {
+          context.mockupDimensions.set(
+            view.id,
+            {
+              width,
+              height,
+            }
+          );
+        }
+      }
+    )
+  );
+
+  if (
+    designViewContext !== context ||
+    !fabricCanvas
+  ) {
+    return;
+  }
+
+  applyActiveDesignView(
+    fabricCanvas,
+    {
+      updateLayers:
+        false,
+    }
+  );
 }
 
 function destroyDesignViewContext() {
@@ -1054,8 +1133,17 @@ function updateDesignViewToolbarState() {
   const view =
     getActiveDesignView();
 
+  const hasTechnicalOrientation =
+    Boolean(
+      getDesignViewRotation(view) ||
+      view?.sourceZone?.flipX ||
+      view?.sourceZone?.flipY
+    );
+
   note.textContent =
-    `Je ontwerpt ${view?.label || 'deze productzijde'} zoals deze op het eindproduct verschijnt. De technische draairichting wordt automatisch in het drukbestand verwerkt.`;
+    hasTechnicalOrientation
+      ? `Je ontwerpt ${view?.label || 'deze productzijde'} in de technische stand van het drukvel. De productpreview corrigeert de draairichting automatisch.`
+      : `Je ontwerpt ${view?.label || 'deze productzijde'} zoals deze op het eindproduct verschijnt.`;
 }
 
 function getDesignViewById(viewId) {
@@ -1110,7 +1198,7 @@ function normalizeDesignRotation(value) {
     360;
 }
 
-function getDesignViewBounds(
+function getDesignViewSourceBounds(
   canvas,
   view = getActiveDesignView()
 ) {
@@ -1204,6 +1292,120 @@ function getDesignViewBounds(
     return null;
   }
 
+  return createDesignBounds({
+    left,
+    top,
+    width,
+    height,
+    rotation:
+      getDesignViewRotation(view),
+    viewId:
+      view.id,
+  });
+}
+
+function getDesignViewBounds(
+  canvas,
+  view = getActiveDesignView()
+) {
+  const sourceBounds =
+    getDesignViewSourceBounds(
+      canvas,
+      view
+    );
+
+  if (
+    !sourceBounds ||
+    !view ||
+    !window.ProductPreview
+      ?.getSlotFitGeometry
+  ) {
+    return sourceBounds;
+  }
+
+  const mockupDimensions =
+    designViewContext
+      ?.mockupDimensions
+      ?.get(view.id);
+
+  if (
+    !mockupDimensions?.width ||
+    !mockupDimensions?.height
+  ) {
+    return sourceBounds;
+  }
+
+  const slot =
+    view.mockup?.slot ||
+    {};
+
+  const slotWidth =
+    mockupDimensions.width *
+    Number(
+      slot.widthPercent ||
+      0
+    ) /
+    100;
+
+  const slotHeight =
+    mockupDimensions.height *
+    Number(
+      slot.heightPercent ||
+      0
+    ) /
+    100;
+
+  const fitGeometry =
+    ProductPreview.getSlotFitGeometry(
+      sourceBounds.width,
+      sourceBounds.height,
+      slotWidth,
+      slotHeight,
+      slot.fit
+    );
+
+  const visibleSourceRect =
+    fitGeometry?.visibleSourceRect;
+
+  if (
+    !visibleSourceRect ||
+    visibleSourceRect.width <= 0 ||
+    visibleSourceRect.height <= 0
+  ) {
+    return sourceBounds;
+  }
+
+  return createDesignBounds({
+    left:
+      sourceBounds.left +
+      visibleSourceRect.x,
+
+    top:
+      sourceBounds.top +
+      visibleSourceRect.y,
+
+    width:
+      visibleSourceRect.width,
+
+    height:
+      visibleSourceRect.height,
+
+    rotation:
+      sourceBounds.rotation,
+
+    viewId:
+      sourceBounds.viewId,
+  });
+}
+
+function createDesignBounds({
+  left,
+  top,
+  width,
+  height,
+  rotation,
+  viewId,
+}) {
   return {
     left,
     top,
@@ -1226,53 +1428,180 @@ function getDesignViewBounds(
       top +
       height / 2,
 
-    rotation:
-      getDesignViewRotation(view),
+    rotation,
+    viewId,
+  };
+}
 
-    viewId:
-      view.id,
+function getDesignViewEditorOrientation(
+  view
+) {
+  const rotation =
+    -getDesignViewRotation(
+      view
+    ) *
+    Math.PI /
+    180;
+
+  const flipX =
+    view?.sourceZone?.flipX
+      ? -1
+      : 1;
+
+  const flipY =
+    view?.sourceZone?.flipY
+      ? -1
+      : 1;
+
+  const cosine =
+    Math.cos(
+      rotation
+    );
+
+  const sine =
+    Math.sin(
+      rotation
+    );
+
+  return {
+    a:
+      flipX *
+      cosine,
+
+    b:
+      flipY *
+      sine,
+
+    c:
+      -flipX *
+      sine,
+
+    d:
+      flipY *
+      cosine,
+  };
+}
+
+function getOrientedDesignViewSize(
+  bounds,
+  orientation
+) {
+  return {
+    width:
+      Math.abs(
+        orientation.a
+      ) *
+      bounds.width +
+      Math.abs(
+        orientation.c
+      ) *
+      bounds.height,
+
+    height:
+      Math.abs(
+        orientation.b
+      ) *
+      bounds.width +
+      Math.abs(
+        orientation.d
+      ) *
+      bounds.height,
   };
 }
 
 function createDesignViewViewport(
   canvas,
-  bounds
+  bounds,
+  view = getActiveDesignView()
 ) {
-  const scale =
-    Math.min(
-      Math.max(
-        1,
-        canvas.getWidth() -
-        DESIGN_VIEW_VIEWPORT_PADDING_PX * 2
-      ) /
-      bounds.width,
-
-      Math.max(
-        1,
-        canvas.getHeight() -
-        DESIGN_VIEW_VIEWPORT_PADDING_PX * 2
-      ) /
-      bounds.height
+  const orientation =
+    getDesignViewEditorOrientation(
+      view
     );
 
+  const orientedSize =
+    getOrientedDesignViewSize(
+      bounds,
+      orientation
+    );
+
+  const availableWidth =
+    Math.max(
+      1,
+      canvas.getWidth() -
+      DESIGN_VIEW_VIEWPORT_PADDING_PX * 2
+    );
+
+  const availableHeight =
+    Math.max(
+      1,
+      canvas.getHeight() -
+      DESIGN_VIEW_VIEWPORT_PADDING_PX * 2
+    );
+
+  const fitScale =
+    Math.min(
+      availableWidth /
+      Math.max(
+        1,
+        orientedSize.width
+      ),
+
+      availableHeight /
+      Math.max(
+        1,
+        orientedSize.height
+      )
+    );
+
+  const scale =
+    fitScale;
+
+  const a =
+    orientation.a *
+    scale;
+
+  const b =
+    orientation.b *
+    scale;
+
+  const c =
+    orientation.c *
+    scale;
+
+  const d =
+    orientation.d *
+    scale;
+
   return [
-    scale,
-    0,
-    0,
-    scale,
+    a,
+    b,
+    c,
+    d,
 
     canvas.getWidth() / 2 -
-      scale * bounds.centerX,
+      (
+        a *
+        bounds.centerX +
+        c *
+        bounds.centerY
+      ),
 
     canvas.getHeight() / 2 -
-      scale * bounds.centerY,
+      (
+        b *
+        bounds.centerX +
+        d *
+        bounds.centerY
+      ),
   ];
 }
 
 function hasExpectedDesignViewport(canvas) {
   if (
     !canvas ||
-    designViewCanonicalDepth > 0
+    designViewCanonicalDepth > 0 ||
+    !designViewContext?.config.enabled
   ) {
     return true;
   }
@@ -1300,7 +1629,8 @@ function hasExpectedDesignViewport(canvas) {
     bounds
       ? createDesignViewViewport(
         canvas,
-        bounds
+        bounds,
+        getActiveDesignView()
       )
       : [
         1,
@@ -1371,6 +1701,12 @@ function applyActiveDesignView(
   const view =
     getActiveDesignView();
 
+  const sourceBounds =
+    getDesignViewSourceBounds(
+      canvas,
+      view
+    );
+
   const bounds =
     getDesignViewBounds(
       canvas,
@@ -1379,6 +1715,7 @@ function applyActiveDesignView(
 
   if (
     !view ||
+    !sourceBounds ||
     !bounds
   ) {
     return;
@@ -1394,11 +1731,16 @@ function applyActiveDesignView(
   canvas.setViewportTransform(
     createDesignViewViewport(
       canvas,
-      bounds
+      bounds,
+      view
     )
   );
 
   canvas.calcOffset();
+
+  applyDesignCanvasDisplayZoom(
+    canvas
+  );
 
   hideTechnicalGuides(
     canvas
@@ -1407,7 +1749,7 @@ function applyActiveDesignView(
   normalizeActiveDesignViewObjects(
     canvas,
     view,
-    bounds
+    sourceBounds
   );
 
   updateDesignObjectInteractivity(
@@ -1427,8 +1769,6 @@ function applyActiveDesignView(
   setCanvasZoomControlsVisible(
     true
   );
-
-  applyCanvasZoom();
 
   if (updateLayers) {
     updateLayerPanel();
@@ -1638,7 +1978,7 @@ function hydrateDesignObjectMetadata(canvas) {
       }
 
       const bounds =
-        getDesignViewBounds(
+        getDesignViewSourceBounds(
           canvas,
           view
         );
@@ -1783,7 +2123,7 @@ function inferDesignViewIdForObject(
       ?.views
       ?.find(view => {
         const bounds =
-          getDesignViewBounds(
+          getDesignViewSourceBounds(
             canvas,
             view
           );
@@ -2429,28 +2769,16 @@ function getDesignViewScreenBounds(
     );
 
   const left =
-    Math.max(
-      0,
-      Math.min(...xValues)
-    );
+    Math.min(...xValues);
 
   const top =
-    Math.max(
-      0,
-      Math.min(...yValues)
-    );
+    Math.min(...yValues);
 
   const right =
-    Math.min(
-      canvas.getWidth(),
-      Math.max(...xValues)
-    );
+    Math.max(...xValues);
 
   const bottom =
-    Math.min(
-      canvas.getHeight(),
-      Math.max(...yValues)
-    );
+    Math.max(...yValues);
 
   return {
     left,
@@ -2468,6 +2796,52 @@ function getDesignViewScreenBounds(
       Math.max(
         1,
         bottom - top
+      ),
+  };
+}
+
+function getDesignCanvasCssScale(canvas) {
+  const container =
+    canvas?.wrapperEl ||
+    canvas?.lowerCanvasEl?.parentElement;
+
+  if (
+    !canvas ||
+    !container
+  ) {
+    return {
+      x: 1,
+      y: 1,
+    };
+  }
+
+  const cssWidth =
+    Number.parseFloat(
+      container.style.width
+    ) ||
+    container.getBoundingClientRect().width ||
+    canvas.getWidth();
+
+  const cssHeight =
+    Number.parseFloat(
+      container.style.height
+    ) ||
+    container.getBoundingClientRect().height ||
+    canvas.getHeight();
+
+  return {
+    x:
+      cssWidth /
+      Math.max(
+        1,
+        canvas.getWidth()
+      ),
+
+    y:
+      cssHeight /
+      Math.max(
+        1,
+        canvas.getHeight()
       ),
   };
 }
@@ -2490,45 +2864,58 @@ function applyDesignViewClip(
       bounds
     );
 
+  const cssScale =
+    getDesignCanvasCssScale(
+      canvas
+    );
+
+  const cssWidth =
+    canvas.getWidth() *
+    cssScale.x;
+
+  const cssHeight =
+    canvas.getHeight() *
+    cssScale.y;
+
   const visibleLeft =
     Math.max(
       0,
-      screenBounds.left -
-      DESIGN_VIEW_VISIBLE_MARGIN_PX
+      screenBounds.left *
+      cssScale.x
     );
 
   const visibleTop =
     Math.max(
       0,
-      screenBounds.top -
-      DESIGN_VIEW_VISIBLE_MARGIN_PX
+      screenBounds.top *
+      cssScale.y
     );
 
   const visibleRight =
     Math.min(
-      canvas.getWidth(),
-      screenBounds.right +
-      DESIGN_VIEW_VISIBLE_MARGIN_PX
+      cssWidth,
+      screenBounds.right *
+      cssScale.x
     );
 
   const visibleBottom =
     Math.min(
-      canvas.getHeight(),
-      screenBounds.bottom +
-      DESIGN_VIEW_VISIBLE_MARGIN_PX
+      cssHeight,
+      screenBounds.bottom *
+      cssScale.y
     );
 
   const rightInset =
     Math.max(
       0,
-      canvas.getWidth() -
+      cssWidth -
       visibleRight
     );
 
   const bottomInset =
     Math.max(
       0,
-      canvas.getHeight() -
+      cssHeight -
       visibleBottom
     );
 
@@ -2560,6 +2947,19 @@ function removeDesignViewClip(canvas) {
 
     container.style.clipPath = '';
     container.style.overflow = '';
+
+    canvas.setDimensions(
+      {
+        width:
+          `${canvas.getWidth()}px`,
+
+        height:
+          `${canvas.getHeight()}px`,
+      },
+      {
+        cssOnly: true,
+      }
+    );
   }
 
   document
@@ -3602,26 +4002,135 @@ function getResponsiveCanvasSize(
   };
 }
 
-function applyCanvasZoom() {
-  const container =
-    document.querySelector(
-      '#canvas-wrap .canvas-container'
-    );
-
-  if (!container) {
+function applyDesignCanvasDisplayZoom(
+  canvas
+) {
+  if (!canvas) {
     return;
   }
 
-  container.style.transform =
-    `scale(${canvasZoom})`;
+  const displayWidth =
+    Math.max(
+      1,
+      canvas.getWidth() *
+      canvasZoom
+    );
 
-  container.style.transformOrigin =
-    'center center';
+  const displayHeight =
+    Math.max(
+      1,
+      canvas.getHeight() *
+      canvasZoom
+    );
 
-  requestAnimationFrame(() => {
-    fabricCanvas?.calcOffset();
-    fabricCanvas?.requestRenderAll();
-  });
+  canvas.setDimensions(
+    {
+      width:
+        `${displayWidth}px`,
+
+      height:
+        `${displayHeight}px`,
+    },
+    {
+      cssOnly: true,
+    }
+  );
+
+  clearCanvasContainerTransform(
+    canvas
+  );
+
+  canvas.calcOffset();
+}
+
+function applyCanvasZoom() {
+  if (!fabricCanvas) {
+    return;
+  }
+
+  if (
+    designViewContext?.config.enabled
+  ) {
+    const view =
+      getActiveDesignView();
+
+    const bounds =
+      getDesignViewBounds(
+        fabricCanvas,
+        view
+      );
+
+    if (
+      !view ||
+      !bounds
+    ) {
+      return;
+    }
+
+    fabricCanvas.setViewportTransform(
+      createDesignViewViewport(
+        fabricCanvas,
+        bounds,
+        view
+      )
+    );
+
+    applyDesignCanvasDisplayZoom(
+      fabricCanvas
+    );
+
+    applyDesignViewClip(
+      fabricCanvas,
+      bounds
+    );
+
+    fabricCanvas.requestRenderAll();
+
+    return;
+  }
+
+  fabricCanvas.setDimensions(
+    {
+      width:
+        `${fabricCanvas.getWidth()}px`,
+
+      height:
+        `${fabricCanvas.getHeight()}px`,
+    },
+    {
+      cssOnly: true,
+    }
+  );
+
+  removeDesignViewClip(
+    fabricCanvas
+  );
+
+  const centerX =
+    fabricCanvas.getWidth() /
+    2;
+
+  const centerY =
+    fabricCanvas.getHeight() /
+    2;
+
+  fabricCanvas.setViewportTransform([
+    canvasZoom,
+    0,
+    0,
+    canvasZoom,
+
+    centerX -
+      canvasZoom *
+      centerX,
+
+    centerY -
+      canvasZoom *
+      centerY,
+  ]);
+
+  fabricCanvas.calcOffset();
+  fabricCanvas.requestRenderAll();
 }
 
 function setCanvasZoom(nextZoom) {
@@ -3889,7 +4398,7 @@ function initFabricTool(
   }
 
   fabricHistory = [];
-  canvasZoom = 1.1;
+  canvasZoom = 1;
   fabricActiveColor = '#1D9E75';
 
   fabricBackgroundColor =
@@ -5213,8 +5722,6 @@ function redrawGuides(
     canvas
   );
 
-  canvas.renderAll();
-
   window._currentDesignGuideState = {
     activePers,
     product,
@@ -5233,7 +5740,11 @@ function redrawGuides(
           false,
       }
     );
+
+    return;
   }
+
+  canvas.requestRenderAll();
 }
 
 function redrawGuidesFromCurrentState(
@@ -5923,27 +6434,58 @@ function getCanvasCenterPoint(canvas) {
   );
 }
 
-function getCenterSnapThreshold(canvas) {
-  const viewportZoom =
-    typeof canvas.getZoom ===
-    'function'
-      ? canvas.getZoom() ||
-        1
-      : 1;
+function getCanvasViewportScale(
+  canvas
+) {
+  const transform =
+    Array.isArray(
+      canvas?.viewportTransform
+    )
+      ? canvas.viewportTransform
+      : null;
 
-  const presentationZoom =
-    Number.isFinite(
-      Number(canvasZoom)
-    ) &&
-    Number(canvasZoom) > 0
-      ? Number(canvasZoom)
-      : 1;
+  if (transform) {
+    const scale =
+      Math.hypot(
+        Number(transform[0]) || 0,
+        Number(transform[1]) || 0
+      );
+
+    if (
+      Number.isFinite(scale) &&
+      scale > 0
+    ) {
+      return (
+        designViewContext?.config.enabled
+          ? scale * canvasZoom
+          : scale
+      );
+    }
+  }
+
+  const fallbackZoom =
+    Math.abs(
+      Number(
+        canvas?.getZoom?.() ||
+        1
+      )
+    );
 
   return (
+    Number.isFinite(
+      fallbackZoom
+    ) &&
+    fallbackZoom > 0
+  )
+    ? fallbackZoom
+    : 1;
+}
+
+function getCenterSnapThreshold(canvas) {
+  return (
     CENTER_SNAP_THRESHOLD_PX /
-    (
-      viewportZoom *
-      presentationZoom
+    getCanvasViewportScale(
+      canvas
     )
   );
 }
@@ -6199,16 +6741,7 @@ function bindFabricEvents(
       !object ||
       isGuideObject(object)
     ) {
-      return;
-    }
-
-    const warning =
-      document.getElementById(
-        'margin-warning'
-      );
-
-    if (!warning) {
-      return;
+      return false;
     }
 
     const activeViewWarning =
@@ -6239,15 +6772,22 @@ function bindFabricEvents(
       outsideOuterMargin ||
       overlapsBlockedZone;
 
-    warning.textContent =
-      overlapsBlockedZone
-        ? 'Object valt over uitsparing'
-        : 'Object buiten marge';
+    const warning =
+      document.getElementById(
+        'margin-warning'
+      );
 
-    warning.style.display =
-      hasWarning
-        ? 'flex'
-        : 'none';
+    if (warning) {
+      warning.textContent =
+        overlapsBlockedZone
+          ? 'Object valt over uitsparing'
+          : 'Object buiten marge';
+
+      warning.style.display =
+        hasWarning
+          ? 'flex'
+          : 'none';
+    }
 
     if (redraw) {
       redrawGuides(
@@ -6260,6 +6800,8 @@ function bindFabricEvents(
         hasWarning
       );
     }
+
+    return hasWarning;
   };
 
   canvas.on(
@@ -6299,7 +6841,11 @@ function bindFabricEvents(
       );
 
       checkMargin(
-        event.target
+        event.target,
+        {
+          redraw:
+            false,
+        }
       );
 
       applyCenterSnap(
@@ -6317,7 +6863,11 @@ function bindFabricEvents(
     'object:rotating',
     event => {
       checkMargin(
-        event.target
+        event.target,
+        {
+          redraw:
+            false,
+        }
       );
 
       removeCenterSnapGuides(
@@ -6339,7 +6889,11 @@ function bindFabricEvents(
       );
 
       checkMargin(
-        event.target
+        event.target,
+        {
+          redraw:
+            false,
+        }
       );
 
       applyCenterSnap(
@@ -6373,9 +6927,14 @@ function bindFabricEvents(
         event.target
       );
 
-      checkMargin(
-        event.target
-      );
+      const hasWarning =
+        checkMargin(
+          event.target,
+          {
+            redraw:
+              false,
+          }
+        );
 
       updateFabricImageDpiWarning(
         canvas,
@@ -6389,7 +6948,8 @@ function bindFabricEvents(
         product,
         margin,
         canvasWidth,
-        canvasHeight
+        canvasHeight,
+        hasWarning
       );
 
       fabricSaveHistory();
@@ -9989,30 +10549,6 @@ function getUploadPrepressWarnings(uploadCheck) {
   }
 
   return [];
-}
-
-function getUploadCheckBackground(status) {
-  if (status === 'good') {
-    return '#EDF2ED';
-  }
-
-  if (status === 'error') {
-    return '#FCE8E3';
-  }
-
-  return '#FFF3D8';
-}
-
-function getUploadCheckTextColor(status) {
-  if (status === 'good') {
-    return '#3E5A3E';
-  }
-
-  if (status === 'error') {
-    return '#C0392B';
-  }
-
-  return '#8A681E';
 }
 
 function getFileExtension(fileName) {

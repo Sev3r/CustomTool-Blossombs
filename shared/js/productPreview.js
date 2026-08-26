@@ -1107,77 +1107,239 @@ const ProductPreview = (() => {
         context.closePath();
     }
 
-    function getFittedRect(
+    function getSlotFitGeometry(
         sourceWidth,
         sourceHeight,
         targetWidth,
         targetHeight,
-        fit
+        fit = 'cover'
     ) {
+        const normalizedSourceWidth =
+            positiveNumber(
+                sourceWidth,
+                null
+            );
+
+        const normalizedSourceHeight =
+            positiveNumber(
+                sourceHeight,
+                null
+            );
+
+        const normalizedTargetWidth =
+            positiveNumber(
+                targetWidth,
+                null
+            );
+
+        const normalizedTargetHeight =
+            positiveNumber(
+                targetHeight,
+                null
+            );
+
         if (
-            !sourceWidth ||
-            !sourceHeight ||
-            !targetWidth ||
-            !targetHeight
+            !normalizedSourceWidth ||
+            !normalizedSourceHeight ||
+            !normalizedTargetWidth ||
+            !normalizedTargetHeight
         ) {
             return null;
         }
 
+        const normalizedFit =
+            SLOT_FITS.has(fit)
+                ? fit
+                : 'cover';
+
         if (
-            fit ===
+            normalizedFit ===
             'stretch'
         ) {
             return {
-                x: 0,
-                y: 0,
-                width: targetWidth,
-                height: targetHeight,
+                fit:
+                    normalizedFit,
+
+                scaleX:
+                    normalizedTargetWidth /
+                    normalizedSourceWidth,
+
+                scaleY:
+                    normalizedTargetHeight /
+                    normalizedSourceHeight,
+
+                fittedRect: {
+                    x: 0,
+                    y: 0,
+                    width:
+                        normalizedTargetWidth,
+                    height:
+                        normalizedTargetHeight,
+                },
+
+                visibleSourceRect: {
+                    x: 0,
+                    y: 0,
+                    width:
+                        normalizedSourceWidth,
+                    height:
+                        normalizedSourceHeight,
+                },
             };
         }
 
         const scale =
-            fit ===
+            normalizedFit ===
             'contain'
                 ? Math.min(
-                    targetWidth /
-                    sourceWidth,
+                    normalizedTargetWidth /
+                    normalizedSourceWidth,
 
-                    targetHeight /
-                    sourceHeight
+                    normalizedTargetHeight /
+                    normalizedSourceHeight
                 )
                 : Math.max(
-                    targetWidth /
-                    sourceWidth,
+                    normalizedTargetWidth /
+                    normalizedSourceWidth,
 
-                    targetHeight /
-                    sourceHeight
+                    normalizedTargetHeight /
+                    normalizedSourceHeight
                 );
 
-        const width =
-            sourceWidth *
+        const fittedWidth =
+            normalizedSourceWidth *
             scale;
 
-        const height =
-            sourceHeight *
+        const fittedHeight =
+            normalizedSourceHeight *
             scale;
 
-        return {
+        const fittedX =
+            (
+                normalizedTargetWidth -
+                fittedWidth
+            ) /
+            2;
+
+        const fittedY =
+            (
+                normalizedTargetHeight -
+                fittedHeight
+            ) /
+            2;
+
+        const fittedRect = {
             x:
-                (
-                    targetWidth -
-                    width
-                ) /
-                2,
+                fittedX,
 
             y:
-                (
-                    targetHeight -
-                    height
-                ) /
-                2,
+                fittedY,
 
-            width,
-            height,
+            width:
+                fittedWidth,
+
+            height:
+                fittedHeight,
+        };
+
+        if (
+            normalizedFit ===
+            'contain'
+        ) {
+            return {
+                fit:
+                    normalizedFit,
+
+                scaleX:
+                    scale,
+
+                scaleY:
+                    scale,
+
+                fittedRect,
+
+                visibleSourceRect: {
+                    x: 0,
+                    y: 0,
+                    width:
+                        normalizedSourceWidth,
+                    height:
+                        normalizedSourceHeight,
+                },
+            };
+        }
+
+        const visibleLeft =
+            clamp(
+                -fittedX /
+                scale,
+                0,
+                normalizedSourceWidth
+            );
+
+        const visibleTop =
+            clamp(
+                -fittedY /
+                scale,
+                0,
+                normalizedSourceHeight
+            );
+
+        const visibleRight =
+            clamp(
+                (
+                    normalizedTargetWidth -
+                    fittedX
+                ) /
+                scale,
+                0,
+                normalizedSourceWidth
+            );
+
+        const visibleBottom =
+            clamp(
+                (
+                    normalizedTargetHeight -
+                    fittedY
+                ) /
+                scale,
+                0,
+                normalizedSourceHeight
+            );
+
+        return {
+            fit:
+                normalizedFit,
+
+            scaleX:
+                scale,
+
+            scaleY:
+                scale,
+
+            fittedRect,
+
+            visibleSourceRect: {
+                x:
+                    visibleLeft,
+
+                y:
+                    visibleTop,
+
+                width:
+                    Math.max(
+                        0,
+                        visibleRight -
+                        visibleLeft
+                    ),
+
+                height:
+                    Math.max(
+                        0,
+                        visibleBottom -
+                        visibleTop
+                    ),
+            },
         };
     }
 
@@ -1220,8 +1382,8 @@ const ProductPreview = (() => {
             slot.borderRadius /
             100;
 
-        const fittedRect =
-            getFittedRect(
+        const fitGeometry =
+            getSlotFitGeometry(
                 sourceCanvas.width,
                 sourceCanvas.height,
                 slotWidth,
@@ -1229,9 +1391,12 @@ const ProductPreview = (() => {
                 slot.fit
             );
 
-        if (!fittedRect) {
+        if (!fitGeometry) {
             return false;
         }
+
+        const { fittedRect } =
+            fitGeometry;
 
         context.save();
 
@@ -1918,7 +2083,6 @@ const ProductPreview = (() => {
                                     ]
                                 );
 
-                                staticCanvas.discardActiveObject();
                                 staticCanvas.renderAll();
 
                                 const sourceCanvas =
@@ -2001,6 +2165,7 @@ const ProductPreview = (() => {
         normalizeConfig,
         getPrintSpec,
         getView,
+        getSlotFitGeometry,
         loadImage,
         createSourceCanvasFromFabric,
         createSourceCanvasFromFabricJSON,

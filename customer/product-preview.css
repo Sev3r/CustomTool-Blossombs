@@ -13,7 +13,9 @@
 }
 
 #canvas-wrap.is-design-side-view {
-  overflow: hidden;
+  align-items: flex-start;
+  justify-content: flex-start;
+  overflow: auto;
 }
 
 #canvas-wrap .canvas-container {
@@ -21,6 +23,9 @@
 }
 
 #canvas-wrap .canvas-container.canvas-editor-side-view {
+  max-width: none;
+  max-height: none;
+  margin: auto;
   overflow: hidden;
 }
 
