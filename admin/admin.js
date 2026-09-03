@@ -10,21 +10,27 @@ const PAGES = {
     el: 'page-sales',
     render: renderSalesOrdersPage,
   },
+
   creation: {
     el: 'page-creation',
     render: renderCreationOrdersPage,
   },
+
+  production: {
+    el: 'page-production',
+    render: renderProductionOrdersPage,
+  },
+
+  history: {
+    el: 'page-archive',
+    render: renderArchivePage,
+  },
+
   archive: {
     el: 'page-archive',
-    render: () => {
-      if (typeof renderArchivePage === 'function') {
-        renderArchivePage();
-        return;
-      }
-
-      renderArchiveFallbackPage();
-    },
+    render: renderArchivePage,
   },
+
   products: {
     el: 'page-products',
     render: renderProductsPage,
@@ -32,175 +38,375 @@ const PAGES = {
 };
 
 function navigate(hash) {
-  const page = hash.replace('#', '') || 'sales';
+  const requestedPage =
+    String(hash || '')
+      .replace('#', '') ||
+    'creation';
+
+  const page =
+    requestedPage === 'archive'
+      ? 'history'
+      : requestedPage;
 
   if (!PAGES[page]) {
-    navigate('#sales');
+    navigate('#creation');
     return;
   }
 
-  document.querySelectorAll('.page').forEach(el => el.classList.remove('active'));
+  document
+    .querySelectorAll('.page')
+    .forEach(element => {
+      element.classList.remove('active');
+    });
 
-  const pageElement = document.getElementById(PAGES[page].el);
+  const pageElement =
+    document.getElementById(
+      PAGES[page].el
+    );
 
   if (pageElement) {
     pageElement.classList.add('active');
   }
 
-  document.querySelectorAll('.nav-item').forEach(link => {
-    link.classList.toggle('active', link.dataset.page === page);
-  });
+  document
+    .querySelectorAll('.nav-item')
+    .forEach(link => {
+      link.classList.toggle(
+        'active',
+        link.dataset.page === page
+      );
+    });
 
   PAGES[page].render();
+
   updateBadges();
-}
-
-function renderArchiveFallbackPage() {
-  const el = document.getElementById('page-archive');
-
-  if (!el) {
-    return;
-  }
-
-  el.innerHTML = `
-    <div class="page-header">
-      <div>
-        <h1>Archief</h1>
-        <p>Afgeronde en geannuleerde orders</p>
-      </div>
-    </div>
-
-    <div class="empty-state">
-      <div class="empty-state-icon">⌛</div>
-      <h3>Archief wordt geladen</h3>
-      <p>De archiefweergave wordt toegevoegd in orders.js.</p>
-    </div>
-  `;
+  closeSettingsMenu();
 }
 
 function updateBadges() {
-  const orders = DS.getOrders();
+  const orders =
+    DS.getOrders();
 
-  const workflowOrders = orders.map(order => ({
-    order,
-    workflow: getSafeOrderWorkflow(order),
-  }));
+  const workflowOrders =
+    orders.map(order => ({
+      order,
+      workflow:
+        getSafeOrderWorkflow(order),
+    }));
 
-  const salesOrders = workflowOrders.filter(({ workflow }) =>
-    workflow.department === 'sales' && !workflow.archived
+  const salesOrders =
+    workflowOrders.filter(
+      ({ workflow }) =>
+        workflow.department === 'sales' &&
+        !workflow.archived
+    );
+
+  const creationOrders =
+    workflowOrders.filter(
+      ({ workflow }) =>
+        workflow.department === 'creation' &&
+        !workflow.archived
+    );
+
+  const archiveOrders =
+    workflowOrders.filter(
+      ({ workflow }) =>
+        workflow.archived
+    );
+
+  setBadgeCount(
+    'badge-sales',
+    salesOrders.length
   );
 
-  const creationOrders = workflowOrders.filter(({ workflow }) =>
-    workflow.department === 'creation' && !workflow.archived
+  setBadgeCount(
+    'badge-creation',
+    creationOrders.length
   );
 
-  const archiveOrders = workflowOrders.filter(({ workflow }) =>
-    workflow.archived
+  setBadgeCount(
+    'badge-history',
+    archiveOrders.length
   );
+}
 
-  const salesBadge = document.getElementById('badge-sales');
-  const creationBadge = document.getElementById('badge-creation');
-  const archiveBadge = document.getElementById('badge-archive');
+function setBadgeCount(
+  elementId,
+  count
+) {
+  const badge =
+    document.getElementById(
+      elementId
+    );
 
-  if (salesBadge) {
-    salesBadge.textContent = salesOrders.length || '';
+  if (!badge) {
+    return;
   }
 
-  if (creationBadge) {
-    creationBadge.textContent = creationOrders.length || '';
-  }
-
-  if (archiveBadge) {
-    archiveBadge.textContent = archiveOrders.length || '';
-  }
+  badge.textContent =
+    count > 0
+      ? String(count)
+      : '';
 }
 
 function getSafeOrderWorkflow(order) {
-  if (typeof normalizeOrderWorkflow === 'function') {
-    return normalizeOrderWorkflow(order);
+  if (
+    typeof normalizeOrderWorkflow ===
+    'function'
+  ) {
+    return normalizeOrderWorkflow(
+      order
+    );
   }
 
-  const archivedStatuses = ['verzonden', 'afgerond', 'completed', 'cancelled'];
+  const archivedStatuses = [
+    'verzonden',
+    'afgerond',
+    'completed',
+    'cancelled',
+  ];
 
   return {
-    department: archivedStatuses.includes(order.status) ? 'archive' : 'sales',
-    status: order.status || 'new_request',
-    archived: archivedStatuses.includes(order.status),
+    department:
+      archivedStatuses.includes(
+        order.status
+      )
+        ? 'archive'
+        : 'sales',
+
+    status:
+      order.status ||
+      'new_request',
+
+    archived:
+      archivedStatuses.includes(
+        order.status
+      ),
   };
+}
+
+// ─── SETTINGS MENU ───────────────────────────────────────────────────────────
+
+function toggleSettingsMenu() {
+  const button =
+    document.getElementById(
+      'btn-settings-menu'
+    );
+
+  const menu =
+    document.getElementById(
+      'settings-menu'
+    );
+
+  if (
+    !button ||
+    !menu
+  ) {
+    return;
+  }
+
+  const nextOpen =
+    menu.classList.contains(
+      'hidden'
+    );
+
+  menu.classList.toggle(
+    'hidden',
+    !nextOpen
+  );
+
+  button.setAttribute(
+    'aria-expanded',
+    String(nextOpen)
+  );
+}
+
+function closeSettingsMenu() {
+  const button =
+    document.getElementById(
+      'btn-settings-menu'
+    );
+
+  const menu =
+    document.getElementById(
+      'settings-menu'
+    );
+
+  if (!menu) {
+    return;
+  }
+
+  menu.classList.add(
+    'hidden'
+  );
+
+  button?.setAttribute(
+    'aria-expanded',
+    'false'
+  );
 }
 
 // ─── MODAL ───────────────────────────────────────────────────────────────────
 
-function openModal({ title, body, footer }) {
-  const modalTitle = document.getElementById('modal-title');
-  const modalBody = document.getElementById('modal-body');
-  const modalFooter = document.getElementById('modal-footer');
-  const modalOverlay = document.getElementById('modal-overlay');
+function openModal({
+  title,
+  body,
+  footer,
+}) {
+  const modalTitle =
+    document.getElementById(
+      'modal-title'
+    );
 
-  if (!modalTitle || !modalBody || !modalFooter || !modalOverlay) {
+  const modalBody =
+    document.getElementById(
+      'modal-body'
+    );
+
+  const modalFooter =
+    document.getElementById(
+      'modal-footer'
+    );
+
+  const modalOverlay =
+    document.getElementById(
+      'modal-overlay'
+    );
+
+  if (
+    !modalTitle ||
+    !modalBody ||
+    !modalFooter ||
+    !modalOverlay
+  ) {
     return;
   }
 
-  modalTitle.textContent = title;
+  modalTitle.textContent =
+    title;
+
   modalBody.innerHTML = '';
   modalFooter.innerHTML = '';
 
-  if (typeof body === 'string') {
-    modalBody.innerHTML = body;
+  if (
+    typeof body ===
+    'string'
+  ) {
+    modalBody.innerHTML =
+      body;
   } else if (body) {
-    modalBody.appendChild(body);
+    modalBody.appendChild(
+      body
+    );
   }
 
   if (footer) {
-    if (typeof footer === 'string') {
-      modalFooter.innerHTML = footer;
+    if (
+      typeof footer ===
+      'string'
+    ) {
+      modalFooter.innerHTML =
+        footer;
     } else {
-      modalFooter.appendChild(footer);
+      modalFooter.appendChild(
+        footer
+      );
     }
   }
 
-  modalOverlay.classList.remove('hidden');
+  modalOverlay.classList.remove(
+    'hidden'
+  );
 }
 
 function closeModal() {
-  const modalOverlay = document.getElementById('modal-overlay');
+  const modalOverlay =
+    document.getElementById(
+      'modal-overlay'
+    );
 
   if (modalOverlay) {
-    modalOverlay.classList.add('hidden');
+    modalOverlay.classList.add(
+      'hidden'
+    );
   }
 }
 
 // ─── CONFIRM DIALOG ───────────────────────────────────────────────────────────
 
-function confirmDialog(message, options = {}) {
+function confirmDialog(
+  message,
+  options = {}
+) {
   return new Promise(resolve => {
-    const confirmLabel = options.confirmLabel || 'Verwijderen';
-    const confirmClass = options.confirmClass || 'btn-danger';
+    const confirmLabel =
+      options.confirmLabel ||
+      'Verwijderen';
 
-    const footer = document.createElement('div');
-    footer.style.display = 'flex';
-    footer.style.gap = '8px';
+    const confirmClass =
+      options.confirmClass ||
+      'btn-danger';
+
+    const footer =
+      document.createElement(
+        'div'
+      );
+
+    footer.className =
+      'confirm-actions';
 
     footer.innerHTML = `
-      <button class="btn btn-secondary" id="confirm-no" type="button">Annuleren</button>
-      <button class="btn ${confirmClass}" id="confirm-yes" type="button">${escHtml(confirmLabel)}</button>
+      <button
+        class="btn btn-secondary"
+        id="confirm-no"
+        type="button"
+      >
+        Annuleren
+      </button>
+
+      <button
+        class="btn ${confirmClass}"
+        id="confirm-yes"
+        type="button"
+      >
+        ${escHtml(confirmLabel)}
+      </button>
     `;
 
     openModal({
-      title: options.title || 'Bevestig',
-      body: `<p style="padding:4px 0">${escHtml(message)}</p>`,
+      title:
+        options.title ||
+        'Bevestig',
+
+      body:
+        `<p class="confirm-message">${escHtml(message)}</p>`,
+
       footer,
     });
 
-    document.getElementById('confirm-yes').addEventListener('click', () => {
-      closeModal();
-      resolve(true);
-    });
+    document
+      .getElementById(
+        'confirm-yes'
+      )
+      .addEventListener(
+        'click',
+        () => {
+          closeModal();
+          resolve(true);
+        }
+      );
 
-    document.getElementById('confirm-no').addEventListener('click', () => {
-      closeModal();
-      resolve(false);
-    });
+    document
+      .getElementById(
+        'confirm-no'
+      )
+      .addEventListener(
+        'click',
+        () => {
+          closeModal();
+          resolve(false);
+        }
+      );
   });
 }
 
@@ -208,21 +414,35 @@ function confirmDialog(message, options = {}) {
 
 let toastTimer;
 
-function showToast(msg, type = 'success') {
-  const toast = document.getElementById('toast');
+function showToast(
+  message,
+  type = 'success'
+) {
+  const toast =
+    document.getElementById(
+      'toast'
+    );
 
   if (!toast) {
     return;
   }
 
-  toast.textContent = msg;
-  toast.className = `toast ${type}`;
+  toast.textContent =
+    message;
 
-  clearTimeout(toastTimer);
+  toast.className =
+    `toast ${type}`;
 
-  toastTimer = setTimeout(() => {
-    toast.classList.add('hidden');
-  }, 3000);
+  clearTimeout(
+    toastTimer
+  );
+
+  toastTimer =
+    setTimeout(() => {
+      toast.classList.add(
+        'hidden'
+      );
+    }, 3000);
 }
 
 // ─── HELPERS ─────────────────────────────────────────────────────────────────
@@ -232,29 +452,41 @@ function formatDate(iso) {
     return '—';
   }
 
-  const date = new Date(iso);
+  const date =
+    new Date(iso);
 
-  if (Number.isNaN(date.getTime())) {
+  if (
+    Number.isNaN(
+      date.getTime()
+    )
+  ) {
     return '—';
   }
 
-  return date.toLocaleDateString('nl-NL', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-  });
+  return date.toLocaleDateString(
+    'nl-NL',
+    {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+    }
+  );
 }
 
-function formatEuro(n) {
-  if (n === undefined || n === null || n === '') {
+function formatEuro(value) {
+  if (
+    value === undefined ||
+    value === null ||
+    value === ''
+  ) {
     return '—';
   }
 
-  return `€ ${parseFloat(n).toFixed(2).replace('.', ',')}`;
+  return `€ ${parseFloat(value).toFixed(2).replace('.', ',')}`;
 }
 
-function escHtml(str) {
-  return String(str || '')
+function escHtml(value) {
+  return String(value || '')
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;');
@@ -262,50 +494,178 @@ function escHtml(str) {
 
 // ─── INIT ─────────────────────────────────────────────────────────────────────
 
-document.addEventListener('DOMContentLoaded', async () => {
-  await DS.init();
-  DS.seedDemoData();
+document.addEventListener(
+  'DOMContentLoaded',
+  async () => {
+    await DS.init();
+    DS.seedDemoData();
 
-  const modalCloseButton = document.getElementById('btn-modal-close');
-  const modalOverlay = document.getElementById('modal-overlay');
-  const resetButton = document.getElementById('btn-reset-data');
+    const modalCloseButton =
+      document.getElementById(
+        'btn-modal-close'
+      );
 
-  if (modalCloseButton) {
-    modalCloseButton.addEventListener('click', closeModal);
-  }
+    const modalOverlay =
+      document.getElementById(
+        'modal-overlay'
+      );
 
-  if (modalOverlay) {
-    modalOverlay.addEventListener('click', event => {
-      if (event.target === event.currentTarget) {
-        closeModal();
+    const resetButton =
+      document.getElementById(
+        'btn-reset-data'
+      );
+
+    const newOrderButton =
+      document.getElementById(
+        'btn-global-new-order'
+      );
+
+    const settingsButton =
+      document.getElementById(
+        'btn-settings-menu'
+      );
+
+    if (modalCloseButton) {
+      modalCloseButton.addEventListener(
+        'click',
+        closeModal
+      );
+    }
+
+    if (modalOverlay) {
+      modalOverlay.addEventListener(
+        'click',
+        event => {
+          if (
+            event.target ===
+            event.currentTarget
+          ) {
+            closeModal();
+          }
+        }
+      );
+    }
+
+    if (newOrderButton) {
+      newOrderButton.addEventListener(
+        'click',
+        () => {
+          if (
+            typeof openOrderModal ===
+            'function'
+          ) {
+            openOrderModal();
+          }
+        }
+      );
+    }
+
+    if (settingsButton) {
+      settingsButton.addEventListener(
+        'click',
+        event => {
+          event.stopPropagation();
+          toggleSettingsMenu();
+        }
+      );
+    }
+
+    document.addEventListener(
+      'click',
+      event => {
+        if (
+          !event.target.closest(
+            '.settings-menu-wrap'
+          )
+        ) {
+          closeSettingsMenu();
+        }
       }
-    });
-  }
+    );
 
-  if (resetButton) {
-    resetButton.addEventListener('click', async () => {
-      const ok = await confirmDialog('Alle data resetten naar demo-data?', {
-        title: 'Reset data',
-        confirmLabel: 'Reset data',
-        confirmClass: 'btn-danger',
-      });
-
-      if (!ok) {
-        return;
+    document.addEventListener(
+      'keydown',
+      event => {
+        if (
+          event.key ===
+          'Escape'
+        ) {
+          closeSettingsMenu();
+          closeModal();
+        }
       }
+    );
 
-      localStorage.removeItem('cot_orders');
-      localStorage.removeItem('cot_products');
+    if (resetButton) {
+      resetButton.addEventListener(
+        'click',
+        async () => {
+          const confirmed =
+            await confirmDialog(
+              'Alle lokaal gecachte data resetten?',
+              {
+                title:
+                  'Reset data',
 
-      DS.seedDemoData();
-      navigate(location.hash || '#sales');
-      showToast('Data gereset naar demo-data');
-    });
+                confirmLabel:
+                  'Reset data',
+
+                confirmClass:
+                  'btn-danger',
+              }
+            );
+
+          if (!confirmed) {
+            return;
+          }
+
+          localStorage.removeItem(
+            'cot_orders'
+          );
+
+          localStorage.removeItem(
+            'cot_products'
+          );
+
+          await Promise.all([
+            typeof DS.refreshOrders ===
+            'function'
+              ? DS.refreshOrders()
+              : Promise.resolve(),
+
+            typeof DS.refreshProducts ===
+            'function'
+              ? DS.refreshProducts()
+              : Promise.resolve(),
+          ]);
+
+          navigate(
+            location.hash ||
+            '#creation'
+          );
+
+          showToast(
+            'Lokale cache opnieuw geladen'
+          );
+        }
+      );
+    }
+
+    window.addEventListener(
+      'hashchange',
+      () => {
+        navigate(
+          location.hash
+        );
+      }
+    );
+
+    navigate(
+      location.hash ||
+      '#creation'
+    );
   }
-
-  window.addEventListener('hashchange', () => navigate(location.hash));
-  navigate(location.hash || '#sales');
-});
+);
 
 // Globaal beschikbaar maken
 
