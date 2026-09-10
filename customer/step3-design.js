@@ -26,7 +26,7 @@ const CANVAS_ZOOM_MIN = 0.65;
 const CANVAS_ZOOM_MAX = 2.5;
 const CANVAS_ZOOM_STEP = 0.1;
 
-const DESIGN_VIEW_ORIENTATION_VERSION = 2;
+const DESIGN_VIEW_ORIENTATION_VERSION = 3;
 const DESIGN_VIEW_VIEWPORT_PADDING_PX = 20;
 const DESIGN_VIEW_VIEWPORT_EPSILON = 0.001;
 const DESIGN_VIEW_GUIDE_FLAG = '_isDesignViewGuide';
@@ -35,7 +35,6 @@ const FABRIC_SERIALIZABLE_PROPERTIES = [
   '_layerId',
   '_uploadMeta',
   '_designViewId',
-  '_designViewRotation',
   '_designOrientationVersion',
 ];
 
@@ -776,11 +775,6 @@ function renderDesignViewToolbar(
           Reset
         </button>
       </div>
-
-      <p
-        id="canvas-view-note"
-        class="canvas-view-note"
-      ></p>
     </div>
   `;
 }
@@ -1120,30 +1114,6 @@ function updateDesignViewToolbarState() {
           ? 0
           : -1;
     });
-
-  const note =
-    document.getElementById(
-      'canvas-view-note'
-    );
-
-  if (!note) {
-    return;
-  }
-
-  const view =
-    getActiveDesignView();
-
-  const hasTechnicalOrientation =
-    Boolean(
-      getDesignViewRotation(view) ||
-      view?.sourceZone?.flipX ||
-      view?.sourceZone?.flipY
-    );
-
-  note.textContent =
-    hasTechnicalOrientation
-      ? `Je ontwerpt ${view?.label || 'deze productzijde'} in de technische stand van het drukvel. De productpreview corrigeert de draairichting automatisch.`
-      : `Je ontwerpt ${view?.label || 'deze productzijde'} zoals deze op het eindproduct verschijnt.`;
 }
 
 function getDesignViewById(viewId) {
@@ -1181,11 +1151,6 @@ function isDesignSideViewActive() {
   );
 }
 
-function getDesignViewRotation(view) {
-  return normalizeDesignRotation(
-    view?.sourceZone?.rotation
-  );
-}
 
 function normalizeDesignRotation(value) {
   return (
@@ -1297,8 +1262,6 @@ function getDesignViewSourceBounds(
     top,
     width,
     height,
-    rotation:
-      getDesignViewRotation(view),
     viewId:
       view.id,
   });
@@ -1390,9 +1353,6 @@ function getDesignViewBounds(
     height:
       visibleSourceRect.height,
 
-    rotation:
-      sourceBounds.rotation,
-
     viewId:
       sourceBounds.viewId,
   });
@@ -1403,7 +1363,6 @@ function createDesignBounds({
   top,
   width,
   height,
-  rotation,
   viewId,
 }) {
   return {
@@ -1428,103 +1387,15 @@ function createDesignBounds({
       top +
       height / 2,
 
-    rotation,
     viewId,
   };
 }
 
-function getDesignViewEditorOrientation(
-  view
-) {
-  const rotation =
-    -getDesignViewRotation(
-      view
-    ) *
-    Math.PI /
-    180;
-
-  const flipX =
-    view?.sourceZone?.flipX
-      ? -1
-      : 1;
-
-  const flipY =
-    view?.sourceZone?.flipY
-      ? -1
-      : 1;
-
-  const cosine =
-    Math.cos(
-      rotation
-    );
-
-  const sine =
-    Math.sin(
-      rotation
-    );
-
-  return {
-    a:
-      flipX *
-      cosine,
-
-    b:
-      flipY *
-      sine,
-
-    c:
-      -flipX *
-      sine,
-
-    d:
-      flipY *
-      cosine,
-  };
-}
-
-function getOrientedDesignViewSize(
-  bounds,
-  orientation
-) {
-  return {
-    width:
-      Math.abs(
-        orientation.a
-      ) *
-      bounds.width +
-      Math.abs(
-        orientation.c
-      ) *
-      bounds.height,
-
-    height:
-      Math.abs(
-        orientation.b
-      ) *
-      bounds.width +
-      Math.abs(
-        orientation.d
-      ) *
-      bounds.height,
-  };
-}
 
 function createDesignViewViewport(
   canvas,
-  bounds,
-  view = getActiveDesignView()
+  bounds
 ) {
-  const orientation =
-    getDesignViewEditorOrientation(
-      view
-    );
-
-  const orientedSize =
-    getOrientedDesignViewSize(
-      bounds,
-      orientation
-    );
-
   const availableWidth =
     Math.max(
       1,
@@ -1539,61 +1410,34 @@ function createDesignViewViewport(
       DESIGN_VIEW_VIEWPORT_PADDING_PX * 2
     );
 
-  const fitScale =
+  const scale =
     Math.min(
       availableWidth /
       Math.max(
         1,
-        orientedSize.width
+        bounds.width
       ),
 
       availableHeight /
       Math.max(
         1,
-        orientedSize.height
+        bounds.height
       )
     );
 
-  const scale =
-    fitScale;
-
-  const a =
-    orientation.a *
-    scale;
-
-  const b =
-    orientation.b *
-    scale;
-
-  const c =
-    orientation.c *
-    scale;
-
-  const d =
-    orientation.d *
-    scale;
-
   return [
-    a,
-    b,
-    c,
-    d,
+    scale,
+    0,
+    0,
+    scale,
 
     canvas.getWidth() / 2 -
-      (
-        a *
-        bounds.centerX +
-        c *
-        bounds.centerY
-      ),
+      scale *
+      bounds.centerX,
 
     canvas.getHeight() / 2 -
-      (
-        b *
-        bounds.centerX +
-        d *
-        bounds.centerY
-      ),
+      scale *
+      bounds.centerY,
   ];
 }
 
@@ -1629,8 +1473,7 @@ function hasExpectedDesignViewport(canvas) {
     bounds
       ? createDesignViewViewport(
         canvas,
-        bounds,
-        getActiveDesignView()
+        bounds
       )
       : [
         1,
@@ -1731,8 +1574,7 @@ function applyActiveDesignView(
   canvas.setViewportTransform(
     createDesignViewViewport(
       canvas,
-      bounds,
-      view
+      bounds
     )
   );
 
@@ -1859,9 +1701,6 @@ function prepareNewObjectForActiveDesignView(
       _designViewId:
         view.id,
 
-      _designViewRotation:
-        getDesignViewRotation(view),
-
       _designOrientationVersion:
         DESIGN_VIEW_ORIENTATION_VERSION,
     });
@@ -1888,9 +1727,6 @@ function prepareNewObjectForActiveDesignView(
 
       _designViewId:
         null,
-
-      _designViewRotation:
-        0,
 
       _designOrientationVersion:
         DESIGN_VIEW_ORIENTATION_VERSION,
@@ -1984,8 +1820,8 @@ function hydrateDesignObjectMetadata(canvas) {
         );
 
       const configuredRotation =
-        getDesignViewRotation(
-          view
+        normalizeDesignRotation(
+          view?.sourceZone?.rotation
         );
 
       const orientationVersion =
@@ -2004,8 +1840,9 @@ function hydrateDesignObjectMetadata(canvas) {
           configuredRotation
         );
 
-      const shouldRecoverLegacyPlacement =
+      const shouldRecoverUnversionedPlacement =
         Boolean(
+          orientationVersion === 0 &&
           bounds &&
           configuredRotation &&
           centerBefore &&
@@ -2022,12 +1859,12 @@ function hydrateDesignObjectMetadata(canvas) {
       if (
         (
           orientationVersion === 1 ||
-          shouldRecoverLegacyPlacement
+          shouldRecoverUnversionedPlacement
         ) &&
         bounds &&
         configuredRotation
       ) {
-        migrateLegacyDesignObjectToVisualOrientation(
+        migrateLegacyDesignObjectToProductOrientation(
           object,
           bounds,
           configuredRotation
@@ -2049,8 +1886,14 @@ function hydrateDesignObjectMetadata(canvas) {
       object._designViewId =
         view.id;
 
-      object._designViewRotation =
-        configuredRotation;
+      delete object._designViewRotation;
+
+      if (
+        orientationVersion !==
+        DESIGN_VIEW_ORIENTATION_VERSION
+      ) {
+        migrated = true;
+      }
 
       object._designOrientationVersion =
         DESIGN_VIEW_ORIENTATION_VERSION;
@@ -2087,18 +1930,10 @@ function assignObjectToCurrentDesignView(
       object
     );
 
-  const view =
-    getDesignViewById(
-      nextViewId
-    );
-
   object._designViewId =
     nextViewId;
 
-  object._designViewRotation =
-    getDesignViewRotation(
-      view
-    );
+  delete object._designViewRotation;
 
   object._designOrientationVersion =
     DESIGN_VIEW_ORIENTATION_VERSION;
@@ -2180,8 +2015,7 @@ function constrainObjectToActiveDesignView(
   object._designViewId =
     bounds.viewId;
 
-  object._designViewRotation =
-    bounds.rotation;
+  delete object._designViewRotation;
 
   object._designOrientationVersion =
     DESIGN_VIEW_ORIENTATION_VERSION;
@@ -2426,7 +2260,7 @@ function getRotatedPointAroundDesignBounds(
   );
 }
 
-function migrateLegacyDesignObjectToVisualOrientation(
+function migrateLegacyDesignObjectToProductOrientation(
   object,
   bounds,
   rotation
@@ -4070,8 +3904,7 @@ function applyCanvasZoom() {
     fabricCanvas.setViewportTransform(
       createDesignViewViewport(
         fabricCanvas,
-        bounds,
-        view
+        bounds
       )
     );
 
@@ -4398,6 +4231,7 @@ function initFabricTool(
   }
 
   fabricHistory = [];
+
   canvasZoom = 1;
   fabricActiveColor = '#1D9E75';
 
@@ -8828,6 +8662,11 @@ function captureCanonicalDesignSourceCanvas(canvas) {
   );
 }
 
+/**
+ * Zet het productgerichte Fabric-ontwerp om naar de technische drukoriëntatie.
+ * sourceZone.rotation / flipX / flipY worden uitsluitend in deze exportlaag
+ * toegepast en beïnvloeden de customer-editor, live preview en FabricJSON niet.
+ */
 function composeTechnicalDesignCanvas(
   sourceCanvas,
   config,
