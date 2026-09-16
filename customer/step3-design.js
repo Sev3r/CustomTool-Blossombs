@@ -25,6 +25,7 @@ let canvasZoom = 1;
 const CANVAS_ZOOM_MIN = 0.65;
 const CANVAS_ZOOM_MAX = 2.5;
 const CANVAS_ZOOM_STEP = 0.1;
+const CANVAS_ZOOM_SAFE_INSET_PX = 8;
 
 const DESIGN_VIEW_ORIENTATION_VERSION = 3;
 const DESIGN_VIEW_VIEWPORT_PADDING_PX = 20;
@@ -3836,6 +3837,166 @@ function getResponsiveCanvasSize(
   };
 }
 
+function resetCanvasDisplaySize(canvas) {
+  if (!canvas) {
+    return;
+  }
+
+  canvas.setDimensions(
+    {
+      width:
+        `${canvas.getWidth()}px`,
+
+      height:
+        `${canvas.getHeight()}px`,
+    },
+    {
+      cssOnly: true,
+    }
+  );
+}
+
+function getCanvasWrapAvailableSize() {
+  const canvasWrap =
+    document.getElementById(
+      'canvas-wrap'
+    );
+
+  if (!canvasWrap) {
+    return null;
+  }
+
+  const styles =
+    window.getComputedStyle(
+      canvasWrap
+    );
+
+  const paddingLeft =
+    Number.parseFloat(
+      styles.paddingLeft
+    ) ||
+    0;
+
+  const paddingRight =
+    Number.parseFloat(
+      styles.paddingRight
+    ) ||
+    0;
+
+  const paddingTop =
+    Number.parseFloat(
+      styles.paddingTop
+    ) ||
+    0;
+
+  const paddingBottom =
+    Number.parseFloat(
+      styles.paddingBottom
+    ) ||
+    0;
+
+  return {
+    width:
+      Math.max(
+        1,
+        canvasWrap.clientWidth -
+        paddingLeft -
+        paddingRight -
+        CANVAS_ZOOM_SAFE_INSET_PX * 2
+      ),
+
+    height:
+      Math.max(
+        1,
+        canvasWrap.clientHeight -
+        paddingTop -
+        paddingBottom -
+        CANVAS_ZOOM_SAFE_INSET_PX * 2
+      ),
+  };
+}
+
+function getCanvasZoomBounds(
+  canvas = fabricCanvas
+) {
+  if (!canvas) {
+    return {
+      min: CANVAS_ZOOM_MIN,
+      max: CANVAS_ZOOM_MAX,
+    };
+  }
+
+  if (!designViewContext?.config.enabled) {
+    return {
+      min:
+        Math.min(
+          CANVAS_ZOOM_MIN,
+          1
+        ),
+
+      max: 1,
+    };
+  }
+
+  const bounds =
+    getDesignViewBounds(
+      canvas
+    );
+
+  const availableSize =
+    getCanvasWrapAvailableSize();
+
+  if (
+    !bounds ||
+    !availableSize
+  ) {
+    return {
+      min: CANVAS_ZOOM_MIN,
+      max: CANVAS_ZOOM_MAX,
+    };
+  }
+
+  const screenBounds =
+    getDesignViewScreenBounds(
+      canvas,
+      bounds
+    );
+
+  const maximumFitZoom =
+    Math.min(
+      CANVAS_ZOOM_MAX,
+
+      availableSize.width /
+      Math.max(
+        1,
+        screenBounds.width
+      ),
+
+      availableSize.height /
+      Math.max(
+        1,
+        screenBounds.height
+      )
+    );
+
+  const maximumZoom =
+    Math.max(
+      0.05,
+      maximumFitZoom
+    );
+
+  return {
+    min:
+      Math.min(
+        CANVAS_ZOOM_MIN,
+        maximumZoom
+      ),
+
+    max:
+      maximumZoom,
+  };
+}
+
 function applyDesignCanvasDisplayZoom(
   canvas
 ) {
@@ -3843,38 +4004,46 @@ function applyDesignCanvasDisplayZoom(
     return;
   }
 
-  const displayWidth =
-    Math.max(
-      1,
-      canvas.getWidth() *
-      canvasZoom
-    );
-
-  const displayHeight =
-    Math.max(
-      1,
-      canvas.getHeight() *
-      canvasZoom
-    );
-
-  canvas.setDimensions(
-    {
-      width:
-        `${displayWidth}px`,
-
-      height:
-        `${displayHeight}px`,
-    },
-    {
-      cssOnly: true,
-    }
-  );
-
-  clearCanvasContainerTransform(
+  resetCanvasDisplaySize(
     canvas
   );
 
+  const container =
+    canvas.wrapperEl ||
+    canvas.lowerCanvasEl?.parentElement;
+
+  if (!container) {
+    return;
+  }
+
+  const zoomBounds =
+    getCanvasZoomBounds(
+      canvas
+    );
+
+  canvasZoom =
+    Math.min(
+      zoomBounds.max,
+      Math.max(
+        zoomBounds.min,
+        canvasZoom
+      )
+    );
+
+  container.style.transform =
+    Math.abs(
+      canvasZoom -
+      1
+    ) < 0.001
+      ? 'none'
+      : `scale(${canvasZoom})`;
+
+  container.style.transformOrigin =
+    'center center';
+
   canvas.calcOffset();
+
+  updateCanvasZoomControls();
 }
 
 function applyCanvasZoom() {
@@ -3922,17 +4091,8 @@ function applyCanvasZoom() {
     return;
   }
 
-  fabricCanvas.setDimensions(
-    {
-      width:
-        `${fabricCanvas.getWidth()}px`,
-
-      height:
-        `${fabricCanvas.getHeight()}px`,
-    },
-    {
-      cssOnly: true,
-    }
+  resetCanvasDisplaySize(
+    fabricCanvas
   );
 
   removeDesignViewClip(
@@ -3967,11 +4127,16 @@ function applyCanvasZoom() {
 }
 
 function setCanvasZoom(nextZoom) {
+  const zoomBounds =
+    getCanvasZoomBounds(
+      fabricCanvas
+    );
+
   const clampedZoom =
     Math.min(
-      CANVAS_ZOOM_MAX,
+      zoomBounds.max,
       Math.max(
-        CANVAS_ZOOM_MIN,
+        zoomBounds.min,
         nextZoom
       )
     );
@@ -3983,6 +4148,7 @@ function setCanvasZoom(nextZoom) {
     ) <
     0.001
   ) {
+    updateCanvasZoomControls();
     return;
   }
 
@@ -4004,17 +4170,22 @@ function updateCanvasZoomControls() {
       'btn-canvas-zoom-out'
     );
 
+  const zoomBounds =
+    getCanvasZoomBounds(
+      fabricCanvas
+    );
+
   if (zoomInButton) {
     zoomInButton.disabled =
       canvasZoom >=
-      CANVAS_ZOOM_MAX -
+      zoomBounds.max -
       0.001;
   }
 
   if (zoomOutButton) {
     zoomOutButton.disabled =
       canvasZoom <=
-      CANVAS_ZOOM_MIN +
+      zoomBounds.min +
       0.001;
   }
 }
@@ -4319,7 +4490,6 @@ function initFabricTool(
   restoreCanvasStateOrDefault(
     fabricCanvas,
     savedState,
-    canvasHeight,
     margin,
     canvasWidth,
     canvasHeight,
@@ -6103,7 +6273,6 @@ function getBlockedLineCanvasData(
 function restoreCanvasStateOrDefault(
   canvas,
   savedState,
-  canvasHeight,
   margin,
   canvasWidth,
   canvasHeightValue,
@@ -6175,69 +6344,7 @@ function restoreCanvasStateOrDefault(
     }
   }
 
-  addDefaultText(
-    canvas,
-    canvasHeight
-  );
-
   redrawAfterRestore();
-}
-
-function addDefaultText(
-  canvas,
-  canvasHeight
-) {
-  const selectedFont =
-    document
-      .getElementById(
-        'font-select'
-      )
-      ?.value ||
-    'Georgia';
-
-  const demo =
-    new fabric.IText(
-      'Jouw bedrijfsnaam',
-      {
-        fontSize:
-          18,
-
-        fill:
-          '#ffffff',
-
-        fontFamily:
-          selectedFont,
-
-        editable:
-          true,
-
-        opacity:
-          0.9,
-      }
-    );
-
-  prepareNewObjectForActiveDesignView(
-    canvas,
-    demo,
-    {
-      fallbackLeft:
-        60,
-
-      fallbackTop:
-        Math.round(
-          canvasHeight *
-          0.65
-        ),
-    }
-  );
-
-  canvas.add(
-    demo
-  );
-
-  canvas.renderAll();
-
-  updateLayerPanel();
 }
 
 function isCenterSnappableObject(object) {
@@ -7036,7 +7143,7 @@ function bindFabricButtons(
       () => {
         const text =
           new fabric.IText(
-            'Dubbelklik om tekst te bewerken',
+            '',
             {
               fontSize:
                 20,
@@ -7077,7 +7184,7 @@ function bindFabricButtons(
           text
         );
 
-        canvas.renderAll();
+        canvas.requestRenderAll();
 
         syncFontSizeControls(
           text
@@ -7089,6 +7196,24 @@ function bindFabricButtons(
         autoSaveCanvasState(
           stateKey
         );
+
+        canvas.setActiveObject(
+          text
+        );
+
+        text.enterEditing();
+
+        text.selectionStart = 0;
+        text.selectionEnd = 0;
+
+        if (text.hiddenTextarea) {
+          text.hiddenTextarea.focus({
+            preventScroll: true,
+          });
+        }
+
+        canvas.requestRenderAll();
+        updateLayerPanel();
       }
     );
 
@@ -8262,9 +8387,16 @@ function updateLayerPanel() {
             object
           );
 
+        const textValue =
+          object.type === 'i-text'
+            ? String(object.text || '').trim()
+            : '';
+
         item.textContent =
           object.type === 'i-text'
-            ? `${index + 1}. Tekst: "${object.text}"`
+            ? textValue
+              ? `${index + 1}. Tekst: "${textValue}"`
+              : `${index + 1}. Tekst`
             : `${index + 1}. Afbeelding`;
 
         if (
