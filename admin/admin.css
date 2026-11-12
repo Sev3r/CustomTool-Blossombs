@@ -2585,3 +2585,18 @@ input[type="number"] {
   opacity: 0.6;
   cursor: wait;
 }
+
+/* ─── DRUKKERREGELS (productformulier) ──────────────────────────────────── */
+
+.pers-printer-row {
+  margin-bottom: 6px;
+}
+
+.pers-printer-row select {
+  flex: 1.4;
+  min-width: 140px;
+}
+
+.pers-printer-row input {
+  min-width: 70px;
+}

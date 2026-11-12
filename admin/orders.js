@@ -172,12 +172,33 @@ const ORDER_LEGACY_STATUS_MAP = {
   },
 };
 
+// Vaste lijst als terugval. De echte lijst komt uit Drukkers (tandwiel → Drukkers).
 const PRINT_SUPPLIER_OPTIONS = [
   ['', 'Nog niet gekozen'],
   ['solfer', 'Solfer'],
   ['q', 'Q'],
   ['anders', 'Anders'],
 ];
+
+function getPrintSupplierOptions() {
+  const printers =
+    typeof DS.getPrinters === 'function'
+      ? DS.getPrinters()
+      : [];
+
+  if (!printers.length) {
+    return PRINT_SUPPLIER_OPTIONS;
+  }
+
+  return [
+    ['', 'Nog niet gekozen'],
+    ...printers.map(printer => [
+      printer.id,
+      printer.name || printer.id,
+    ]),
+    ['anders', 'Anders'],
+  ];
+}
 
 function renderSalesOrdersPage() {
   orderPillFilter = 'sales';
@@ -2240,8 +2261,10 @@ function normalizeOrderWorkflow(
           ? production.definitiveFiles
           : [],
 
+      // Standaard de drukker die bij de klantaanvraag is bepaald.
       printSupplier:
         production.printSupplier ||
+        order.printerId ||
         '',
 
       purchaseOrderNumber:
@@ -3021,7 +3044,7 @@ function openPrintworkOrderModal(
     );
 
   const supplierOptions =
-    PRINT_SUPPLIER_OPTIONS.map(
+    getPrintSupplierOptions().map(
       ([value, label]) =>
         `
           <option
@@ -3765,6 +3788,46 @@ function renderProductOverview(
           ${formatAddons(order.addons)}
         </span>
       </div>
+
+      <div class="overview-item">
+        <span class="overview-label">
+          Gewenste leverdatum
+        </span>
+
+        <span class="overview-value">
+          ${order.desiredDeliveryDate
+            ? escHtml(formatDate(order.desiredDeliveryDate))
+            : order.deliveryDateInOverleg
+              ? 'In overleg'
+              : '—'}
+        </span>
+      </div>
+
+      <div class="overview-item">
+        <span class="overview-label">
+          Drukker
+        </span>
+
+        <span class="overview-value">
+          ${order.printerId
+            ? escHtml(order.printerName || getPrintSupplierLabel(order.printerId))
+            : 'Nog niet bepaald'}
+        </span>
+      </div>
+
+      ${order.earliestDeliveryDate ? `
+        <div class="overview-item overview-wide">
+          <span class="overview-label">
+            Planning bij aanvraag
+          </span>
+
+          <span class="overview-value">
+            Vroegst mogelijk: ${escHtml(formatDate(order.earliestDeliveryDate))}${order.deliveryPlanning?.orderDay
+              ? ` · drukwerk bestellen op ${escHtml(formatDate(order.deliveryPlanning.orderDay))}`
+              : ''}
+          </span>
+        </div>
+      ` : ''}
     </div>
   `;
 }
@@ -4694,7 +4757,7 @@ function openOrderModal(
     ).join('');
 
   const supplierOptions =
-    PRINT_SUPPLIER_OPTIONS.map(
+    getPrintSupplierOptions().map(
       ([value, label]) =>
         `
           <option
@@ -5833,6 +5896,7 @@ function getOrderShipDate(
     order.shipDate ||
     order.dispatchDate ||
     order.deliveryDate ||
+    order.desiredDeliveryDate ||
     ''
   );
 }
@@ -5968,7 +6032,7 @@ function getPrintSupplierLabel(
   value
 ) {
   const match =
-    PRINT_SUPPLIER_OPTIONS.find(
+    getPrintSupplierOptions().find(
       ([optionValue]) =>
         optionValue ===
         value

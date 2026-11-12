@@ -38,6 +38,8 @@ function renderOptionsPage() {
 
   const previewSrc = getPersonalisationImageSrc(activePers, product);
   const initialOptions = collectOptionsFromValues(product, activePers, quantity, designChoice, addons);
+  const minQuantity = getMinQuantityForPersonalisation(activePers);
+  const visibleQuantities = FIXED_QUANTITIES.filter(qty => qty >= minQuantity);
 
   el.innerHTML = `
     <h1 class="page-title">${escHtml(product.name)}</h1>
@@ -76,7 +78,7 @@ function renderOptionsPage() {
             </tr>
           </thead>
           <tbody>
-            ${FIXED_QUANTITIES.map(qty => {
+            ${visibleQuantities.map(qty => {
         const price = getPriceForQty(product, qty, activePers);
         const isActive = parseInt(quantity, 10) === qty;
 
@@ -96,9 +98,15 @@ function renderOptionsPage() {
                  id="qty-custom"
                  value="${!FIXED_QUANTITIES.includes(parseInt(quantity, 10)) && quantity ? escHtml(quantity) : ''}"
                  placeholder="stuks"
-                 min="1">
+                 min="${minQuantity}">
           <label for="qty-custom">stuks</label>
         </div>
+
+        ${minQuantity > 1 ? `
+          <p class="form-hint" style="margin-top:6px">
+            Minimaal ${minQuantity} stuks${activePers?.label ? ` voor ${escHtml(activePers.label)}` : ''}.
+          </p>
+        ` : ''}
 
         ${activePers?.templatePdf?.dataURL ? `
           <div class="template-downloads">
@@ -371,13 +379,7 @@ function bindOptionsPdfButton(el, product, persTypes) {
   document.getElementById('btn-options-pdf')?.addEventListener('click', () => {
     const options = collectOptions(el, product, persTypes);
 
-    if (!options.quantity) {
-      const error = document.getElementById('options-error');
-
-      if (error) {
-        error.style.display = 'block';
-      }
-
+    if (!validateQuantity(options)) {
       return;
     }
 
@@ -424,25 +426,42 @@ function bindNextButton(el, product, persTypes) {
   document.getElementById('btn-options-next')?.addEventListener('click', () => {
     const options = collectOptions(el, product, persTypes);
 
-    if (!options.quantity) {
-      const error = document.getElementById('options-error');
-
-      if (error) {
-        error.style.display = 'block';
-      }
-
+    if (!validateQuantity(options)) {
       return;
-    }
-
-    const error = document.getElementById('options-error');
-
-    if (error) {
-      error.style.display = 'none';
     }
 
     Session.setOptions(options);
     navigateTo(options.designChoice === 'laat-ontwerpen' ? 'wensen' : 'design');
   });
+}
+
+function getMinQuantityForPersonalisation(persType) {
+  return window.DeliveryPlanning?.getMinQuantity
+    ? DeliveryPlanning.getMinQuantity(persType)
+    : 1;
+}
+
+/**
+ * Controleert of er een aantal is gekozen dat aan het minimum voldoet.
+ * Toont anders een melding en geeft false terug.
+ */
+function validateQuantity(options) {
+  const error = document.getElementById('options-error');
+  const minQuantity = getMinQuantityForPersonalisation(options.persType);
+  let message = '';
+
+  if (!options.quantity) {
+    message = 'Kies een aantal om verder te gaan.';
+  } else if (options.quantity < minQuantity) {
+    message = `Het minimum is ${minQuantity} stuks${options.persType?.label ? ` voor ${options.persType.label}` : ''}.`;
+  }
+
+  if (error) {
+    error.textContent = message;
+    error.style.display = message ? 'block' : 'none';
+  }
+
+  return !message;
 }
 
 function collectOptions(el, product, persTypes) {

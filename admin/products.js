@@ -70,6 +70,8 @@ function renderProductGrid() {
           ${priceCount ? `, ${priceCount} staffels` : ''}
           ${zoneCount ? `, ${zoneCount} zones` : ''}
           ${previewViewCount ? `, ${previewViewCount} productpreview${previewViewCount === 1 ? '' : 's'}` : ''}
+          ${type.minQuantity ? `, min. ${type.minQuantity} st.` : ''}
+          ${Array.isArray(type.printerRules) && type.printerRules.length ? `, ${type.printerRules.length} drukkerregel${type.printerRules.length === 1 ? '' : 's'}` : ', geen drukker'}
           ${isActive ? '' : ' · inactief'}
         </span>
       `;
@@ -426,6 +428,37 @@ function getDefaultPersonalisationPriceSlabs(type = {}) {
   ];
 }
 
+function getPrinterOptionsHTML(selectedId = '') {
+  const printers = typeof DS.getPrinters === 'function' ? DS.getPrinters() : [];
+  const hasSelected = !selectedId || printers.some(printer => printer.id === selectedId);
+
+  return `
+    <option value="">Kies drukker</option>
+    ${printers.map(printer => `
+      <option value="${escHtml(printer.id)}" ${printer.id === selectedId ? 'selected' : ''}>
+        ${escHtml(printer.name || printer.id)}
+      </option>
+    `).join('')}
+    ${hasSelected ? '' : `<option value="${escHtml(selectedId)}" selected>${escHtml(selectedId)} (onbekend)</option>`}
+  `;
+}
+
+function printerRuleRow(rule = {}) {
+  return `
+    <div class="slab-row pers-printer-row">
+      <select class="pers-printer-id">
+        ${getPrinterOptionsHTML(rule.printerId || '')}
+      </select>
+      <span>vanaf</span>
+      <input type="number" class="pers-printer-from" value="${escHtml(rule.fromQty || '')}" placeholder="1" min="1" step="1">
+      <span>t/m</span>
+      <input type="number" class="pers-printer-to" value="${escHtml(rule.toQty ?? '')}" placeholder="leeg = onbeperkt" min="1" step="1">
+      <span>stuks</span>
+      <button class="icon-btn danger" type="button" onclick="this.closest('.pers-printer-row').remove()">×</button>
+    </div>
+  `;
+}
+
 function persTypeRow(type, index, uploadKey) {
   const key = uploadKey || createUploadKey();
   const spec = normalizeAdminPrintSpec(type);
@@ -672,6 +705,50 @@ function persTypeRow(type, index, uploadKey) {
         Gebruik dit voor gaten, rillijnen, nietzones en andere gebieden
         waar geen tekst, logo of afbeelding overheen mag vallen.
       </span>
+
+      <div class="section-title" style="margin-top: 10px">
+        Bestellen en drukwerk
+      </div>
+
+      <div class="form-row" style="margin-bottom: 8px">
+        <div class="form-group">
+          <label>Minimaal aantal stuks</label>
+          <input
+            type="number"
+            class="pers-min-qty"
+            min="1"
+            step="1"
+            value="${escHtml(type.minQuantity || '')}"
+            placeholder="Bijvoorbeeld 50"
+          >
+          <span class="form-hint">
+            Lager kan de klant niet bestellen. Leeg = geen minimum.
+          </span>
+        </div>
+      </div>
+
+      <label style="display:block;font-size:12px;font-weight:600;margin-bottom:6px">
+        Drukker per aantal
+      </label>
+
+      <span class="form-hint" style="display:block;margin-bottom:6px">
+        Per aantal geldt precies één drukker. Bijvoorbeeld: 1 t/m 150 bij drukker A, vanaf 151 bij drukker B.
+        Zonder passende regel ziet de klant "leverdatum in overleg".
+      </span>
+
+      <div class="pers-printer-list">
+        ${(Array.isArray(type.printerRules) ? type.printerRules : [])
+      .map(rule => printerRuleRow(rule))
+      .join('')}
+      </div>
+
+      <button
+        class="btn btn-secondary btn-sm btn-add-pers-printer"
+        type="button"
+        style="margin: 8px 0 12px"
+      >
+        + Drukkerregel toevoegen
+      </button>
 
       <div class="section-title" style="margin-top: 10px">
         Staffelprijzen voor deze personalisatie
@@ -2474,6 +2551,23 @@ function bindPersRowUploads(row, uploadState) {
   const templateRemove = row.querySelector('.pers-template-remove');
   const templateOutput = row.querySelector('.pers-template-output');
 
+  row.querySelector('.btn-add-pers-printer')?.addEventListener('click', () => {
+    const list = row.querySelector('.pers-printer-list');
+
+    if (!list) {
+      return;
+    }
+
+    const lastTo = [...list.querySelectorAll('.pers-printer-to')]
+      .map(input => parseInt(input.value, 10))
+      .filter(Number.isFinite)
+      .pop();
+
+    list.insertAdjacentHTML('beforeend', printerRuleRow({
+      fromQty: lastTo ? lastTo + 1 : '',
+    }));
+  });
+
   row.querySelector('.btn-add-pers-slab')?.addEventListener('click', () => {
     const list = row.querySelector('.pers-slab-list');
 
@@ -2753,6 +2847,20 @@ function saveProductFromModal(uploadState, product, isEdit) {
     if (!activePersonalisationTypes.length) {
       showProductModalError(
         'Zet minimaal één personalisatietype op actief.'
+      );
+
+      return;
+    }
+
+    const printerRuleErrors = personalisatieTypes.flatMap(type =>
+      DeliveryPlanning.validatePrinterRules(type.printerRules).map(
+        message => `${type.label}: ${message}`
+      )
+    );
+
+    if (printerRuleErrors.length) {
+      showProductModalError(
+        printerRuleErrors[0]
       );
 
       return;
@@ -3046,6 +3154,16 @@ function collectPersonalisationTypes(uploadState) {
 
     const blockedZones = collectBlockedZonesFromRow(row);
     const preview = collectPreviewConfigFromRow(row, fileState, spec);
+    const minQuantity = parseInt(row.querySelector('.pers-min-qty')?.value, 10);
+    const printerRules = [...row.querySelectorAll('.pers-printer-row')].map(ruleRow => {
+      const toValue = ruleRow.querySelector('.pers-printer-to')?.value;
+
+      return {
+        printerId: ruleRow.querySelector('.pers-printer-id')?.value || '',
+        fromQty: parseInt(ruleRow.querySelector('.pers-printer-from')?.value, 10) || 1,
+        toQty: toValue === '' || toValue === undefined ? null : parseInt(toValue, 10),
+      };
+    }).filter(rule => rule.printerId);
 
     return {
       ...(fileState.sourceType || {}),
@@ -3054,6 +3172,8 @@ function collectPersonalisationTypes(uploadState) {
       active: row.querySelector('.pers-active')?.checked !== false,
       priceSlabs,
       blockedZones,
+      minQuantity: Number.isFinite(minQuantity) && minQuantity > 1 ? minQuantity : null,
+      printerRules,
 
       previewImageFile: fileState.previewImageFile || null,
       previewImage: fileState.previewImageFile?.dataURL || '',

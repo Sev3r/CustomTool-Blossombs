@@ -33,6 +33,7 @@ function renderReviewPage() {
   const hasFileCheck = !isLatOntwerpen && options.addons?.includes('bestandscontrole');
   const persType = getSelectedPersonalisationType(product, options);
   const previewConfig = getReviewProductPreviewConfig(product, persType);
+  const delivery = getReviewDelivery(product, options);
   const designPreviewHTML = renderReviewProductPreviewHTML(
     previewConfig,
     design
@@ -145,6 +146,8 @@ function renderReviewPage() {
             </div>
           </div>
         ` : ''}
+
+        ${renderDeliverySection(delivery, savedKlant)}
 
         ${isLatOntwerpen && wensen ? `
           <div class="review-section" style="margin-top:16px">
@@ -294,6 +297,7 @@ function renderReviewPage() {
     'r-kvk',
     'r-btw',
     'r-factuuradres',
+    'r-leverdatum',
   ].forEach(id => {
     document
       .getElementById(id)
@@ -379,6 +383,10 @@ function renderReviewPage() {
       }
 
       Session.setKlant(klant);
+
+      if (!validateDeliveryDate(product, options, klant)) {
+        return;
+      }
 
       const submitError =
         document.getElementById('review-submit-error');
@@ -1018,6 +1026,10 @@ function collectKlant() {
     btw:
       document.getElementById('r-btw')?.value.trim() ||
       '',
+
+    gewensteLeverdatum:
+      document.getElementById('r-leverdatum')?.value ||
+      '',
   };
 }
 
@@ -1150,6 +1162,12 @@ async function placeOrder(
   const orderNumber =
     pendingOrderIdentity.orderNumber;
 
+  // Leverdatum opnieuw berekenen op het moment van versturen.
+  const delivery = getReviewDelivery(
+    product,
+    options
+  );
+
   const order = {
     ...buildOrder(
       product,
@@ -1159,6 +1177,10 @@ async function placeOrder(
       klant,
       orderNumber,
       null
+    ),
+    ...getOrderDeliveryFields(
+      delivery,
+      klant
     ),
     id: pendingOrderIdentity.id,
   };
@@ -1215,6 +1237,231 @@ async function placeOrder(
     product,
     pricing
   );
+}
+
+// ─── LEVERDATUM ─────────────────────────────────────────────────────────────
+
+/**
+ * Vroegst mogelijke leverdatum voor de huidige keuze.
+ * Zie shared/js/deliveryPlanning.js voor de rekenregels.
+ */
+function getReviewDelivery(
+  product,
+  options
+) {
+  if (!window.DeliveryPlanning) {
+    return {
+      ok: false,
+      reason: 'unavailable',
+    };
+  }
+
+  const persType =
+    getSelectedPersonalisationType(
+      product,
+      options
+    );
+
+  return DeliveryPlanning.calculateEarliestDelivery({
+    today: new Date(),
+    designChoice: options.designChoice,
+    persType,
+    quantity: options.quantity,
+    printers:
+      typeof DS !== 'undefined' &&
+      typeof DS.getPrinters === 'function'
+        ? DS.getPrinters()
+        : [],
+  });
+}
+
+function renderDeliverySection(
+  delivery,
+  savedKlant = {}
+) {
+  let content = '';
+
+  if (delivery.ok) {
+    const savedDate =
+      savedKlant.gewensteLeverdatum &&
+      savedKlant.gewensteLeverdatum >= delivery.earliestKey
+        ? savedKlant.gewensteLeverdatum
+        : '';
+
+    content = `
+      <div class="review-field">
+        <label for="r-leverdatum">Gewenste leverdatum *</label>
+        <input
+          type="date"
+          id="r-leverdatum"
+          min="${escHtml(delivery.earliestKey)}"
+          value="${escHtml(savedDate)}"
+        >
+      </div>
+
+      <span style="color:var(--text-3)">
+        Vroegst mogelijk: <strong>${escHtml(DeliveryPlanning.formatLong(delivery.earliestDate))}</strong>.
+        Hierin zitten ${delivery.breakdown.designDays ? 'het ontwerp, ' : ''}het drukwerk en ${delivery.breakdown.productionAndShippingDays} werkdagen voor productie en verzending.
+      </span>
+
+      <div
+        id="review-date-error"
+        role="alert"
+        style="display:none;color:var(--danger)"
+      ></div>
+    `;
+  } else if (delivery.reason === 'below-minimum') {
+    content = `
+      <span style="color:var(--danger)">
+        Het gekozen aantal is lager dan het minimum van ${escHtml(delivery.minQuantity)} stuks.
+        Ga terug naar de opties om het aantal aan te passen.
+      </span>
+    `;
+  } else {
+    content = `
+      <span>
+        Voor deze bestelling stemmen we de leverdatum na uw aanvraag met u af.
+      </span>
+    `;
+  }
+
+  return `
+    <div class="review-section" style="margin-top:16px">
+      <div class="review-section-title">Levering</div>
+      <div class="review-section-body" style="font-size:13px;color:var(--text-2);gap:8px">
+        ${content}
+      </div>
+    </div>
+  `;
+}
+
+/**
+ * Controleert de gewenste leverdatum vóór het versturen.
+ * Geeft false terug (en toont een melding) als die niet klopt.
+ */
+function validateDeliveryDate(
+  product,
+  options,
+  klant
+) {
+  const delivery =
+    getReviewDelivery(
+      product,
+      options
+    );
+
+  const errorElement =
+    document.getElementById(
+      'review-date-error'
+    );
+
+  const input =
+    document.getElementById(
+      'r-leverdatum'
+    );
+
+  const showError = message => {
+    if (errorElement) {
+      errorElement.textContent = message;
+      errorElement.style.display = 'block';
+    }
+
+    input?.classList.add(
+      'required-error'
+    );
+
+    (input || errorElement)?.scrollIntoView({
+      behavior: 'smooth',
+      block: 'center',
+    });
+  };
+
+  if (
+    !delivery.ok &&
+    delivery.reason === 'below-minimum'
+  ) {
+    const submitError =
+      document.getElementById(
+        'review-submit-error'
+      );
+
+    if (submitError) {
+      submitError.textContent =
+        `Het minimum is ${delivery.minQuantity} stuks. Pas het aantal aan in de opties.`;
+      submitError.style.display = 'block';
+    }
+
+    return false;
+  }
+
+  if (!delivery.ok) {
+    // Leverdatum in overleg: niets te controleren.
+    return true;
+  }
+
+  const chosen =
+    klant.gewensteLeverdatum ||
+    '';
+
+  if (!chosen) {
+    showError(
+      'Kies een gewenste leverdatum.'
+    );
+    return false;
+  }
+
+  if (chosen < delivery.earliestKey) {
+    showError(
+      `Deze datum is te vroeg. De vroegst mogelijke leverdatum is ${DeliveryPlanning.formatLong(delivery.earliestDate)}.`
+    );
+    return false;
+  }
+
+  if (errorElement) {
+    errorElement.style.display = 'none';
+  }
+
+  input?.classList.remove(
+    'required-error'
+  );
+
+  return true;
+}
+
+/**
+ * Leverdatum- en drukkergegevens die met de order worden opgeslagen.
+ */
+function getOrderDeliveryFields(
+  delivery,
+  klant
+) {
+  if (!delivery.ok) {
+    return {
+      desiredDeliveryDate: '',
+      earliestDeliveryDate: '',
+      deliveryDateInOverleg: delivery.reason !== 'below-minimum',
+      printerId: '',
+      printerName: '',
+      deliveryPlanning: {
+        reason: delivery.reason || null,
+      },
+    };
+  }
+
+  return {
+    desiredDeliveryDate:
+      klant.gewensteLeverdatum ||
+      '',
+    earliestDeliveryDate:
+      delivery.earliestKey,
+    deliveryDateInOverleg: false,
+    printerId:
+      delivery.printerId,
+    printerName:
+      delivery.printerName,
+    deliveryPlanning:
+      delivery.breakdown,
+  };
 }
 
 function buildOrder(

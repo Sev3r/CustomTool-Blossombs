@@ -20,7 +20,10 @@
  * - Vóór het opslaan van een ORDER worden alle ingebakken bestanden ("data:...")
  *   naar Supabase Storage geüpload en vervangen door een link (FileStorage).
  *   Producten blijven voorlopig ongewijzigd.
- * - migrateOrderFiles() verplaatst de bestanden van bestaande orders.
+ *
+ * Drukkers:
+ * - Tabel 'printers' (zelfde opbouw als 'products'). Ontbreekt de tabel nog,
+ *   dan werkt de rest gewoon door en geeft isPrintersAvailable() false.
  *
  * API:
  * - saveOrder/saveProduct/delete* (sync): passen het scherm direct aan en
@@ -68,7 +71,14 @@ const KINDS = {
     table: 'products',
     prefix: 'PRD',
   },
+  printers: {
+    table: 'printers',
+    prefix: 'DRK',
+    optional: true,
+  },
 };
+
+const ALL_KINDS = ['products', 'printers', 'orders'];
 
 const state = {
   initialized: false,
@@ -77,9 +87,12 @@ const state = {
   online: null,
   orders: [],
   products: [],
+  printers: [],
+  printersAvailable: false,
   lastConfirmed: {
     orders: {},
     products: {},
+    printers: {},
   },
   writeChains: {},
   pendingWrites: {},
@@ -87,6 +100,7 @@ const state = {
   unloadable: {
     orders: new Set(),
     products: new Set(),
+    printers: new Set(),
   },
   autoRefreshTimer: null,
   lastRefreshAt: 0,
@@ -121,7 +135,7 @@ async function initializeDataService() {
   }
 
   try {
-    await loadKinds(['products', 'orders']);
+    await loadKinds(ALL_KINDS);
     state.initialized = true;
     return true;
   } catch (error) {
@@ -288,6 +302,7 @@ function rowToOrder(row) {
   };
 }
 
+// Producten en drukkers hebben dezelfde rij-opbouw: id, data, created_at, updated_at.
 function toRow(kind, record, updatedAt) {
   return kind === 'orders'
     ? orderToRow(record, updatedAt)
@@ -473,6 +488,26 @@ async function fetchAll(kind) {
 }
 
 /**
+ * Haalt een tabel op. Voor optionele tabellen (drukkers) wordt een fout
+ * opgevangen: dan null, en de rest van de tool werkt door.
+ */
+async function fetchKindTolerant(kind) {
+  if (!KINDS[kind].optional) {
+    return fetchAll(kind);
+  }
+
+  try {
+    const items = await fetchAll(kind);
+    state[`${kind}Available`] = true;
+    return items;
+  } catch (error) {
+    console.warn(`Tabel '${KINDS[kind].table}' kon niet worden geladen. Is de SQL voor deze tabel al uitgevoerd?`, error);
+    state[`${kind}Available`] = false;
+    return null;
+  }
+}
+
+/**
  * Volledig (her)laden. Records met een lopende opslag blijven ongemoeid.
  */
 async function loadKinds(kinds) {
@@ -480,10 +515,15 @@ async function loadKinds(kinds) {
     throw new Error('Geen verbinding met de database.');
   }
 
-  const results = await Promise.all(kinds.map(kind => fetchAll(kind)));
+  const results = await Promise.all(kinds.map(kind => fetchKindTolerant(kind)));
 
   kinds.forEach((kind, index) => {
     const remoteItems = results[index];
+
+    if (remoteItems === null) {
+      // Optionele tabel (drukkers) is niet beschikbaar: niets aan doen.
+      return;
+    }
 
     const merged = remoteItems.map(item =>
       isPending(kind, item.id)
@@ -507,11 +547,11 @@ async function loadKinds(kinds) {
 
 async function reload() {
   try {
-    await loadKinds(['products', 'orders']);
+    await loadKinds(ALL_KINDS);
 
     emit('ds:data-changed', {
       source: 'reload',
-      kinds: ['products', 'orders'],
+      kinds: ALL_KINDS,
     });
 
     return true;
@@ -585,9 +625,21 @@ async function refresh() {
     try {
       const changedKinds = [];
 
-      for (const kind of ['products', 'orders']) {
-        if (await syncKindFromRemote(kind)) {
-          changedKinds.push(kind);
+      for (const kind of ALL_KINDS) {
+        if (KINDS[kind].optional && !state[`${kind}Available`]) {
+          continue;
+        }
+
+        try {
+          if (await syncKindFromRemote(kind)) {
+            changedKinds.push(kind);
+          }
+        } catch (error) {
+          if (!KINDS[kind].optional) {
+            throw error;
+          }
+
+          console.warn(`Verversen van '${kind}' mislukt.`, error);
         }
       }
 
@@ -1028,80 +1080,6 @@ async function deleteRecordAsync(kind, id, label) {
   clearConfirmed(kind, id);
 }
 
-// ─── MIGRATIE: BESTANDEN NAAR STORAGE ──────────────────────────────────────
-
-/**
- * Verplaatst bestanden van bestaande orders naar Storage, één order tegelijk.
- * Orders zonder ingebakken bestanden worden overgeslagen.
- * onProgress({ done, total, migrated, failed })
- * Geeft { total, migrated, skipped, failed: [ids] } terug.
- */
-async function migrateOrderFiles(onProgress = () => {}) {
-  if (!state.supabase) {
-    throw new Error('Geen verbinding met de database.');
-  }
-
-  const versions = await fetchVersions('orders');
-  const ids = versions.map(row => row.id);
-  const result = {
-    total: ids.length,
-    migrated: 0,
-    skipped: 0,
-    failed: [],
-  };
-
-  for (let index = 0; index < ids.length; index += 1) {
-    const id = ids[index];
-    const key = recordKey('orders', id);
-
-    try {
-      const [order] = await fetchRowsQuery('orders', [id]).then(rows =>
-        rows.map(row => fromRow('orders', row))
-      );
-
-      if (!order || !FileStorage.containsInlineFiles(order)) {
-        result.skipped += 1;
-      } else {
-        await queueWrite('orders', id, async () => {
-          const expected = resolveExpectedVersion(key, order._version || null);
-          // Bewust zonder prepareForSave: updatedAt van de order blijft gelijk.
-          const persisted = await persistRecord('orders', order, expected);
-
-          recordOwnVersion(key, expected, persisted.version);
-
-          const confirmed = {
-            ...persisted.record,
-            _version: persisted.version,
-          };
-
-          putLocal('orders', confirmed);
-          setConfirmed('orders', confirmed);
-          state.unloadable.orders.delete(id);
-        });
-
-        result.migrated += 1;
-      }
-    } catch (error) {
-      console.warn(`Bestanden van order ${id} verplaatsen mislukt.`, error);
-      result.failed.push(id);
-    }
-
-    onProgress({
-      done: index + 1,
-      total: ids.length,
-      migrated: result.migrated,
-      failed: result.failed.length,
-    });
-  }
-
-  emit('ds:data-changed', {
-    source: 'reload',
-    kinds: ['orders'],
-  });
-
-  return result;
-}
-
 // ─── ORDERS ─────────────────────────────────────────────────────────────────
 
 function getOrders() {
@@ -1424,6 +1402,53 @@ function seedDemoData() {
 }
 
 
+// ─── DRUKKERS ───────────────────────────────────────────────────────────────
+
+function getPrinters() {
+  return state.printers
+    .slice()
+    .sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'nl'));
+}
+
+function getPrinterById(id) {
+  return getLocal('printers', id);
+}
+
+function isPrintersAvailable() {
+  return state.printersAvailable === true;
+}
+
+function getProductsUsingPrinter(id) {
+  return state.products.filter(product =>
+    (product.personalisatieTypes || []).some(type =>
+      (type.printerRules || []).some(rule => rule.printerId === id)
+    )
+  );
+}
+
+function savePrinter(printer) {
+  return saveRecord('printers', printer, 'Drukker opslaan');
+}
+
+function deletePrinter(id) {
+  const products = getProductsUsingPrinter(id);
+
+  if (products.length) {
+    return {
+      error: `Deze drukker wordt nog gebruikt bij: ${products.map(product => product.name).join(', ')}. Pas daar eerst de drukkerregels aan.`,
+    };
+  }
+
+  deleteRecord('printers', id, 'Drukker verwijderen');
+
+  return { success: true };
+}
+
+async function refreshPrinters() {
+  await loadKinds(['printers']);
+  return state.printers;
+}
+
 // ─── EXPORT ─────────────────────────────────────────────────────────────────
 
 window.DS = {
@@ -1455,7 +1480,12 @@ window.DS = {
   getProductById,
   refreshProducts,
 
-  migrateOrderFiles,
+  getPrinters,
+  getPrinterById,
+  isPrintersAvailable,
+  savePrinter,
+  deletePrinter,
+  refreshPrinters,
 
   calcCanvasDimensions,
   seedDemoData,
