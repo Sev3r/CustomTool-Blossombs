@@ -959,7 +959,7 @@ function renderWorkflowOrderCard(
   return `
     <article
       class="workflow-card ${isDragBlocked ? 'workflow-card-locked' : ''}"
-      data-order-id="${orderId}"
+      data-order-id="${escHtml(orderId)}"
       draggable="${isDragBlocked ? 'false' : 'true'}"
       tabindex="0"
       role="button"
@@ -4266,7 +4266,7 @@ function viewOrderFiles(
           style="margin-top:10px;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;display:inline-block"
         >
           <img
-            src="${order.designDataURL}"
+            src="${escHtml(order.designDataURL)}"
             alt="Ontwerp preview"
             style="max-width:100%;max-height:320px;display:block"
           >
@@ -4666,7 +4666,7 @@ function openOrderModal(
       product =>
         `
           <option
-            value="${product.id}"
+            value="${escHtml(product.id)}"
             ${order.productId === product.id ? 'selected' : ''}
           >
             ${escHtml(product.name)}
@@ -4906,7 +4906,7 @@ function openOrderModal(
         <input
           type="number"
           id="of-qty"
-          value="${order.quantity || ''}"
+          value="${escHtml(order.quantity)}"
           min="1"
           placeholder="10"
         >
@@ -4930,7 +4930,7 @@ function openOrderModal(
         <input
           type="date"
           id="of-shipping-date"
-          value="${workflow.salesHandoff.expectedDeliveryDate || getOrderShipDate(order) || ''}"
+          value="${escHtml(workflow.salesHandoff.expectedDeliveryDate || getOrderShipDate(order) || '')}"
         >
       </div>
     </div>
@@ -4942,7 +4942,7 @@ function openOrderModal(
         <input
           type="number"
           id="of-quote"
-          value="${order.quoteAmount || ''}"
+          value="${escHtml(order.quoteAmount)}"
           step="0.01"
           placeholder="0.00"
         >
@@ -6200,53 +6200,6 @@ function formatDateInput(
       );
 }
 
-function formatDate(
-  iso
-) {
-  if (!iso) {
-    return '—';
-  }
-
-  const date =
-    new Date(iso);
-
-  if (
-    Number.isNaN(
-      date.getTime()
-    )
-  ) {
-    return '—';
-  }
-
-  return date.toLocaleDateString(
-    'nl-NL',
-    {
-      day:
-        '2-digit',
-
-      month:
-        '2-digit',
-
-      year:
-        'numeric',
-    }
-  );
-}
-
-function formatEuro(
-  value
-) {
-  return (
-    value === null ||
-    value === undefined ||
-    Number.isNaN(
-      Number(value)
-    )
-  )
-    ? '—'
-    : `€ ${Number(value).toFixed(2).replace('.', ',')}`;
-}
-
 function getFileTypeFromName(
   fileName
 ) {
@@ -6697,27 +6650,6 @@ function iconClipboard() {
       />
     </svg>
   `;
-}
-
-function escHtml(
-  value
-) {
-  return String(
-    value ||
-    ''
-  )
-    .replace(
-      /&/g,
-      '&amp;'
-    )
-    .replace(
-      /</g,
-      '&lt;'
-    )
-    .replace(
-      />/g,
-      '&gt;'
-    );
 }
 
 window.viewOrderFiles =

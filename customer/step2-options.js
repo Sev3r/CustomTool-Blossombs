@@ -591,18 +591,3 @@ function downloadDataFile(dataURL, fileName) {
   link.click();
   link.remove();
 }
-
-function formatEuro(value) {
-  if (value === null || value === undefined || Number.isNaN(Number(value))) {
-    return '—';
-  }
-
-  return `€ ${Number(value).toFixed(2).replace('.', ',')}`;
-}
-
-function escHtml(value) {
-  return String(value || '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
-}

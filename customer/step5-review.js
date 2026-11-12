@@ -11,6 +11,11 @@ const REVIEW_PRODUCT_PREVIEW_MAX_WIDTH = 720;
 let reviewProductPreviewResizeObserver = null;
 let reviewProductPreviewRenderToken = 0;
 
+// Identiteit van de aanvraag die nu verstuurd wordt. Bij een nieuwe poging
+// na een fout wordt hetzelfde id en nummer hergebruikt, zodat een aanvraag
+// die tóch al was aangekomen niet dubbel in de database komt.
+let pendingOrderIdentity = null;
+
 function renderReviewPage() {
   const el = document.getElementById('page-review');
   const product = Session.getProduct();
@@ -226,6 +231,12 @@ function renderReviewPage() {
       </div>
     </div>
 
+    <div
+      id="review-submit-error"
+      role="alert"
+      style="display:none;margin-top:16px;color:var(--danger);font-size:13px"
+    ></div>
+
     <div class="flow-nav">
       <button
         class="btn btn-outline"
@@ -320,7 +331,13 @@ function renderReviewPage() {
 
   document
     .getElementById('btn-bestellen')
-    ?.addEventListener('click', () => {
+    ?.addEventListener('click', async event => {
+      const submitButton = event.currentTarget;
+
+      if (submitButton.disabled) {
+        return;
+      }
+
       const klant = collectKlant();
 
       if (
@@ -363,13 +380,39 @@ function renderReviewPage() {
 
       Session.setKlant(klant);
 
-      placeOrder(
-        product,
-        options,
-        design,
-        wensen,
-        klant
-      );
+      const submitError =
+        document.getElementById('review-submit-error');
+
+      if (submitError) {
+        submitError.style.display = 'none';
+        submitError.textContent = '';
+      }
+
+      const originalLabel = submitButton.innerHTML;
+
+      submitButton.disabled = true;
+      submitButton.textContent = 'Bezig met versturen...';
+
+      try {
+        await placeOrder(
+          product,
+          options,
+          design,
+          wensen,
+          klant
+        );
+      } catch (error) {
+        console.error('Aanvraag versturen mislukt', error);
+
+        submitButton.disabled = false;
+        submitButton.innerHTML = originalLabel;
+
+        if (submitError) {
+          submitError.textContent =
+            'Uw aanvraag kon niet worden verstuurd. Controleer uw internetverbinding en probeer het opnieuw. Uw gegevens blijven bewaard.';
+          submitError.style.display = 'block';
+        }
+      }
     });
 }
 
@@ -1097,11 +1140,18 @@ async function placeOrder(
   wensen,
   klant
 ) {
-  const orderNumber =
-    `BLS-${Date.now()}`;
+  if (!pendingOrderIdentity) {
+    pendingOrderIdentity = {
+      id: `ORD-${Date.now().toString(36).toUpperCase()}${Math.random().toString(36).slice(2, 6).toUpperCase()}`,
+      orderNumber: `BLS-${Date.now()}`,
+    };
+  }
 
-  const order =
-    buildOrder(
+  const orderNumber =
+    pendingOrderIdentity.orderNumber;
+
+  const order = {
+    ...buildOrder(
       product,
       options,
       design,
@@ -1109,7 +1159,9 @@ async function placeOrder(
       klant,
       orderNumber,
       null
-    );
+    ),
+    id: pendingOrderIdentity.id,
+  };
 
   const pricing =
     getCurrentPricing(
@@ -1118,27 +1170,45 @@ async function placeOrder(
     );
 
   if (
-    typeof DS !==
-    'undefined'
+    typeof DS ===
+    'undefined' ||
+    typeof DS.saveOrderAsync !==
+    'function'
   ) {
-    if (
-      typeof DS.init ===
-      'function'
-    ) {
-      await DS.init();
-    }
-
-    if (
-      typeof DS.saveOrderAsync ===
-      'function'
-    ) {
-      await DS.saveOrderAsync(
-        order
-      );
-    } else {
-      DS.saveOrder(order);
-    }
+    throw new Error(
+      'Datalaag niet beschikbaar; aanvraag niet verstuurd.'
+    );
   }
+
+  if (
+    typeof DS.init ===
+    'function'
+  ) {
+    await DS.init();
+  }
+
+  // Zonder database-verbinding zou de aanvraag alleen in deze browser
+  // belanden. Dan liever een duidelijke fout dan een stille 'gelukt'.
+  if (
+    typeof DS.isRemoteAvailable ===
+    'function' &&
+    !DS.isRemoteAvailable()
+  ) {
+    throw new Error(
+      'Geen verbinding met de database; aanvraag niet verstuurd.'
+    );
+  }
+
+  // Gooit een fout als de database niet bereikbaar is.
+  // returnVersion: false — de klant hoeft na het versturen niets terug te lezen.
+  await DS.saveOrderAsync(
+    order,
+    {
+      returnVersion: false,
+    }
+  );
+
+  pendingOrderIdentity = null;
 
   renderConfirmPage(
     order,
@@ -2081,38 +2151,6 @@ function startNieuweOrder() {
   }
 
   navigateTo('select');
-}
-
-function formatEuro(value) {
-  if (
-    value === null ||
-    value === undefined ||
-    Number.isNaN(
-      Number(value)
-    )
-  ) {
-    return '—';
-  }
-
-  return `€ ${Number(value)
-    .toFixed(2)
-    .replace('.', ',')}`;
-}
-
-function escHtml(value) {
-  return String(value || '')
-    .replace(
-      /&/g,
-      '&amp;'
-    )
-    .replace(
-      /</g,
-      '&lt;'
-    )
-    .replace(
-      />/g,
-      '&gt;'
-    );
 }
 
 window.startNieuweOrder =

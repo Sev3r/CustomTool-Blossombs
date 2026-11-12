@@ -3,6 +3,7 @@
  * Beheert lichte sessiemetadata in sessionStorage.
  * Zware ontwerpdata wordt in IndexedDB bewaard zodat grote PNG/PDF/Fabric-data
  * de sessionStorage-limiet niet kan blokkeren.
+ * Hetzelfde geldt voor het referentiebeeld uit de wensenstap (refDataURL).
  */
 
 const SESSION_KEY = 'cot_session';
@@ -10,11 +11,16 @@ const DESIGN_DB_NAME = 'cot_design_storage';
 const DESIGN_DB_VERSION = 1;
 const DESIGN_STORE_NAME = 'designs';
 const DESIGN_STORAGE_KEY = 'current';
+const WENSEN_REF_STORAGE_KEY = 'wensen-ref';
 
 let designCache = null;
 let designHydrated = false;
 let designHydrationPromise = null;
 let designStorageQueue = Promise.resolve();
+
+let wensenRefCache = null;
+let wensenRefHydrated = false;
+let wensenRefHydrationPromise = null;
 
 function safeParseSession() {
   try {
@@ -150,7 +156,7 @@ function openDesignDatabase() {
   });
 }
 
-async function readStoredDesign() {
+async function readStoredDesign(storageKey = DESIGN_STORAGE_KEY) {
   const database = await openDesignDatabase();
 
   return new Promise((resolve, reject) => {
@@ -161,7 +167,7 @@ async function readStoredDesign() {
 
     const request = transaction
       .objectStore(DESIGN_STORE_NAME)
-      .get(DESIGN_STORAGE_KEY);
+      .get(storageKey);
 
     request.onsuccess = () => {
       resolve(request.result?.design || null);
@@ -198,7 +204,7 @@ async function readStoredDesign() {
   });
 }
 
-async function writeStoredDesign(design) {
+async function writeStoredDesign(design, storageKey = DESIGN_STORAGE_KEY) {
   const database = await openDesignDatabase();
 
   return new Promise((resolve, reject) => {
@@ -210,7 +216,7 @@ async function writeStoredDesign(design) {
     transaction
       .objectStore(DESIGN_STORE_NAME)
       .put({
-        id: DESIGN_STORAGE_KEY,
+        id: storageKey,
         design,
         updatedAt: Date.now(),
       });
@@ -240,7 +246,7 @@ async function writeStoredDesign(design) {
   });
 }
 
-async function deleteStoredDesign() {
+async function deleteStoredDesign(storageKey = DESIGN_STORAGE_KEY) {
   const database = await openDesignDatabase();
 
   return new Promise((resolve, reject) => {
@@ -251,7 +257,7 @@ async function deleteStoredDesign() {
 
     transaction
       .objectStore(DESIGN_STORE_NAME)
-      .delete(DESIGN_STORAGE_KEY);
+      .delete(storageKey);
 
     transaction.oncomplete = () => {
       database.close();
@@ -287,6 +293,39 @@ function queueDesignStorageOperation(operation) {
   designStorageQueue = queuedOperation.catch(() => {});
 
   return queuedOperation;
+}
+
+function getLightWensen(wensen) {
+  if (!wensen) {
+    return null;
+  }
+
+  const {
+    refDataURL,
+    ...lightWensen
+  } = wensen;
+
+  return {
+    ...lightWensen,
+    hasStoredRef: Boolean(refDataURL),
+  };
+}
+
+function resetWensenRefCache() {
+  wensenRefCache = null;
+  wensenRefHydrated = true;
+  wensenRefHydrationPromise = null;
+}
+
+function deleteWensenRefInBackground() {
+  void queueDesignStorageOperation(() =>
+    deleteStoredDesign(WENSEN_REF_STORAGE_KEY)
+  ).catch(error => {
+    console.warn(
+      'Referentiebeeld opruimen mislukt',
+      error
+    );
+  });
 }
 
 function resetDesignCache() {
@@ -340,10 +379,15 @@ const Session = {
     sessionStorage.removeItem(SESSION_KEY);
 
     resetDesignCache();
+    resetWensenRefCache();
 
     try {
-      await queueDesignStorageOperation(
-        deleteStoredDesign
+      await queueDesignStorageOperation(() =>
+        deleteStoredDesign()
+      );
+
+      await queueDesignStorageOperation(() =>
+        deleteStoredDesign(WENSEN_REF_STORAGE_KEY)
       );
     } catch (error) {
       console.warn(
@@ -506,8 +550,8 @@ const Session = {
     resetDesignCache();
 
     try {
-      await queueDesignStorageOperation(
-        deleteStoredDesign
+      await queueDesignStorageOperation(() =>
+        deleteStoredDesign()
       );
     } catch (error) {
       console.warn(
@@ -522,7 +566,92 @@ const Session = {
   },
 
   getWensen() {
-    return this.get().wensen || null;
+    const lightWensen = this.get().wensen || null;
+
+    if (!lightWensen) {
+      return null;
+    }
+
+    return {
+      ...lightWensen,
+      refDataURL:
+        lightWensen.refDataURL ||
+        wensenRefCache?.refDataURL ||
+        null,
+    };
+  },
+
+  /**
+   * Laadt het referentiebeeld uit IndexedDB in het geheugen.
+   * Migreert ook oude sessies waarin het beeld nog in sessionStorage stond.
+   */
+  async hydrateWensen() {
+    if (wensenRefHydrated) {
+      return this.getWensen();
+    }
+
+    if (wensenRefHydrationPromise) {
+      return wensenRefHydrationPromise;
+    }
+
+    wensenRefHydrationPromise = (async () => {
+      const session = this.get();
+      const sessionWensen = session.wensen || null;
+
+      if (sessionWensen?.refDataURL) {
+        wensenRefCache = {
+          refDataURL: sessionWensen.refDataURL,
+        };
+
+        wensenRefHydrated = true;
+
+        this.write({
+          ...session,
+          wensen: getLightWensen(sessionWensen),
+        });
+
+        try {
+          await queueDesignStorageOperation(() =>
+            writeStoredDesign(wensenRefCache, WENSEN_REF_STORAGE_KEY)
+          );
+        } catch (error) {
+          console.warn(
+            'Referentiebeeld kon niet naar IndexedDB worden gemigreerd',
+            error
+          );
+        }
+
+        return this.getWensen();
+      }
+
+      if (!sessionWensen?.hasStoredRef) {
+        wensenRefCache = null;
+        wensenRefHydrated = true;
+
+        return this.getWensen();
+      }
+
+      try {
+        await designStorageQueue;
+
+        wensenRefCache = await readStoredDesign(WENSEN_REF_STORAGE_KEY);
+      } catch (error) {
+        console.warn(
+          'Referentiebeeld kon niet worden geladen',
+          error
+        );
+
+        wensenRefCache = null;
+      }
+
+      wensenRefHydrated = true;
+
+      return this.getWensen();
+    })().finally(() => {
+      wensenRefHydrationPromise = null;
+    });
+
+    return wensenRefHydrationPromise;
   },
 
   getKlant() {
@@ -557,9 +686,11 @@ const Session = {
 
     if (productChanged) {
       resetDesignCache();
+      resetWensenRefCache();
+      deleteWensenRefInBackground();
 
-      void queueDesignStorageOperation(
-        deleteStoredDesign
+      void queueDesignStorageOperation(() =>
+        deleteStoredDesign()
       ).catch(error => {
         console.warn(
           'Ontwerp van vorig product opruimen mislukt',
@@ -606,11 +737,21 @@ const Session = {
           : null,
     });
 
+    const wensenDropped = Boolean(
+      current.wensen &&
+        safeOptions?.designChoice !== 'laat-ontwerpen'
+    );
+
+    if (wensenDropped) {
+      resetWensenRefCache();
+      deleteWensenRefInBackground();
+    }
+
     if (designInvalidated) {
       resetDesignCache();
 
-      void queueDesignStorageOperation(
-        deleteStoredDesign
+      void queueDesignStorageOperation(() =>
+        deleteStoredDesign()
       ).catch(error => {
         console.warn(
           'Oud ontwerp opruimen mislukt',
@@ -620,10 +761,38 @@ const Session = {
     }
   },
 
-  setWensen(wensen) {
+  /**
+   * Bewaart de wensen. Tekstvelden gaan naar sessionStorage,
+   * het (mogelijk grote) referentiebeeld naar IndexedDB.
+   */
+  async setWensen(wensen) {
+    const refDataURL = wensen?.refDataURL || null;
+
     this.set({
-      wensen,
+      wensen: getLightWensen(wensen),
     });
+
+    wensenRefCache = refDataURL
+      ? { refDataURL }
+      : null;
+
+    wensenRefHydrated = true;
+    wensenRefHydrationPromise = null;
+
+    try {
+      await queueDesignStorageOperation(() =>
+        refDataURL
+          ? writeStoredDesign(wensenRefCache, WENSEN_REF_STORAGE_KEY)
+          : deleteStoredDesign(WENSEN_REF_STORAGE_KEY)
+      );
+    } catch (error) {
+      console.warn(
+        'Referentiebeeld kon niet permanent worden opgeslagen; de actieve pagina houdt het wel beschikbaar.',
+        error
+      );
+    }
+
+    return this.getWensen();
   },
 
   setKlant(klant) {

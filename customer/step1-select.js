@@ -122,21 +122,6 @@ function getLowestPrice(product) {
   return Math.min(...validPrices);
 }
 
-function escHtml(str) {
-  return String(str || '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
-}
-
-function formatEuro(n) {
-  if (n === null || n === undefined || Number.isNaN(Number(n))) {
-    return '—';
-  }
-
-  return `€ ${parseFloat(n).toFixed(2).replace('.', ',')}`;
-}
-
 function getProductImageSrc(product) {
   return product?.imageProductFile?.dataURL || product?.imageProduct || '';
 }

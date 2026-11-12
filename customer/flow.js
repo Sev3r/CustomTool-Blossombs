@@ -40,6 +40,13 @@ async function initCustomerFlow() {
     await Session.hydrateDesign();
   }
 
+  if (
+    typeof Session !== 'undefined' &&
+    typeof Session.hydrateWensen === 'function'
+  ) {
+    await Session.hydrateWensen();
+  }
+
   synchronizeHighestStepFromSession();
 
   flowInitialized = true;
@@ -193,6 +200,13 @@ async function renderNavigationTarget(hash) {
     typeof Session.hydrateDesign === 'function'
   ) {
     await Session.hydrateDesign();
+  }
+
+  if (
+    typeof Session !== 'undefined' &&
+    typeof Session.hydrateWensen === 'function'
+  ) {
+    await Session.hydrateWensen();
   }
 
   synchronizeHighestStepFromSession();
@@ -471,13 +485,6 @@ function checkIcon() {
       />
     </svg>
   `;
-}
-
-function escHtml(value) {
-  return String(value || '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
 }
 
 document.addEventListener(

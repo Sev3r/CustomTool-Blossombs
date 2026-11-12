@@ -190,16 +190,32 @@
           </a>
 
           <button
-            class="settings-menu-item danger"
+            class="settings-menu-item"
             id="btn-reset-data"
             type="button"
           >
-            Reset data
+            Data opnieuw laden
           </button>
         </div>
       </div>
     </div>
   </header>
+
+  <div
+    id="sync-banner"
+    class="sync-banner hidden"
+    role="alert"
+  >
+    <span id="sync-banner-text"></span>
+
+    <button
+      class="btn btn-secondary btn-sm"
+      id="btn-sync-retry"
+      type="button"
+    >
+      Opnieuw verbinden
+    </button>
+  </div>
 
   <main class="main-content">
     <div id="page-sales" class="page"></div>
@@ -249,6 +265,7 @@
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="../shared/js/utils.js"></script>
   <script src="dataService.js"></script>
   <script src="../shared/js/offertePdf.js"></script>
   <script src="orders.js"></script>

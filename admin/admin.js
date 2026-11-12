@@ -159,18 +159,12 @@ function getSafeOrderWorkflow(order) {
     );
   }
 
-  const archivedStatuses = [
-    'verzonden',
-    'afgerond',
-    'completed',
-    'cancelled',
-  ];
+  const archived =
+    isOrderArchived(order);
 
   return {
     department:
-      archivedStatuses.includes(
-        order.status
-      )
+      archived
         ? 'archive'
         : 'sales',
 
@@ -178,10 +172,7 @@ function getSafeOrderWorkflow(order) {
       order.status ||
       'new_request',
 
-    archived:
-      archivedStatuses.includes(
-        order.status
-      ),
+    archived,
   };
 }
 
@@ -330,6 +321,8 @@ function closeModal() {
       'hidden'
     );
   }
+
+  flushPendingRerender();
 }
 
 // ─── CONFIRM DIALOG ───────────────────────────────────────────────────────────
@@ -416,7 +409,8 @@ let toastTimer;
 
 function showToast(
   message,
-  type = 'success'
+  type = 'success',
+  duration = 3000
 ) {
   const toast =
     document.getElementById(
@@ -442,63 +436,264 @@ function showToast(
       toast.classList.add(
         'hidden'
       );
-    }, 3000);
+    }, duration);
 }
 
 // ─── HELPERS ─────────────────────────────────────────────────────────────────
 
-function formatDate(iso) {
-  if (!iso) {
-    return '—';
-  }
+// ─── VERBINDING & SAMENWERKEN ────────────────────────────────────────────────
 
-  const date =
-    new Date(iso);
+let wasOffline = false;
+let pendingRerender = false;
+
+function updateConnectionBanner(online) {
+  const banner =
+    document.getElementById(
+      'sync-banner'
+    );
+
+  const text =
+    document.getElementById(
+      'sync-banner-text'
+    );
 
   if (
-    Number.isNaN(
-      date.getTime()
-    )
+    !banner ||
+    !text
   ) {
-    return '—';
+    return;
   }
 
-  return date.toLocaleDateString(
-    'nl-NL',
-    {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-    }
+  if (online) {
+    banner.classList.add(
+      'hidden'
+    );
+
+    return;
+  }
+
+  text.textContent =
+    'Geen verbinding met de database. Je ziet mogelijk niet de laatste stand, en wijzigingen worden niet opgeslagen.';
+
+  banner.classList.remove(
+    'hidden'
   );
 }
 
-function formatEuro(value) {
+function handleConnection(event) {
+  const online =
+    Boolean(
+      event.detail?.online
+    );
+
+  updateConnectionBanner(
+    online
+  );
+
   if (
-    value === undefined ||
-    value === null ||
-    value === ''
+    online &&
+    wasOffline
   ) {
-    return '—';
+    showToast(
+      'Verbinding hersteld'
+    );
   }
 
-  return `€ ${parseFloat(value).toFixed(2).replace('.', ',')}`;
+  wasOffline =
+    !online;
 }
 
-function escHtml(value) {
-  return String(value || '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
+function getRecordNoun(kind) {
+  return kind === 'products'
+    ? 'Dit product'
+    : 'Deze order';
+}
+
+function handleSaveError(event) {
+  const detail =
+    event.detail ||
+    {};
+
+  const noun =
+    getRecordNoun(
+      detail.kind
+    );
+
+  const messages = {
+    conflict:
+      `${noun} is intussen door iemand anders aangepast. De nieuwste versie staat nu op je scherm; voer je wijziging opnieuw uit.`,
+
+    deleted:
+      `${noun} is intussen door iemand anders verwijderd.`,
+
+    failed:
+      'Opslaan mislukt. Je wijziging is teruggedraaid; controleer je verbinding en probeer het opnieuw.',
+  };
+
+  showToast(
+    messages[detail.type] ||
+    messages.failed,
+    'error',
+    7000
+  );
+}
+
+/**
+ * Is de gebruiker midden in iets (modal open, slepen, typen)?
+ * Dan het scherm niet onder haar handen vernieuwen.
+ */
+function isUserBusy() {
+  const overlay =
+    document.getElementById(
+      'modal-overlay'
+    );
+
+  if (
+    overlay &&
+    !overlay.classList.contains(
+      'hidden'
+    )
+  ) {
+    return true;
+  }
+
+  if (
+    typeof draggedOrderId !==
+    'undefined' &&
+    draggedOrderId
+  ) {
+    return true;
+  }
+
+  const active =
+    document.activeElement;
+
+  return Boolean(
+    active &&
+    active.closest?.(
+      '.main-content'
+    ) &&
+    [
+      'INPUT',
+      'TEXTAREA',
+      'SELECT',
+    ].includes(
+      active.tagName
+    )
+  );
+}
+
+function rerenderCurrentPage() {
+  if (isUserBusy()) {
+    pendingRerender = true;
+    return;
+  }
+
+  pendingRerender = false;
+
+  const scrollY =
+    window.scrollY;
+
+  navigate(
+    location.hash ||
+    '#creation'
+  );
+
+  window.scrollTo(
+    0,
+    scrollY
+  );
+}
+
+function flushPendingRerender() {
+  if (!pendingRerender) {
+    return;
+  }
+
+  setTimeout(
+    rerenderCurrentPage,
+    0
+  );
+}
+
+async function reconnect() {
+  const button =
+    document.getElementById(
+      'btn-sync-retry'
+    );
+
+  if (button?.disabled) {
+    return;
+  }
+
+  if (button) {
+    button.disabled = true;
+    button.textContent =
+      'Bezig...';
+  }
+
+  const ok =
+    await DS.reload();
+
+  if (button) {
+    button.disabled = false;
+    button.textContent =
+      'Opnieuw verbinden';
+  }
+
+  if (!ok) {
+    showToast(
+      'Nog geen verbinding. Probeer het zo opnieuw.',
+      'error'
+    );
+  }
 }
 
 // ─── INIT ─────────────────────────────────────────────────────────────────────
 
+window.addEventListener(
+  'ds:connection',
+  handleConnection
+);
+
+window.addEventListener(
+  'ds:save-error',
+  handleSaveError
+);
+
+window.addEventListener(
+  'ds:data-changed',
+  rerenderCurrentPage
+);
+
 document.addEventListener(
   'DOMContentLoaded',
   async () => {
+    const syncRetryButton =
+      document.getElementById(
+        'btn-sync-retry'
+      );
+
+    if (syncRetryButton) {
+      syncRetryButton.addEventListener(
+        'click',
+        reconnect
+      );
+    }
+
     await DS.init();
     DS.seedDemoData();
+    DS.startAutoRefresh();
+
+    document.addEventListener(
+      'focusout',
+      flushPendingRerender
+    );
+
+    document.addEventListener(
+      'dragend',
+      flushPendingRerender
+    );
 
     const modalCloseButton =
       document.getElementById(
@@ -600,52 +795,18 @@ document.addEventListener(
       resetButton.addEventListener(
         'click',
         async () => {
-          const confirmed =
-            await confirmDialog(
-              'Alle lokaal gecachte data resetten?',
-              {
-                title:
-                  'Reset data',
+          closeSettingsMenu();
 
-                confirmLabel:
-                  'Reset data',
-
-                confirmClass:
-                  'btn-danger',
-              }
-            );
-
-          if (!confirmed) {
-            return;
-          }
-
-          localStorage.removeItem(
-            'cot_orders'
-          );
-
-          localStorage.removeItem(
-            'cot_products'
-          );
-
-          await Promise.all([
-            typeof DS.refreshOrders ===
-            'function'
-              ? DS.refreshOrders()
-              : Promise.resolve(),
-
-            typeof DS.refreshProducts ===
-            'function'
-              ? DS.refreshProducts()
-              : Promise.resolve(),
-          ]);
-
-          navigate(
-            location.hash ||
-            '#creation'
-          );
+          const ok =
+            await DS.reload();
 
           showToast(
-            'Lokale cache opnieuw geladen'
+            ok
+              ? 'Data opnieuw geladen'
+              : 'Opnieuw laden mislukt. Controleer je verbinding.',
+            ok
+              ? 'success'
+              : 'error'
           );
         }
       );

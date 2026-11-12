@@ -2,9 +2,30 @@
  * dataService.js
  * Gedeelde datalaag voor orders en producten.
  *
- * Centrale opslag:
- * - Supabase voor gedeelde producten en orders tussen apparaten.
- * - localStorage als fallback/cache wanneer Supabase niet beschikbaar is.
+ * Opslag:
+ * - Supabase is de ENIGE opslag. Er wordt niets in localStorage bewaard,
+ *   zodat iedereen dezelfde data ziet.
+ * - Data staat alleen in het geheugen van de open pagina en wordt bij het
+ *   laden (en daarna periodiek) uit Supabase opgehaald.
+ *
+ * Samenwerken (meerdere collega's tegelijk):
+ * - Elk record krijgt in het geheugen een _version (= updated_at uit Supabase).
+ * - Een wijziging wordt alleen opgeslagen als het record in Supabase nog
+ *   dezelfde versie heeft als toen je het opende. Heeft een collega het
+ *   intussen aangepast, dan wordt er NIETS overschreven: de nieuwste versie
+ *   wordt geladen en er gaat een 'ds:save-error' (type 'conflict') uit.
+ * - startAutoRefresh() haalt periodiek alleen gewijzigde records op.
+ *
+ * API:
+ * - saveOrder/saveProduct/delete* (sync): passen het scherm direct aan en
+ *   slaan daarna op. Mislukt het opslaan, dan wordt de wijziging teruggedraaid.
+ * - save*Async/delete*Async: slaan eerst op en passen pas daarna het scherm
+ *   aan. Gooien een fout als het mislukt.
+ *
+ * Events (op window):
+ * - 'ds:connection'   { online, error }
+ * - 'ds:data-changed' { source: 'remote' | 'reload' | 'revert' | 'conflict', kinds }
+ * - 'ds:save-error'   { kind, id, type: 'conflict' | 'deleted' | 'failed', label, error }
  *
  * Let op:
  * - Deze implementatie gebruikt de Supabase anon key.
@@ -16,29 +37,52 @@ const SUPABASE_ANON_KEY = 'sb_publishable_PzZox9nlVKF5jaJFg8OSbw_H-ubNqyo';
 
 const ENABLE_DEMO_DATA = false;
 
-const KEYS = {
-  orders: 'cot_orders',
-  products: 'cot_products',
-};
+const AUTO_REFRESH_INTERVAL_MS = 20000;
+const FOCUS_REFRESH_MIN_GAP_MS = 5000;
+const FETCH_CHUNK_SIZE = 100;
 
-const DB_TABLES = {
-  orders: 'orders',
-  products: 'products',
+// Oude localStorage-sleutels uit eerdere versies. Worden bij het laden opgeruimd.
+const LEGACY_LOCAL_KEYS = [
+  'cot_orders',
+  'cot_products',
+  'cot_unsynced',
+];
+
+const KINDS = {
+  orders: {
+    table: 'orders',
+    prefix: 'ORD',
+  },
+  products: {
+    table: 'products',
+    prefix: 'PRD',
+  },
 };
 
 const state = {
   initialized: false,
   initializing: null,
   supabase: null,
+  online: null,
   orders: [],
   products: [],
+  lastConfirmed: {
+    orders: {},
+    products: {},
+  },
+  writeChains: {},
+  pendingWrites: {},
+  ownVersions: {},
+  autoRefreshTimer: null,
+  lastRefreshAt: 0,
+  refreshing: null,
 };
 
 // ─── INIT ───────────────────────────────────────────────────────────────────
 
 async function init() {
   if (state.initialized) {
-    return true;
+    return Boolean(state.online);
   }
 
   if (state.initializing) {
@@ -51,51 +95,24 @@ async function init() {
 }
 
 async function initializeDataService() {
+  removeLegacyLocalCache();
+
   state.supabase = createSupabaseClient();
 
-  loadLocalCache();
-
   if (!state.supabase) {
-    console.warn('Supabase client niet beschikbaar. dataService gebruikt localStorage fallback.');
     state.initialized = true;
+    setOnline(false, new Error('Supabase client niet beschikbaar.'));
     return false;
   }
 
   try {
-    const [productsResult, ordersResult] = await Promise.all([
-      fetchRemoteProducts(),
-      fetchRemoteOrders(),
-    ]);
-
-    const remoteProducts = productsResult || [];
-    const remoteOrders = ordersResult || [];
-
-    const localProducts = readLocalArray(KEYS.products);
-    const localOrders = readLocalArray(KEYS.orders);
-
-    if (!remoteProducts.length && localProducts.length) {
-      state.products = localProducts;
-      await persistAllProductsRemote(localProducts);
-    } else {
-      state.products = remoteProducts;
-    }
-
-    if (!remoteOrders.length && localOrders.length) {
-      state.orders = localOrders;
-      await persistAllOrdersRemote(localOrders);
-    } else {
-      state.orders = remoteOrders;
-    }
-
-    writeLocalArray(KEYS.products, state.products);
-    writeLocalArray(KEYS.orders, state.orders);
-
+    await loadKinds(['products', 'orders']);
     state.initialized = true;
     return true;
   } catch (error) {
-    console.warn('Supabase laden mislukt. dataService gebruikt localStorage fallback.', error);
-    loadLocalCache();
+    console.warn('Supabase laden mislukt.', error);
     state.initialized = true;
+    setOnline(false, error);
     return false;
   }
 }
@@ -108,9 +125,24 @@ function createSupabaseClient() {
   return window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 }
 
-function loadLocalCache() {
-  state.products = readLocalArray(KEYS.products);
-  state.orders = readLocalArray(KEYS.orders);
+function removeLegacyLocalCache() {
+  try {
+    if (typeof localStorage === 'undefined') {
+      return;
+    }
+
+    LEGACY_LOCAL_KEYS.forEach(key => localStorage.removeItem(key));
+  } catch {
+    // Opruimen is best effort.
+  }
+}
+
+function isRemoteAvailable() {
+  return Boolean(state.supabase) && state.online === true;
+}
+
+function isOnline() {
+  return state.online === true;
 }
 
 // ─── HELPERS ────────────────────────────────────────────────────────────────
@@ -123,36 +155,48 @@ function now() {
   return new Date().toISOString();
 }
 
-function readLocalArray(key) {
-  try {
-    const raw = localStorage.getItem(key);
-    const parsed = raw ? JSON.parse(raw) : [];
-
-    return Array.isArray(parsed) ? parsed : [];
-  } catch (error) {
-    console.warn(`localStorage lezen mislukt voor ${key}`, error);
-    return [];
-  }
-}
-
-function writeLocalArray(key, items) {
-  try {
-    localStorage.setItem(key, JSON.stringify(items || []));
-  } catch (error) {
-    console.warn(`localStorage schrijven mislukt voor ${key}`, error);
-  }
-}
-
 function cloneData(value) {
   return JSON.parse(JSON.stringify(value || null));
 }
 
-function normalizeRecordId(record, prefix) {
-  if (record.id) {
-    return record.id;
+function recordKey(kind, id) {
+  return `${kind}:${id}`;
+}
+
+function emit(name, detail) {
+  window.dispatchEvent(
+    new CustomEvent(name, {
+      detail,
+    })
+  );
+}
+
+function setOnline(online, error = null) {
+  const changed = state.online !== online;
+
+  state.online = online;
+
+  if (changed) {
+    emit('ds:connection', {
+      online,
+      error,
+    });
+  }
+}
+
+function sameVersion(a, b) {
+  if (!a || !b) {
+    return false;
   }
 
-  return uid(prefix);
+  if (a === b) {
+    return true;
+  }
+
+  const timeA = new Date(a).getTime();
+  const timeB = new Date(b).getTime();
+
+  return Number.isFinite(timeA) && timeA === timeB;
 }
 
 function getOrderNumber(order) {
@@ -167,22 +211,25 @@ function getOrderWorkflow(order) {
   return order.workflow || {};
 }
 
-function queueRemoteTask(task, label) {
-  task().catch(error => {
-    console.warn(`${label} mislukt. Wijziging staat nog wel lokaal.`, error);
-  });
-}
-
 // ─── ROW MAPPING ────────────────────────────────────────────────────────────
 
-function productToRow(product) {
-  const data = cloneData(product);
+/**
+ * Kopie van het record zonder interne velden (zoals _version).
+ */
+function toStoredData(record) {
+  const data = cloneData(record) || {};
 
+  delete data._version;
+
+  return data;
+}
+
+function productToRow(product, updatedAt) {
   return {
     id: product.id,
-    data,
-    created_at: product.createdAt || product.created_at || now(),
-    updated_at: now(),
+    data: toStoredData(product),
+    created_at: product.createdAt || product.created_at || updatedAt,
+    updated_at: updatedAt,
   };
 }
 
@@ -194,20 +241,19 @@ function rowToProduct(row) {
     id: row.id,
     createdAt: data.createdAt || row.created_at,
     updatedAt: data.updatedAt || row.updated_at,
+    _version: row.updated_at || null,
   };
 }
 
-function orderToRow(order) {
-  const data = cloneData(order);
-
+function orderToRow(order, updatedAt) {
   return {
     id: order.id,
     order_number: getOrderNumber(order),
     status: getOrderStatus(order),
     workflow: getOrderWorkflow(order),
-    data,
-    created_at: order.createdAt || order.created_at || now(),
-    updated_at: now(),
+    data: toStoredData(order),
+    created_at: order.createdAt || order.created_at || updatedAt,
+    updated_at: updatedAt,
   };
 }
 
@@ -223,109 +269,503 @@ function rowToOrder(row) {
     workflow,
     createdAt: data.createdAt || row.created_at,
     updatedAt: data.updatedAt || row.updated_at,
+    _version: row.updated_at || null,
   };
 }
 
-// ─── REMOTE FETCH ───────────────────────────────────────────────────────────
+function toRow(kind, record, updatedAt) {
+  return kind === 'orders'
+    ? orderToRow(record, updatedAt)
+    : productToRow(record, updatedAt);
+}
 
-async function fetchRemoteProducts() {
-  if (!state.supabase) {
-    return [];
+function fromRow(kind, row) {
+  return kind === 'orders'
+    ? rowToOrder(row)
+    : rowToProduct(row);
+}
+
+// ─── IN-MEMORY STATE ────────────────────────────────────────────────────────
+
+function getLocal(kind, id) {
+  return state[kind].find(item => item.id === id) || null;
+}
+
+function putLocal(kind, record) {
+  const items = state[kind].slice();
+  const index = items.findIndex(item => item.id === record.id);
+
+  if (index > -1) {
+    items[index] = record;
+  } else {
+    items.push(record);
   }
 
+  state[kind] = items;
+}
+
+function removeLocal(kind, id) {
+  state[kind] = state[kind].filter(item => item.id !== id);
+}
+
+function setConfirmed(kind, record) {
+  state.lastConfirmed[kind][record.id] = record;
+}
+
+function clearConfirmed(kind, id) {
+  delete state.lastConfirmed[kind][id];
+}
+
+function restoreConfirmed(kind, id) {
+  const confirmed = state.lastConfirmed[kind][id];
+
+  if (confirmed) {
+    putLocal(kind, confirmed);
+  } else {
+    removeLocal(kind, id);
+  }
+}
+
+function isPending(kind, id) {
+  return (state.pendingWrites[recordKey(kind, id)] || 0) > 0;
+}
+
+// ─── REMOTE: LEZEN ──────────────────────────────────────────────────────────
+
+async function fetchAll(kind) {
   const { data, error } = await state.supabase
-    .from(DB_TABLES.products)
+    .from(KINDS[kind].table)
     .select('*')
-    .order('created_at', { ascending: true });
+    .order('created_at', { ascending: kind === 'products' });
 
   if (error) {
     throw error;
   }
 
-  return (data || []).map(rowToProduct);
+  return (data || []).map(row => fromRow(kind, row));
 }
 
-async function fetchRemoteOrders() {
-  if (!state.supabase) {
-    return [];
+async function fetchByIds(kind, ids) {
+  const results = [];
+
+  for (let index = 0; index < ids.length; index += FETCH_CHUNK_SIZE) {
+    const chunk = ids.slice(index, index + FETCH_CHUNK_SIZE);
+
+    const { data, error } = await state.supabase
+      .from(KINDS[kind].table)
+      .select('*')
+      .in('id', chunk);
+
+    if (error) {
+      throw error;
+    }
+
+    (data || []).forEach(row => {
+      results.push(fromRow(kind, row));
+    });
   }
 
+  return results;
+}
+
+async function fetchVersions(kind) {
   const { data, error } = await state.supabase
-    .from(DB_TABLES.orders)
-    .select('*')
-    .order('created_at', { ascending: false });
+    .from(KINDS[kind].table)
+    .select('id, updated_at');
 
   if (error) {
     throw error;
   }
 
-  return (data || []).map(rowToOrder);
+  return data || [];
 }
 
-// ─── ORDERS ─────────────────────────────────────────────────────────────────
+/**
+ * Volledig (her)laden. Records met een lopende opslag blijven ongemoeid.
+ */
+async function loadKinds(kinds) {
+  if (!state.supabase) {
+    throw new Error('Geen verbinding met de database.');
+  }
 
-function getOrders() {
-  return state.orders.slice();
+  const results = await Promise.all(kinds.map(kind => fetchAll(kind)));
+
+  kinds.forEach((kind, index) => {
+    const remoteItems = results[index];
+
+    const merged = remoteItems.map(item =>
+      isPending(kind, item.id)
+        ? getLocal(kind, item.id) || item
+        : item
+    );
+
+    state[kind]
+      .filter(item => isPending(kind, item.id) && !merged.some(entry => entry.id === item.id))
+      .forEach(item => merged.push(item));
+
+    state[kind] = merged;
+    state.lastConfirmed[kind] = {};
+
+    remoteItems.forEach(item => setConfirmed(kind, item));
+  });
+
+  state.lastRefreshAt = Date.now();
+  setOnline(true);
 }
 
-function saveAllOrders(orders) {
-  state.orders = Array.isArray(orders) ? orders.slice() : [];
-  writeLocalArray(KEYS.orders, state.orders);
+async function reload() {
+  try {
+    await loadKinds(['products', 'orders']);
 
-  if (state.supabase) {
-    queueRemoteTask(() => persistAllOrdersRemote(state.orders), 'Orders synchroniseren');
+    emit('ds:data-changed', {
+      source: 'reload',
+      kinds: ['products', 'orders'],
+    });
+
+    return true;
+  } catch (error) {
+    console.warn('Opnieuw laden mislukt.', error);
+    setOnline(false, error);
+    return false;
   }
 }
 
-async function saveAllOrdersAsync(orders) {
-  state.orders = Array.isArray(orders) ? orders.slice() : [];
-  writeLocalArray(KEYS.orders, state.orders);
+/**
+ * Haalt alleen gewijzigde, nieuwe en verwijderde records op.
+ */
+async function syncKindFromRemote(kind) {
+  const versions = await fetchVersions(kind);
+  const remoteVersions = new Map(versions.map(row => [row.id, row.updated_at]));
 
-  if (state.supabase) {
-    await persistAllOrdersRemote(state.orders);
+  const changedIds = [];
+
+  remoteVersions.forEach((version, id) => {
+    if (isPending(kind, id)) {
+      return;
+    }
+
+    const local = getLocal(kind, id);
+
+    if (!local || !sameVersion(local._version, version)) {
+      changedIds.push(id);
+    }
+  });
+
+  const removedIds = state[kind]
+    .filter(item =>
+      !remoteVersions.has(item.id) &&
+      !isPending(kind, item.id) &&
+      item._version
+    )
+    .map(item => item.id);
+
+  if (changedIds.length) {
+    const freshItems = await fetchByIds(kind, changedIds);
+
+    freshItems.forEach(item => {
+      if (!isPending(kind, item.id)) {
+        putLocal(kind, item);
+        setConfirmed(kind, item);
+      }
+    });
   }
 
+  removedIds.forEach(id => {
+    removeLocal(kind, id);
+    clearConfirmed(kind, id);
+  });
+
+  return changedIds.length > 0 || removedIds.length > 0;
+}
+
+async function refresh() {
+  if (!state.supabase) {
+    return false;
+  }
+
+  if (state.refreshing) {
+    return state.refreshing;
+  }
+
+  state.refreshing = (async () => {
+    try {
+      const changedKinds = [];
+
+      for (const kind of ['products', 'orders']) {
+        if (await syncKindFromRemote(kind)) {
+          changedKinds.push(kind);
+        }
+      }
+
+      state.lastRefreshAt = Date.now();
+      setOnline(true);
+
+      if (changedKinds.length) {
+        emit('ds:data-changed', {
+          source: 'remote',
+          kinds: changedKinds,
+        });
+      }
+
+      return true;
+    } catch (error) {
+      console.warn('Verversen mislukt.', error);
+      setOnline(false, error);
+      return false;
+    } finally {
+      state.refreshing = null;
+    }
+  })();
+
+  return state.refreshing;
+}
+
+function refreshIfStale() {
+  if (Date.now() - state.lastRefreshAt >= FOCUS_REFRESH_MIN_GAP_MS) {
+    refresh();
+  }
+}
+
+function startAutoRefresh(intervalMs = AUTO_REFRESH_INTERVAL_MS) {
+  if (state.autoRefreshTimer) {
+    return;
+  }
+
+  state.autoRefreshTimer = setInterval(() => {
+    if (
+      typeof document === 'undefined' ||
+      document.visibilityState === 'visible'
+    ) {
+      refresh();
+    }
+  }, intervalMs);
+
+  if (typeof document !== 'undefined') {
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') {
+        refreshIfStale();
+      }
+    });
+  }
+
+  window.addEventListener('focus', refreshIfStale);
+  window.addEventListener('online', () => refresh());
+}
+
+function stopAutoRefresh() {
+  if (state.autoRefreshTimer) {
+    clearInterval(state.autoRefreshTimer);
+    state.autoRefreshTimer = null;
+  }
+}
+
+async function refreshOrders() {
+  await loadKinds(['orders']);
   return state.orders;
 }
 
-function saveOrder(order) {
-  const savedOrder = prepareOrderForSave(order);
-  const orders = state.orders.slice();
-  const index = orders.findIndex(item => item.id === savedOrder.id);
-
-  if (index > -1) {
-    orders[index] = savedOrder;
-  } else {
-    orders.push(savedOrder);
-  }
-
-  state.orders = orders;
-  writeLocalArray(KEYS.orders, state.orders);
-
-  if (state.supabase) {
-    queueRemoteTask(() => persistOrderRemote(savedOrder), 'Order opslaan');
-  }
-
-  return savedOrder;
+async function refreshProducts() {
+  await loadKinds(['products']);
+  return state.products;
 }
 
-async function saveOrderAsync(order) {
-  const savedOrder = saveOrder(order);
+// ─── REMOTE: SCHRIJVEN ──────────────────────────────────────────────────────
 
-  if (state.supabase) {
-    await persistOrderRemote(savedOrder);
-  }
+function conflictError(kind, id) {
+  const error = new Error('Record is intussen door iemand anders gewijzigd.');
 
-  return savedOrder;
+  error.code = 'DS_CONFLICT';
+  error.kind = kind;
+  error.id = id;
+
+  return error;
 }
 
-function prepareOrderForSave(order = {}) {
+/**
+ * Houdt bij welke versie deze pagina zelf heeft vervangen door welke nieuwe,
+ * zodat twee snelle opeenvolgende eigen wijzigingen geen vals conflict geven.
+ */
+function recordOwnVersion(key, fromVersion, toVersion) {
+  if (!fromVersion || !toVersion) {
+    return;
+  }
+
+  if (!state.ownVersions[key]) {
+    state.ownVersions[key] = {};
+  }
+
+  state.ownVersions[key][fromVersion] = toVersion;
+}
+
+function resolveExpectedVersion(key, version) {
+  const map = state.ownVersions[key] || {};
+  let current = version;
+  let guard = 0;
+
+  while (current && map[current] && guard < 100) {
+    current = map[current];
+    guard += 1;
+  }
+
+  return current || null;
+}
+
+/**
+ * Nieuw record (geen versie): upsert.
+ * Bestaand record: update ALLEEN als de versie in Supabase nog klopt.
+ * Geeft de nieuwe versie terug.
+ */
+async function persistRecord(kind, record, expectedVersion, { returnVersion = true } = {}) {
+  const table = KINDS[kind].table;
+  const updatedAt = now();
+  const row = toRow(kind, record, updatedAt);
+
+  if (!expectedVersion) {
+    const query = state.supabase
+      .from(table)
+      .upsert(row, { onConflict: 'id' });
+
+    if (!returnVersion) {
+      const { error } = await query;
+
+      if (error) {
+        throw error;
+      }
+
+      return updatedAt;
+    }
+
+    const { data, error } = await query.select('updated_at');
+
+    if (error) {
+      throw error;
+    }
+
+    return data?.[0]?.updated_at || updatedAt;
+  }
+
+  const { data, error } = await state.supabase
+    .from(table)
+    .update(row)
+    .eq('id', record.id)
+    .eq('updated_at', expectedVersion)
+    .select('id, updated_at');
+
+  if (error) {
+    throw error;
+  }
+
+  if (!data || !data.length) {
+    throw conflictError(kind, record.id);
+  }
+
+  return data[0].updated_at;
+}
+
+async function deleteRemote(kind, id, expectedVersion) {
+  const table = KINDS[kind].table;
+
+  if (!expectedVersion) {
+    const { error } = await state.supabase
+      .from(table)
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      throw error;
+    }
+
+    return;
+  }
+
+  const { data, error } = await state.supabase
+    .from(table)
+    .delete()
+    .eq('id', id)
+    .eq('updated_at', expectedVersion)
+    .select('id');
+
+  if (error) {
+    throw error;
+  }
+
+  if (!data || !data.length) {
+    throw conflictError(kind, id);
+  }
+}
+
+/**
+ * Schrijfacties per record worden achter elkaar uitgevoerd.
+ */
+function queueWrite(kind, id, task) {
+  const key = recordKey(kind, id);
+  const previous = state.writeChains[key] || Promise.resolve();
+
+  state.pendingWrites[key] = (state.pendingWrites[key] || 0) + 1;
+
+  const run = previous.then(task);
+
+  state.writeChains[key] = run.catch(() => {});
+
+  return run.finally(() => {
+    state.pendingWrites[key] -= 1;
+
+    if (state.pendingWrites[key] <= 0) {
+      delete state.pendingWrites[key];
+      delete state.writeChains[key];
+    }
+  });
+}
+
+/**
+ * Bij een conflict: nieuwste versie ophalen en tonen. Er wordt niets overschreven.
+ */
+async function resolveConflict(kind, id, label) {
+  try {
+    const [fresh] = await fetchByIds(kind, [id]);
+
+    if (fresh) {
+      putLocal(kind, fresh);
+      setConfirmed(kind, fresh);
+      emit('ds:save-error', { kind, id, type: 'conflict', label });
+    } else {
+      removeLocal(kind, id);
+      clearConfirmed(kind, id);
+      emit('ds:save-error', { kind, id, type: 'deleted', label });
+    }
+  } catch (error) {
+    restoreConfirmed(kind, id);
+    emit('ds:save-error', { kind, id, type: 'failed', label, error });
+  }
+
+  emit('ds:data-changed', {
+    source: 'conflict',
+    kinds: [kind],
+  });
+}
+
+function handleWriteFailure(kind, id, error, label) {
+  if (error?.code === 'DS_CONFLICT') {
+    return resolveConflict(kind, id, label);
+  }
+
+  console.warn(`${label} mislukt.`, error);
+
+  restoreConfirmed(kind, id);
+
+  emit('ds:save-error', { kind, id, type: 'failed', label, error });
+  emit('ds:data-changed', { source: 'revert', kinds: [kind] });
+
+  return Promise.resolve();
+}
+
+function prepareForSave(kind, record = {}) {
   const prepared = {
-    ...order,
-    id: normalizeRecordId(order, 'ORD'),
+    ...record,
+    id: record.id || uid(KINDS[kind].prefix),
   };
 
-  if (!prepared.orderNumber) {
+  if (kind === 'orders' && !prepared.orderNumber) {
     prepared.orderNumber = uid('BLO');
   }
 
@@ -338,82 +778,156 @@ function prepareOrderForSave(order = {}) {
   return prepared;
 }
 
-function deleteOrder(id) {
-  state.orders = state.orders.filter(order => order.id !== id);
-  writeLocalArray(KEYS.orders, state.orders);
+/**
+ * Optimistisch opslaan: scherm direct bijwerken, daarna Supabase.
+ * Mislukt het, dan wordt teruggedraaid naar de laatst bevestigde versie.
+ */
+function saveRecord(kind, record, label) {
+  const saved = prepareForSave(kind, record);
+  const key = recordKey(kind, saved.id);
 
-  if (state.supabase) {
-    queueRemoteTask(() => deleteOrderRemote(id), 'Order verwijderen');
+  putLocal(kind, saved);
+
+  if (!state.supabase) {
+    handleWriteFailure(kind, saved.id, new Error('Geen verbinding met de database.'), label);
+    return saved;
   }
+
+  queueWrite(kind, saved.id, async () => {
+    const expected = resolveExpectedVersion(key, saved._version || null);
+    const newVersion = await persistRecord(kind, saved, expected);
+
+    recordOwnVersion(key, expected, newVersion);
+    saved._version = newVersion;
+    setConfirmed(kind, saved);
+
+    // Was er intussen teruggedraaid door een eerdere mislukte poging, toon dan alsnog deze versie.
+    if (getLocal(kind, saved.id) !== saved && (state.pendingWrites[key] || 0) <= 1) {
+      putLocal(kind, saved);
+      emit('ds:data-changed', { source: 'remote', kinds: [kind] });
+    }
+  }).catch(error => handleWriteFailure(kind, saved.id, error, label));
+
+  return saved;
 }
 
-async function deleteOrderAsync(id) {
-  deleteOrder(id);
-
-  if (state.supabase) {
-    await deleteOrderRemote(id);
+/**
+ * Eerst opslaan, dan pas het scherm bijwerken. Gooit een fout bij falen.
+ * returnVersion: false voor de klantkant (die hoeft niets terug te lezen).
+ */
+async function saveRecordAsync(kind, record, label, { returnVersion = true } = {}) {
+  if (!state.supabase) {
+    throw new Error('Geen verbinding met de database.');
   }
+
+  const saved = prepareForSave(kind, record);
+  const key = recordKey(kind, saved.id);
+
+  try {
+    await queueWrite(kind, saved.id, async () => {
+      const expected = resolveExpectedVersion(key, saved._version || null);
+      const newVersion = await persistRecord(kind, saved, expected, { returnVersion });
+
+      recordOwnVersion(key, expected, newVersion);
+      saved._version = newVersion;
+    });
+  } catch (error) {
+    if (error?.code === 'DS_CONFLICT') {
+      await resolveConflict(kind, saved.id, label);
+    }
+
+    throw error;
+  }
+
+  putLocal(kind, saved);
+  setConfirmed(kind, saved);
+
+  return saved;
+}
+
+function deleteRecord(kind, id, label) {
+  const existing = getLocal(kind, id);
+  const key = recordKey(kind, id);
+
+  removeLocal(kind, id);
+
+  if (!state.supabase) {
+    handleWriteFailure(kind, id, new Error('Geen verbinding met de database.'), label);
+    return;
+  }
+
+  queueWrite(kind, id, async () => {
+    const expected = resolveExpectedVersion(key, existing?._version || null);
+
+    await deleteRemote(kind, id, expected);
+    clearConfirmed(kind, id);
+  }).catch(error => handleWriteFailure(kind, id, error, label));
+}
+
+async function deleteRecordAsync(kind, id, label) {
+  if (!state.supabase) {
+    throw new Error('Geen verbinding met de database.');
+  }
+
+  const existing = getLocal(kind, id);
+  const key = recordKey(kind, id);
+
+  try {
+    await queueWrite(kind, id, async () => {
+      const expected = resolveExpectedVersion(key, existing?._version || null);
+
+      await deleteRemote(kind, id, expected);
+    });
+  } catch (error) {
+    if (error?.code === 'DS_CONFLICT') {
+      await resolveConflict(kind, id, label);
+    }
+
+    throw error;
+  }
+
+  removeLocal(kind, id);
+  clearConfirmed(kind, id);
+}
+
+// ─── ORDERS ─────────────────────────────────────────────────────────────────
+
+function getOrders() {
+  return state.orders.slice();
 }
 
 function getOrderById(id) {
-  return state.orders.find(order => order.id === id) || null;
+  return getLocal('orders', id);
 }
 
-async function refreshOrders() {
-  if (!state.supabase) {
-    loadLocalCache();
-    return state.orders;
-  }
-
-  state.orders = await fetchRemoteOrders();
-  writeLocalArray(KEYS.orders, state.orders);
-
-  return state.orders;
+function saveOrder(order) {
+  return saveRecord('orders', order, 'Order opslaan');
 }
 
-async function persistOrderRemote(order) {
-  if (!state.supabase) {
-    return;
-  }
-
-  const { error } = await state.supabase
-    .from(DB_TABLES.orders)
-    .upsert(orderToRow(order), { onConflict: 'id' });
-
-  if (error) {
-    throw error;
-  }
+async function saveOrderAsync(order, options = {}) {
+  return saveRecordAsync('orders', order, 'Order opslaan', options);
 }
 
-async function persistAllOrdersRemote(orders) {
-  if (!state.supabase || !orders.length) {
-    return;
-  }
-
-  const rows = orders.map(orderToRow);
-
-  const { error } = await state.supabase
-    .from(DB_TABLES.orders)
-    .upsert(rows, { onConflict: 'id' });
-
-  if (error) {
-    throw error;
-  }
+function deleteOrder(id) {
+  deleteRecord('orders', id, 'Order verwijderen');
 }
 
-async function deleteOrderRemote(id) {
-  if (!state.supabase) {
-    return;
+async function deleteOrderAsync(id) {
+  await deleteRecordAsync('orders', id, 'Order verwijderen');
+}
+
+function saveAllOrders(orders) {
+  (Array.isArray(orders) ? orders : []).forEach(order => saveOrder(order));
+}
+
+async function saveAllOrdersAsync(orders) {
+  const list = Array.isArray(orders) ? orders : [];
+
+  for (const order of list) {
+    await saveOrderAsync(order);
   }
 
-  const { error } = await state.supabase
-    .from(DB_TABLES.orders)
-    .delete()
-    .eq('id', id);
-
-  if (error) {
-    throw error;
-  }
+  return getOrders();
 }
 
 // ─── PRODUCTS ───────────────────────────────────────────────────────────────
@@ -422,79 +936,22 @@ function getProducts() {
   return state.products.slice();
 }
 
-function saveAllProducts(products) {
-  state.products = Array.isArray(products) ? products.slice() : [];
-  writeLocalArray(KEYS.products, state.products);
-
-  if (state.supabase) {
-    queueRemoteTask(() => persistAllProductsRemote(state.products), 'Producten synchroniseren');
-  }
-}
-
-async function saveAllProductsAsync(products) {
-  state.products = Array.isArray(products) ? products.slice() : [];
-  writeLocalArray(KEYS.products, state.products);
-
-  if (state.supabase) {
-    await persistAllProductsRemote(state.products);
-  }
-
-  return state.products;
+function getProductById(id) {
+  return getLocal('products', id);
 }
 
 function saveProduct(product) {
-  const savedProduct = prepareProductForSave(product);
-  const products = state.products.slice();
-  const index = products.findIndex(item => item.id === savedProduct.id);
-
-  if (index > -1) {
-    products[index] = savedProduct;
-  } else {
-    products.push(savedProduct);
-  }
-
-  state.products = products;
-  writeLocalArray(KEYS.products, state.products);
-
-  if (state.supabase) {
-    queueRemoteTask(() => persistProductRemote(savedProduct), 'Product opslaan');
-  }
-
-  return savedProduct;
+  return saveRecord('products', product, 'Product opslaan');
 }
 
-async function saveProductAsync(product) {
-  const savedProduct = saveProduct(product);
-
-  if (state.supabase) {
-    await persistProductRemote(savedProduct);
-  }
-
-  return savedProduct;
+async function saveProductAsync(product, options = {}) {
+  return saveRecordAsync('products', product, 'Product opslaan', options);
 }
 
-function prepareProductForSave(product = {}) {
-  const prepared = {
-    ...product,
-    id: normalizeRecordId(product, 'PRD'),
-  };
-
-  if (!prepared.createdAt) {
-    prepared.createdAt = now();
-  }
-
-  prepared.updatedAt = now();
-
-  return prepared;
-}
-
-function deleteProduct(id) {
-  const linkedOrders = state.orders.filter(order => {
-    const workflow = order.workflow || {};
-    const archived = workflow.archived || order.status === 'afgerond' || order.status === 'completed';
-
-    return order.productId === id && !archived;
-  });
+function getDeleteProductBlocker(id) {
+  const linkedOrders = state.orders.filter(
+    order => order.productId === id && !isOrderArchived(order)
+  );
 
   if (linkedOrders.length > 0) {
     return {
@@ -502,89 +959,45 @@ function deleteProduct(id) {
     };
   }
 
-  state.products = state.products.filter(product => product.id !== id);
-  writeLocalArray(KEYS.products, state.products);
+  return null;
+}
 
-  if (state.supabase) {
-    queueRemoteTask(() => deleteProductRemote(id), 'Product verwijderen');
+function deleteProduct(id) {
+  const blocker = getDeleteProductBlocker(id);
+
+  if (blocker) {
+    return blocker;
   }
+
+  deleteRecord('products', id, 'Product verwijderen');
 
   return { success: true };
 }
 
 async function deleteProductAsync(id) {
-  const result = deleteProduct(id);
+  const blocker = getDeleteProductBlocker(id);
 
-  if (result.error) {
-    return result;
+  if (blocker) {
+    return blocker;
   }
 
-  if (state.supabase) {
-    await deleteProductRemote(id);
-  }
+  await deleteRecordAsync('products', id, 'Product verwijderen');
 
-  return result;
+  return { success: true };
 }
 
-function getProductById(id) {
-  return state.products.find(product => product.id === id) || null;
+function saveAllProducts(products) {
+  (Array.isArray(products) ? products : []).forEach(product => saveProduct(product));
 }
 
-async function refreshProducts() {
-  if (!state.supabase) {
-    loadLocalCache();
-    return state.products;
+async function saveAllProductsAsync(products) {
+  const list = Array.isArray(products) ? products : [];
+
+  for (const product of list) {
+    await saveProductAsync(product);
   }
 
-  state.products = await fetchRemoteProducts();
-  writeLocalArray(KEYS.products, state.products);
-
-  return state.products;
-}
-
-async function persistProductRemote(product) {
-  if (!state.supabase) {
-    return;
-  }
-
-  const { error } = await state.supabase
-    .from(DB_TABLES.products)
-    .upsert(productToRow(product), { onConflict: 'id' });
-
-  if (error) {
-    throw error;
-  }
-}
-
-async function persistAllProductsRemote(products) {
-  if (!state.supabase || !products.length) {
-    return;
-  }
-
-  const rows = products.map(productToRow);
-
-  const { error } = await state.supabase
-    .from(DB_TABLES.products)
-    .upsert(rows, { onConflict: 'id' });
-
-  if (error) {
-    throw error;
-  }
-}
-
-async function deleteProductRemote(id) {
-  if (!state.supabase) {
-    return;
-  }
-
-  const { error } = await state.supabase
-    .from(DB_TABLES.products)
-    .delete()
-    .eq('id', id);
-
-  if (error) {
-    throw error;
-  }
+  return getProducts();
 }
 
 // ─── CANVAS DIMENSIONS ──────────────────────────────────────────────────────
@@ -593,6 +1006,17 @@ function calcCanvasDimensions(widthMm, heightMm) {
   const DPI = 300;
   const MM_PER_INCH = 25.4;
   const MAX_DISPLAY = 700;
+
+  if (!(Number(widthMm) > 0 && Number(heightMm) > 0)) {
+    console.warn('calcCanvasDimensions: breedte en hoogte moeten groter dan 0 zijn.', { widthMm, heightMm });
+
+    return {
+      width_px: 0,
+      height_px: 0,
+      canvas_display_width: 0,
+      canvas_display_height: 0,
+    };
+  }
 
   const widthPx = Math.round((widthMm / MM_PER_INCH) * DPI);
   const heightPx = Math.round((heightMm / MM_PER_INCH) * DPI);
@@ -787,10 +1211,17 @@ function seedDemoData() {
   saveAllOrders(orders);
 }
 
+
 // ─── EXPORT ─────────────────────────────────────────────────────────────────
 
 window.DS = {
   init,
+  reload,
+  refresh,
+  startAutoRefresh,
+  stopAutoRefresh,
+  isRemoteAvailable,
+  isOnline,
 
   getOrders,
   saveAllOrders,

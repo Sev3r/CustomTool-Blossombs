@@ -77,11 +77,7 @@ async function generateOffertePDF(order, product, pricingInput = null) {
     doc.setTextColor(42, 42, 34);
 
     customerRows.forEach(([label, value]) => {
-        doc.setFont('helvetica', 'bold');
-        doc.text(`${label}:`, margin, y);
-        doc.setFont('helvetica', 'normal');
-        doc.text(String(value || '—'), margin + 30, y);
-        y += 6;
+        y = drawPdfRow(doc, label, value, margin, 30, contentWidth, y);
     });
 
     y += 6;
@@ -113,11 +109,7 @@ async function generateOffertePDF(order, product, pricingInput = null) {
     doc.setTextColor(42, 42, 34);
 
     productRows.forEach(([label, value]) => {
-        doc.setFont('helvetica', 'bold');
-        doc.text(`${label}:`, margin, y);
-        doc.setFont('helvetica', 'normal');
-        doc.text(String(value || '—'), margin + 50, y);
-        y += 6;
+        y = drawPdfRow(doc, label, value, margin, 50, contentWidth, y);
     });
 
     y += 6;
@@ -170,6 +162,24 @@ async function generateOffertePDF(order, product, pricingInput = null) {
     doc.text('Deze offerte is onder voorbehoud van definitieve bevestiging.', pageWidth / 2, 293, { align: 'center' });
 
     doc.save(`blossombs-offerte-${order.orderNumber || 'concept'}.pdf`);
+}
+
+/**
+ * Tekent een label + waarde. Lange waarden (bijv. adressen) lopen door
+ * op de volgende regel in plaats van van de pagina af.
+ * Geeft de nieuwe y-positie terug.
+ */
+function drawPdfRow(doc, label, value, x, labelWidth, contentWidth, y) {
+    const lineHeight = 5;
+    const valueWidth = contentWidth - labelWidth;
+    const lines = doc.splitTextToSize(String(value || '—'), valueWidth);
+
+    doc.setFont('helvetica', 'bold');
+    doc.text(`${label}:`, x, y);
+    doc.setFont('helvetica', 'normal');
+    doc.text(lines, x + labelWidth, y);
+
+    return y + 6 + (lines.length - 1) * lineHeight;
 }
 
 function formatPdfEuro(value) {

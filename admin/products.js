@@ -98,7 +98,7 @@ function renderProductGrid() {
 
           ${product.imageProduct ? `
             <div class="file-preview-box" style="margin-bottom:12px">
-              <img src="${product.imageProduct}" alt="${escHtml(product.name)}">
+              <img src="${escHtml(product.imageProduct)}" alt="${escHtml(product.name)}">
             </div>
           ` : ''}
 
@@ -122,11 +122,15 @@ function toggleProductActive(id) {
     return;
   }
 
-  product.active = product.active === false;
-  DS.saveProduct(product);
+  // Nieuwe kopie i.p.v. het bestaande object aanpassen: zo kan een mislukte
+  // opslag netjes worden teruggedraaid.
+  const savedProduct = DS.saveProduct({
+    ...product,
+    active: product.active === false,
+  });
 
   renderProductGrid();
-  AdminUI.showToast(product.active ? 'Product geactiveerd' : 'Product gedeactiveerd');
+  AdminUI.showToast(savedProduct.active ? 'Product geactiveerd' : 'Product gedeactiveerd');
 }
 
 async function deleteProductById(id) {
@@ -3249,7 +3253,7 @@ function renderStoredFile(file, fallbackLabel = 'Bestand opgeslagen') {
   if (file.type?.startsWith('image/')) {
     return `
       <div class="file-preview-box">
-        <img src="${file.dataURL}" alt="${escHtml(file.name || fallbackLabel)}">
+        <img src="${escHtml(file.dataURL)}" alt="${escHtml(file.name || fallbackLabel)}">
       </div>
       <span class="form-hint">${escHtml(file.name || fallbackLabel)}</span>
     `;
@@ -3274,27 +3278,10 @@ function slugify(value) {
     .replace(/^-+|-+$/g, '');
 }
 
-function formatEuro(value) {
-  if (value === null || value === undefined || Number.isNaN(Number(value))) {
-    return '—';
-  }
-
-  return `€ ${Number(value).toFixed(2).replace('.', ',')}`;
-}
-
 function formatMm(value) {
   if (value === null || value === undefined || Number.isNaN(Number(value))) {
     return '—';
   }
 
   return Number(value).toFixed(1).replace('.0', '').replace('.', ',');
-}
-
-function escHtml(value) {
-  return String(value || '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/\"/g, '&quot;')
-    .replace(/'/g, '&#039;');
 }

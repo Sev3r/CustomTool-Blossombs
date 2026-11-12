@@ -2557,3 +2557,31 @@ input[type="number"] {
     width: 100%;
   }
 }
+
+/* ─── SYNC-BANNER ─────────────────────────────────────────────────────────── */
+
+.sync-banner {
+  position: sticky;
+  top: var(--topbar-h);
+  z-index: 99;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 10px 28px;
+  border-bottom: 1px solid #f0c5bb;
+  background: var(--danger-light);
+  color: var(--danger);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.sync-banner.hidden {
+  display: none;
+}
+
+.sync-banner .btn[disabled] {
+  opacity: 0.6;
+  cursor: wait;
+}

@@ -505,7 +505,7 @@ function renderDesignPage() {
             ${uploadedDataURL && uploadedDataURL.startsWith('data:image')
               ? `
                 <img
-                  src="${uploadedDataURL}"
+                  src="${escHtml(uploadedDataURL)}"
                   alt="Preview van het geüploade bestand"
                 >
               `
@@ -10590,15 +10590,6 @@ async function clearUpload() {
   }
 
   renderDesignPage();
-}
-
-function escHtml(value) {
-  return String(value || '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;');
 }
 
 window.clearUpload =
