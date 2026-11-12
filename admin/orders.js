@@ -4251,9 +4251,8 @@ function viewOrderFiles(
     'display:flex;flex-direction:column;gap:20px';
 
   if (
-    order.designDataURL &&
-    order.designDataURL.startsWith(
-      'data:image'
+    isImageFileRef(
+      order.designDataURL
     )
   ) {
     body.innerHTML += `
@@ -4499,8 +4498,15 @@ function downloadDataURL(
       'a'
     );
 
+  // Werkt voor ingebakken bestanden én Storage-links.
   link.href =
-    dataURL;
+    getFileDownloadHref(
+      dataURL,
+      fileName
+    );
+
+  link.rel =
+    'noopener';
 
   link.download =
     fileName;
@@ -5747,15 +5753,62 @@ function bindManualOrderUpload() {
   );
 }
 
+// Bestanden kunnen een ingebakken "data:..."-tekst zijn (oud / nog niet opgeslagen)
+// of een Supabase Storage-link (nieuw). Deze helpers ondersteunen beide.
+
+function isImageFileRef(
+  ref
+) {
+  return typeof FileStorage !==
+    'undefined'
+    ? FileStorage.isImageRef(
+      ref
+    )
+    : Boolean(
+      ref &&
+      String(ref).startsWith(
+        'data:image'
+      )
+    );
+}
+
+function isPdfFileRef(
+  ref
+) {
+  return typeof FileStorage !==
+    'undefined'
+    ? FileStorage.isPdfRef(
+      ref
+    )
+    : Boolean(
+      ref &&
+      String(ref).startsWith(
+        'data:application/pdf'
+      )
+    );
+}
+
+function getFileDownloadHref(
+  ref,
+  fileName
+) {
+  return typeof FileStorage !==
+    'undefined'
+    ? FileStorage.getDownloadHref(
+      ref,
+      fileName
+    )
+    : ref;
+}
+
 function getOrderPdfDataURL(
   order
 ) {
   return (
     order.designPdfDataURL ||
     (
-      order.designDataURL &&
-      order.designDataURL.startsWith(
-        'data:application/pdf'
+      isPdfFileRef(
+        order.designDataURL
       )
         ? order.designDataURL
         : ''
@@ -5998,7 +6051,9 @@ function formatWensen(
       ? `
         <div>
           <strong>Referentie:</strong>
-          ${escHtml(wensen.refFileName)}
+          ${wensen.refDataURL
+            ? `<a href="${escHtml(getFileDownloadHref(wensen.refDataURL, wensen.refFileName))}" download="${escHtml(wensen.refFileName)}" rel="noopener" style="color:var(--accent-dark)">${escHtml(wensen.refFileName)}</a>`
+            : escHtml(wensen.refFileName)}
         </div>
       `
       : '',

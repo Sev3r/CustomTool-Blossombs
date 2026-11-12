@@ -16,6 +16,12 @@
  *   wordt geladen en er gaat een 'ds:save-error' (type 'conflict') uit.
  * - startAutoRefresh() haalt periodiek alleen gewijzigde records op.
  *
+ * Bestanden:
+ * - Vóór het opslaan van een ORDER worden alle ingebakken bestanden ("data:...")
+ *   naar Supabase Storage geüpload en vervangen door een link (FileStorage).
+ *   Producten blijven voorlopig ongewijzigd.
+ * - migrateOrderFiles() verplaatst de bestanden van bestaande orders.
+ *
  * API:
  * - saveOrder/saveProduct/delete* (sync): passen het scherm direct aan en
  *   slaan daarna op. Mislukt het opslaan, dan wordt de wijziging teruggedraaid.
@@ -699,12 +705,40 @@ function resolveExpectedVersion(key, version) {
 }
 
 /**
+ * Uploadt ingebakken bestanden van een order naar Storage.
+ * Geeft het record terug met links in plaats van bestandstekst.
+ */
+async function externalizeFiles(kind, record) {
+  if (
+    kind !== 'orders' ||
+    typeof FileStorage === 'undefined' ||
+    !FileStorage.containsInlineFiles(record)
+  ) {
+    return record;
+  }
+
+  const { _version, ...data } = record;
+
+  const { value } = await FileStorage.externalize(
+    state.supabase,
+    data,
+    `orders/${record.id}`
+  );
+
+  return {
+    ...value,
+    _version,
+  };
+}
+
+/**
  * Nieuw record (geen versie): upsert.
  * Bestaand record: update ALLEEN als de versie in Supabase nog klopt.
- * Geeft de nieuwe versie terug.
+ * Geeft { version, record } terug; record bevat Storage-links i.p.v. bestanden.
  */
-async function persistRecord(kind, record, expectedVersion, { returnVersion = true } = {}) {
+async function persistRecord(kind, inputRecord, expectedVersion, { returnVersion = true } = {}) {
   const table = KINDS[kind].table;
+  const record = await externalizeFiles(kind, inputRecord);
   const updatedAt = now();
   const row = toRow(kind, record, updatedAt);
 
@@ -720,7 +754,7 @@ async function persistRecord(kind, record, expectedVersion, { returnVersion = tr
         throw error;
       }
 
-      return updatedAt;
+      return { version: updatedAt, record };
     }
 
     const { data, error } = await query.select('updated_at');
@@ -729,7 +763,7 @@ async function persistRecord(kind, record, expectedVersion, { returnVersion = tr
       throw error;
     }
 
-    return data?.[0]?.updated_at || updatedAt;
+    return { version: data?.[0]?.updated_at || updatedAt, record };
   }
 
   const { data, error } = await state.supabase
@@ -747,7 +781,7 @@ async function persistRecord(kind, record, expectedVersion, { returnVersion = tr
     throw conflictError(kind, record.id);
   }
 
-  return data[0].updated_at;
+  return { version: data[0].updated_at, record };
 }
 
 async function deleteRemote(kind, id, expectedVersion) {
@@ -883,15 +917,26 @@ function saveRecord(kind, record, label) {
 
   queueWrite(kind, saved.id, async () => {
     const expected = resolveExpectedVersion(key, saved._version || null);
-    const newVersion = await persistRecord(kind, saved, expected);
+    const result = await persistRecord(kind, saved, expected);
 
-    recordOwnVersion(key, expected, newVersion);
-    saved._version = newVersion;
-    setConfirmed(kind, saved);
+    recordOwnVersion(key, expected, result.version);
+    saved._version = result.version;
 
-    // Was er intussen teruggedraaid door een eerdere mislukte poging, toon dan alsnog deze versie.
-    if (getLocal(kind, saved.id) !== saved && (state.pendingWrites[key] || 0) <= 1) {
-      putLocal(kind, saved);
+    const confirmed = {
+      ...result.record,
+      _version: result.version,
+    };
+
+    setConfirmed(kind, confirmed);
+
+    const current = getLocal(kind, saved.id);
+
+    if (current === saved) {
+      // Zelfde inhoud, maar nu met Storage-links in plaats van bestanden.
+      putLocal(kind, confirmed);
+    } else if ((state.pendingWrites[key] || 0) <= 1) {
+      // Was er intussen teruggedraaid door een eerdere mislukte poging: toon alsnog deze versie.
+      putLocal(kind, confirmed);
       emit('ds:data-changed', { source: 'remote', kinds: [kind] });
     }
   }).catch(error => handleWriteFailure(kind, saved.id, error, label));
@@ -910,14 +955,19 @@ async function saveRecordAsync(kind, record, label, { returnVersion = true } = {
 
   const saved = prepareForSave(kind, record);
   const key = recordKey(kind, saved.id);
+  let confirmed = saved;
 
   try {
     await queueWrite(kind, saved.id, async () => {
       const expected = resolveExpectedVersion(key, saved._version || null);
-      const newVersion = await persistRecord(kind, saved, expected, { returnVersion });
+      const result = await persistRecord(kind, saved, expected, { returnVersion });
 
-      recordOwnVersion(key, expected, newVersion);
-      saved._version = newVersion;
+      recordOwnVersion(key, expected, result.version);
+
+      confirmed = {
+        ...result.record,
+        _version: result.version,
+      };
     });
   } catch (error) {
     if (error?.code === 'DS_CONFLICT') {
@@ -927,10 +977,10 @@ async function saveRecordAsync(kind, record, label, { returnVersion = true } = {
     throw error;
   }
 
-  putLocal(kind, saved);
-  setConfirmed(kind, saved);
+  putLocal(kind, confirmed);
+  setConfirmed(kind, confirmed);
 
-  return saved;
+  return confirmed;
 }
 
 function deleteRecord(kind, id, label) {
@@ -976,6 +1026,80 @@ async function deleteRecordAsync(kind, id, label) {
 
   removeLocal(kind, id);
   clearConfirmed(kind, id);
+}
+
+// ─── MIGRATIE: BESTANDEN NAAR STORAGE ──────────────────────────────────────
+
+/**
+ * Verplaatst bestanden van bestaande orders naar Storage, één order tegelijk.
+ * Orders zonder ingebakken bestanden worden overgeslagen.
+ * onProgress({ done, total, migrated, failed })
+ * Geeft { total, migrated, skipped, failed: [ids] } terug.
+ */
+async function migrateOrderFiles(onProgress = () => {}) {
+  if (!state.supabase) {
+    throw new Error('Geen verbinding met de database.');
+  }
+
+  const versions = await fetchVersions('orders');
+  const ids = versions.map(row => row.id);
+  const result = {
+    total: ids.length,
+    migrated: 0,
+    skipped: 0,
+    failed: [],
+  };
+
+  for (let index = 0; index < ids.length; index += 1) {
+    const id = ids[index];
+    const key = recordKey('orders', id);
+
+    try {
+      const [order] = await fetchRowsQuery('orders', [id]).then(rows =>
+        rows.map(row => fromRow('orders', row))
+      );
+
+      if (!order || !FileStorage.containsInlineFiles(order)) {
+        result.skipped += 1;
+      } else {
+        await queueWrite('orders', id, async () => {
+          const expected = resolveExpectedVersion(key, order._version || null);
+          // Bewust zonder prepareForSave: updatedAt van de order blijft gelijk.
+          const persisted = await persistRecord('orders', order, expected);
+
+          recordOwnVersion(key, expected, persisted.version);
+
+          const confirmed = {
+            ...persisted.record,
+            _version: persisted.version,
+          };
+
+          putLocal('orders', confirmed);
+          setConfirmed('orders', confirmed);
+          state.unloadable.orders.delete(id);
+        });
+
+        result.migrated += 1;
+      }
+    } catch (error) {
+      console.warn(`Bestanden van order ${id} verplaatsen mislukt.`, error);
+      result.failed.push(id);
+    }
+
+    onProgress({
+      done: index + 1,
+      total: ids.length,
+      migrated: result.migrated,
+      failed: result.failed.length,
+    });
+  }
+
+  emit('ds:data-changed', {
+    source: 'reload',
+    kinds: ['orders'],
+  });
+
+  return result;
 }
 
 // ─── ORDERS ─────────────────────────────────────────────────────────────────
@@ -1330,6 +1454,8 @@ window.DS = {
   deleteProductAsync,
   getProductById,
   refreshProducts,
+
+  migrateOrderFiles,
 
   calcCanvasDimensions,
   seedDemoData,

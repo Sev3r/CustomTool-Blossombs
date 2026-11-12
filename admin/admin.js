@@ -649,6 +649,85 @@ async function reconnect() {
   }
 }
 
+// ─── MIGRATIE BESTANDEN ──────────────────────────────────────────────────────
+
+let migrationRunning = false;
+
+async function runFileMigration() {
+  closeSettingsMenu();
+
+  if (migrationRunning) {
+    return;
+  }
+
+  const confirmed =
+    await confirmDialog(
+      'Alle ontwerpen en documenten in bestaande orders worden naar Supabase Storage verplaatst. Dit kan een paar minuten duren; laat dit tabblad open tot je de eindmelding ziet.',
+      {
+        title:
+          'Bestanden verplaatsen',
+
+        confirmLabel:
+          'Start',
+
+        confirmClass:
+          'btn-primary',
+      }
+    );
+
+  if (!confirmed) {
+    return;
+  }
+
+  migrationRunning = true;
+
+  try {
+    const result =
+      await DS.migrateOrderFiles(
+        progress => {
+          showToast(
+            `Bestanden verplaatsen: order ${progress.done} van ${progress.total}...`,
+            'success',
+            60000
+          );
+        }
+      );
+
+    const failedText =
+      result.failed.length
+        ? ` ${result.failed.length} mislukt (zie console).`
+        : '';
+
+    if (result.failed.length) {
+      console.warn(
+        'Bestanden verplaatsen mislukt voor:',
+        result.failed
+      );
+    }
+
+    showToast(
+      `Klaar: ${result.migrated} order(s) verplaatst, ${result.skipped} hadden niets te verplaatsen.${failedText}`,
+      result.failed.length
+        ? 'error'
+        : 'success',
+      10000
+    );
+  } catch (error) {
+    console.warn(
+      'Bestanden verplaatsen mislukt.',
+      error
+    );
+
+    showToast(
+      'Bestanden verplaatsen mislukt. Controleer je verbinding en probeer het opnieuw.',
+      'error',
+      8000
+    );
+  } finally {
+    migrationRunning = false;
+  }
+}
+
 // ─── INIT ─────────────────────────────────────────────────────────────────────
 
 window.addEventListener(
@@ -819,6 +898,15 @@ document.addEventListener(
         }
       }
     );
+
+    document
+      .getElementById(
+        'btn-migrate-files'
+      )
+      ?.addEventListener(
+        'click',
+        runFileMigration
+      );
 
     if (resetButton) {
       resetButton.addEventListener(
