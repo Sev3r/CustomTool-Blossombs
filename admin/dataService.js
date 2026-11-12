@@ -26,6 +26,7 @@
  * - 'ds:connection'   { online, error }
  * - 'ds:data-changed' { source: 'remote' | 'reload' | 'revert' | 'conflict', kinds }
  * - 'ds:save-error'   { kind, id, type: 'conflict' | 'deleted' | 'failed', label, error }
+ * - 'ds:load-warning' { kind, ids } — records die (ook los) niet geladen konden worden
  *
  * Let op:
  * - Deze implementatie gebruikt de Supabase anon key.
@@ -39,7 +40,11 @@ const ENABLE_DEMO_DATA = false;
 
 const AUTO_REFRESH_INTERVAL_MS = 20000;
 const FOCUS_REFRESH_MIN_GAP_MS = 5000;
-const FETCH_CHUNK_SIZE = 100;
+// Rijen worden in kleine porties opgehaald: orders en producten bevatten nog
+// zware bestanden (base64), en één groot verzoek loopt dan tegen de
+// tijdslimiet van Supabase aan (500 / statement timeout).
+const FETCH_CHUNK_SIZE = 10;
+const FETCH_CONCURRENCY = 3;
 
 // Oude localStorage-sleutels uit eerdere versies. Worden bij het laden opgeruimd.
 const LEGACY_LOCAL_KEYS = [
@@ -73,6 +78,10 @@ const state = {
   writeChains: {},
   pendingWrites: {},
   ownVersions: {},
+  unloadable: {
+    orders: new Set(),
+    products: new Set(),
+  },
   autoRefreshTimer: null,
   lastRefreshAt: 0,
   refreshing: null,
@@ -332,52 +341,129 @@ function isPending(kind, id) {
 
 // ─── REMOTE: LEZEN ──────────────────────────────────────────────────────────
 
-async function fetchAll(kind) {
+/**
+ * Lichte lijst: alleen id, versie en aanmaakdatum. Snel, ook bij zware rijen.
+ */
+async function fetchVersions(kind) {
   const { data, error } = await state.supabase
     .from(KINDS[kind].table)
-    .select('*')
+    .select('id, updated_at, created_at')
     .order('created_at', { ascending: kind === 'products' });
 
   if (error) {
     throw error;
   }
 
-  return (data || []).map(row => fromRow(kind, row));
+  return data || [];
 }
 
-async function fetchByIds(kind, ids) {
-  const results = [];
-
-  for (let index = 0; index < ids.length; index += FETCH_CHUNK_SIZE) {
-    const chunk = ids.slice(index, index + FETCH_CHUNK_SIZE);
-
-    const { data, error } = await state.supabase
-      .from(KINDS[kind].table)
-      .select('*')
-      .in('id', chunk);
-
-    if (error) {
-      throw error;
-    }
-
-    (data || []).forEach(row => {
-      results.push(fromRow(kind, row));
-    });
-  }
-
-  return results;
-}
-
-async function fetchVersions(kind) {
+async function fetchRowsQuery(kind, ids) {
   const { data, error } = await state.supabase
     .from(KINDS[kind].table)
-    .select('id, updated_at');
+    .select('*')
+    .in('id', ids);
 
   if (error) {
     throw error;
   }
 
   return data || [];
+}
+
+/**
+ * Haalt een portie op. Mislukt dat, dan wordt de portie gehalveerd en
+ * opnieuw geprobeerd, tot op één record. Records die ook los niet lukken,
+ * komen in 'failedIds'. Gooit alleen als ALLES mislukt (bijv. geen verbinding).
+ */
+async function fetchChunkAdaptive(kind, ids, failedIds) {
+  try {
+    return await fetchRowsQuery(kind, ids);
+  } catch (error) {
+    if (ids.length === 1) {
+      console.warn(`${kind} ${ids[0]} kon niet worden geladen.`, error);
+      failedIds.push(ids[0]);
+      return [];
+    }
+
+    const middle = Math.ceil(ids.length / 2);
+    const left = await fetchChunkAdaptive(kind, ids.slice(0, middle), failedIds);
+    const right = await fetchChunkAdaptive(kind, ids.slice(middle), failedIds);
+
+    return [...left, ...right];
+  }
+}
+
+/**
+ * Volledige records ophalen in kleine porties, een paar tegelijk.
+ * Geeft { items, failedIds } terug, in de volgorde van 'ids'.
+ */
+async function fetchByIdsDetailed(kind, ids) {
+  const chunks = [];
+
+  for (let index = 0; index < ids.length; index += FETCH_CHUNK_SIZE) {
+    chunks.push(ids.slice(index, index + FETCH_CHUNK_SIZE));
+  }
+
+  const rowsById = new Map();
+  const failedIds = [];
+  let nextChunk = 0;
+
+  async function worker() {
+    while (nextChunk < chunks.length) {
+      const chunk = chunks[nextChunk];
+
+      nextChunk += 1;
+
+      const rows = await fetchChunkAdaptive(kind, chunk, failedIds);
+
+      rows.forEach(row => rowsById.set(row.id, row));
+    }
+  }
+
+  const workers = [];
+
+  for (let count = 0; count < Math.min(FETCH_CONCURRENCY, chunks.length); count += 1) {
+    workers.push(worker());
+  }
+
+  await Promise.all(workers);
+
+  const items = ids
+    .filter(id => rowsById.has(id))
+    .map(id => fromRow(kind, rowsById.get(id)));
+
+  return {
+    items,
+    failedIds,
+  };
+}
+
+async function fetchByIds(kind, ids) {
+  const { items } = await fetchByIdsDetailed(kind, ids);
+
+  return items;
+}
+
+function reportUnloadable(kind, failedIds) {
+  failedIds.forEach(id => state.unloadable[kind].add(id));
+
+  if (failedIds.length) {
+    emit('ds:load-warning', {
+      kind,
+      ids: failedIds.slice(),
+    });
+  }
+}
+
+async function fetchAll(kind) {
+  const versions = await fetchVersions(kind);
+  const ids = versions.map(row => row.id);
+  const { items, failedIds } = await fetchByIdsDetailed(kind, ids);
+
+  state.unloadable[kind] = new Set();
+  reportUnloadable(kind, failedIds);
+
+  return items;
 }
 
 /**
@@ -440,7 +526,7 @@ async function syncKindFromRemote(kind) {
   const changedIds = [];
 
   remoteVersions.forEach((version, id) => {
-    if (isPending(kind, id)) {
+    if (isPending(kind, id) || state.unloadable[kind].has(id)) {
       return;
     }
 
@@ -460,7 +546,9 @@ async function syncKindFromRemote(kind) {
     .map(item => item.id);
 
   if (changedIds.length) {
-    const freshItems = await fetchByIds(kind, changedIds);
+    const { items: freshItems, failedIds } = await fetchByIdsDetailed(kind, changedIds);
+
+    reportUnloadable(kind, failedIds);
 
     freshItems.forEach(item => {
       if (!isPending(kind, item.id)) {

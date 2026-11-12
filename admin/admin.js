@@ -666,6 +666,35 @@ window.addEventListener(
   rerenderCurrentPage
 );
 
+window.addEventListener(
+  'ds:load-warning',
+  event => {
+    const detail =
+      event.detail ||
+      {};
+
+    const count =
+      (detail.ids || []).length;
+
+    const noun =
+      detail.kind === 'products'
+        ? (count === 1 ? 'product' : 'producten')
+        : (count === 1 ? 'order' : 'orders');
+
+    console.warn(
+      'Niet geladen:',
+      detail.kind,
+      detail.ids
+    );
+
+    showToast(
+      `${count} ${noun} kon${count === 1 ? '' : 'den'} niet worden geladen (waarschijnlijk te groot). Details staan in de console.`,
+      'error',
+      9000
+    );
+  }
+);
+
 document.addEventListener(
   'DOMContentLoaded',
   async () => {
