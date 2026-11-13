@@ -1627,6 +1627,11 @@ function buildOrder(
       design?.rillinesPdfDataURL ||
       '',
 
+    // Klant heeft bevestigd dat afbeeldingen onder 300 DPI minder scherp kunnen worden.
+    imageQualityAcknowledgement:
+      design?.imageQualityAcknowledgement ||
+      null,
+
     wensen:
       wensen ||
       null,
@@ -1828,7 +1833,7 @@ function buildOrderPrintSpec(
     minDpi:
       getPositiveNumber(
         spec.minDpi,
-        150
+        250
       ),
 
     personalisationTypeId:
@@ -1971,7 +1976,7 @@ function getNormalizedPrintSpec(
 
   return {
     dpi: 300,
-    minDpi: 150,
+    minDpi: 250,
     finishWidthMm,
     finishHeightMm,
     bleedMm,

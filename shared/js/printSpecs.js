@@ -6,7 +6,7 @@
 
 const PrintSpecs = (() => {
     const DPI = 300;
-    const MIN_DPI = 150;
+    const MIN_DPI = 250;
     const DEFAULT_BLEED_MM = 3;
     const DEFAULT_SAFE_MARGIN_MM = 3;
     const MM_PER_INCH = 25.4;
@@ -226,13 +226,13 @@ const PrintSpecs = (() => {
             dimensions.height >= spec.requiredImageHeightPx300;
 
         if (!meets150Dpi) {
-            warnings.push(`De afbeelding lijkt lager dan 150 DPI voor dit formaat. Gebruik bij voorkeur minimaal ${spec.requiredImageWidthPx300} × ${spec.requiredImageHeightPx300}px.`);
+            errors.push(`De afbeelding is lager dan ${MIN_DPI} DPI voor dit formaat en kan niet worden gebruikt. Aanbevolen: ${spec.requiredImageWidthPx300} × ${spec.requiredImageHeightPx300}px.`);
         } else if (!meets300Dpi) {
             warnings.push(`De afbeelding is bruikbaar, maar lager dan de aanbevolen 300 DPI. Aanbevolen formaat: ${spec.requiredImageWidthPx300} × ${spec.requiredImageHeightPx300}px.`);
         }
 
         return {
-            valid: true,
+            valid: errors.length === 0,
             errors,
             warnings,
             dimensions,

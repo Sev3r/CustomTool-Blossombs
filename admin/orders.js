@@ -3960,6 +3960,21 @@ function renderOrderFilesOverview(
         </span>
       </div>
 
+      ${order.imageQualityAcknowledgement ? `
+        <div
+          class="overview-item overview-wide"
+        >
+          <span class="overview-label">
+            Beeldkwaliteit
+          </span>
+          <span class="overview-value" style="color:#8A681E">
+            Klant heeft bevestigd dat deze afbeelding(en) onder ${escHtml(order.imageQualityAcknowledgement.recommendedDpi || 300)} DPI minder scherp kunnen worden:
+            ${(order.imageQualityAcknowledgement.images || []).map(image => `${escHtml(image.fileName)} (${escHtml(image.dpi)} DPI)`).join(', ')}
+            · ${escHtml(formatDate(order.imageQualityAcknowledgement.acknowledgedAt))}
+          </span>
+        </div>
+      ` : ''}
+
       <div
         class="overview-item overview-wide"
       >

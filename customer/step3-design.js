@@ -22,6 +22,13 @@ let fabricInitToken = 0;
 let fabricInitTimer = null;
 let canvasZoom = 1;
 
+// Basis-pixelverhouding van het scherm. Bij inzoomen tekent Fabric op een
+// hogere resolutie (fabric.devicePixelRatio), zodat het beeld scherp blijft.
+const BASE_DEVICE_PIXEL_RATIO =
+  window.devicePixelRatio ||
+  1;
+const CANVAS_MAX_BACKSTORE_SIDE_PX = 4096;
+
 const CANVAS_ZOOM_MIN = 0.65;
 const CANVAS_ZOOM_MAX = 2.5;
 const CANVAS_ZOOM_STEP = 0.1;
@@ -44,8 +51,13 @@ let designViewResizeObserver = null;
 let designViewSyncFrame = null;
 let designViewCanonicalDepth = 0;
 
+// Onder IMAGE_DPI_MINIMUM kan de klant niet verder.
+// Tussen minimum en aanbevolen: waarschuwing + bevestiging bij "Verder".
 const IMAGE_DPI_RECOMMENDED = 300;
-const IMAGE_DPI_MINIMUM = 150;
+const IMAGE_DPI_MINIMUM = 250;
+
+// Bovengrens voor de export, zodat zeer grote formaten de browser niet laten vastlopen.
+const PRINT_EXPORT_MAX_SIDE_PX = 9000;
 
 const CENTER_SNAP_THRESHOLD_PX = 6;
 const CENTER_GUIDE_COLOR = '#5C7A5C';
@@ -203,7 +215,21 @@ function renderDesignPage() {
             </button>
           </div>
 
-          <div class="side-section">
+          <div class="side-section side-hint" data-context="none">
+            <p>
+              Selecteer een tekst om lettertype, grootte en kleur aan te passen.
+            </p>
+          </div>
+
+          <div class="side-section side-hint" data-context="image" hidden>
+            <div class="side-label">Afbeelding</div>
+            <p>
+              Sleep de hoeken om de afbeelding te schalen.
+              Klik naast het ontwerp om de selectie op te heffen.
+            </p>
+          </div>
+
+          <div class="side-section" data-context="text" hidden>
             <label
               class="side-label"
               for="font-select"
@@ -223,7 +249,7 @@ function renderDesignPage() {
             </select>
           </div>
 
-          <div class="side-section">
+          <div class="side-section" data-context="text" hidden>
             <label
               class="side-label"
               for="font-size"
@@ -265,7 +291,7 @@ function renderDesignPage() {
             </select>
           </div>
 
-          <div class="side-section">
+          <div class="side-section" data-context="text shape multi" hidden>
             <div class="side-label">Elementkleur</div>
 
             <div
@@ -288,7 +314,7 @@ function renderDesignPage() {
           </div>
 
           ${activePersonalisation?.allowBackgroundColor ? `
-            <div class="side-section">
+            <div class="side-section" data-context="none">
               <div class="side-label">
                 Achtergrondkleur
               </div>
@@ -1023,9 +1049,13 @@ function bindDesignViewControls(canvas) {
     if (canvasWrap) {
       designViewResizeObserver =
         new ResizeObserver(() => {
-          queueActiveDesignView(
-            canvas
-          );
+          if (designViewContext?.config?.enabled) {
+            queueActiveDesignView(
+              canvas
+            );
+          } else {
+            applyCanvasZoom();
+          }
         });
 
       designViewResizeObserver.observe(
@@ -3249,6 +3279,263 @@ function bindUploadZone(
   );
 }
 
+// ─── BEELDKWALITEIT BIJ "VERDER" ───────────────────────────────────────────
+
+/**
+ * Controleert de resolutie van alle afbeeldingen in het ontwerp.
+ * Geeft { blocking: [...], warnings: [...] } terug.
+ */
+function getDesignResolutionIssues(
+  canvas,
+  activePers,
+  product
+) {
+  const issues =
+    withCanonicalDesignCanvas(
+      canvas,
+      () =>
+        getFabricImageDpiWarnings(
+          canvas,
+          activePers,
+          product
+        ),
+      {
+        hideGuides:
+          false,
+      }
+    ) ||
+    [];
+
+  return {
+    blocking:
+      issues.filter(
+        issue =>
+          issue.level === 'error'
+      ),
+    warnings:
+      issues.filter(
+        issue =>
+          issue.level === 'warning'
+      ),
+  };
+}
+
+function getUploadResolutionIssues(
+  uploadCheck
+) {
+  const dpi =
+    Math.min(
+      Number(uploadCheck?.estimatedDpiX) || Infinity,
+      Number(uploadCheck?.estimatedDpiY) || Infinity
+    );
+
+  if (
+    !uploadCheck ||
+    !Number.isFinite(dpi)
+  ) {
+    return {
+      blocking: [],
+      warnings: [],
+    };
+  }
+
+  const issue = {
+    fileName:
+      uploadCheck.fileName ||
+      'bestand',
+    dpi,
+    message:
+      uploadCheck.message ||
+      '',
+  };
+
+  return {
+    blocking:
+      dpi < IMAGE_DPI_MINIMUM
+        ? [issue]
+        : [],
+    warnings:
+      dpi >= IMAGE_DPI_MINIMUM &&
+      dpi < IMAGE_DPI_RECOMMENDED
+        ? [issue]
+        : [],
+  };
+}
+
+function formatBlockingResolutionMessage(
+  blocking
+) {
+  const names =
+    blocking
+      .map(issue => `"${issue.fileName}" (${issue.dpi} DPI)`)
+      .join(', ');
+
+  return `De resolutie is te laag voor drukwerk: ${names}. Minimaal ${IMAGE_DPI_MINIMUM} DPI is nodig. Gebruik een groter bestand of maak de afbeelding kleiner in het ontwerp.`;
+}
+
+/**
+ * Pop-up bij afbeeldingen tussen 250 en 300 DPI.
+ * Resolves true bij "Ik begrijp het, ga door", anders false.
+ */
+function showLowResolutionDialog(
+  warnings
+) {
+  return new Promise(resolve => {
+    const previousFocus =
+      document.activeElement;
+
+    const overlay =
+      document.createElement(
+        'div'
+      );
+
+    overlay.className =
+      'flow-dialog-overlay';
+
+    overlay.innerHTML = `
+      <div
+        class="flow-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="flow-dialog-title"
+      >
+        <h2 id="flow-dialog-title">Let op de beeldkwaliteit</h2>
+
+        <p>
+          ${warnings.length === 1 ? 'Deze afbeelding heeft' : 'Deze afbeeldingen hebben'}
+          een resolutie onder de aanbevolen ${IMAGE_DPI_RECOMMENDED} DPI:
+        </p>
+
+        <ul class="flow-dialog-list">
+          ${warnings.map(issue => `
+            <li>
+              <strong>${escHtml(issue.fileName)}</strong>
+              <span>${escHtml(issue.dpi)} DPI</span>
+            </li>
+          `).join('')}
+        </ul>
+
+        <p>
+          Hierdoor kan de afbeelding minder scherp worden afgedrukt.
+          Bent u ervan op de hoogte dat de beeldkwaliteit hierdoor achteruit kan gaan?
+        </p>
+
+        <div class="flow-dialog-actions">
+          <button class="btn btn-outline" type="button" data-dialog-cancel>
+            Terug naar ontwerp
+          </button>
+
+          <button class="btn btn-green" type="button" data-dialog-confirm>
+            Ik begrijp het, ga door
+          </button>
+        </div>
+      </div>
+    `;
+
+    const close = result => {
+      document.removeEventListener(
+        'keydown',
+        onKeydown
+      );
+
+      overlay.remove();
+      previousFocus?.focus?.();
+      resolve(result);
+    };
+
+    const onKeydown = event => {
+      if (event.key === 'Escape') {
+        close(false);
+      }
+    };
+
+    overlay
+      .querySelector('[data-dialog-cancel]')
+      .addEventListener('click', () => close(false));
+
+    overlay
+      .querySelector('[data-dialog-confirm]')
+      .addEventListener('click', () => close(true));
+
+    overlay.addEventListener('click', event => {
+      if (event.target === overlay) {
+        close(false);
+      }
+    });
+
+    document.addEventListener(
+      'keydown',
+      onKeydown
+    );
+
+    document.body.appendChild(
+      overlay
+    );
+
+    overlay
+      .querySelector('[data-dialog-cancel]')
+      .focus();
+  });
+}
+
+/**
+ * Blokkeert onder het minimum, vraagt bevestiging onder de aanbevolen DPI.
+ * Geeft { proceed, acknowledgement } terug.
+ */
+async function confirmDesignResolution(
+  issues,
+  showError
+) {
+  if (issues.blocking.length) {
+    showError(
+      formatBlockingResolutionMessage(
+        issues.blocking
+      )
+    );
+
+    return {
+      proceed: false,
+      acknowledgement: null,
+    };
+  }
+
+  if (!issues.warnings.length) {
+    return {
+      proceed: true,
+      acknowledgement: null,
+    };
+  }
+
+  const confirmed =
+    await showLowResolutionDialog(
+      issues.warnings
+    );
+
+  if (!confirmed) {
+    return {
+      proceed: false,
+      acknowledgement: null,
+    };
+  }
+
+  return {
+    proceed: true,
+    acknowledgement: {
+      acknowledgedAt:
+        new Date().toISOString(),
+      recommendedDpi:
+        IMAGE_DPI_RECOMMENDED,
+      images:
+        issues.warnings.map(issue => ({
+          fileName:
+            issue.fileName,
+          dpi:
+            issue.dpi,
+        })),
+    },
+  };
+}
+
 function bindDesignNextButton(
   product,
   activePers,
@@ -3352,11 +3639,24 @@ function bindDesignNextButton(
             showError(
               'Upload eerst een bestand om verder te gaan.'
             );
+            return;
+          }
 
+          const resolution =
+            await confirmDesignResolution(
+              getUploadResolutionIssues(
+                uploadedCheck
+              ),
+              showError
+            );
+
+          if (!resolution.proceed) {
             return;
           }
 
           const designData = {
+            imageQualityAcknowledgement:
+              resolution.acknowledgement,
             dataURL:
               uploadedDataURL,
 
@@ -3418,13 +3718,26 @@ function bindDesignNextButton(
             return;
           }
 
+          const resolution =
+            await confirmDesignResolution(
+              getDesignResolutionIssues(
+                fabricCanvas,
+                activePers,
+                product
+              ),
+              showError
+            );
+
+          if (!resolution.proceed) {
+            return;
+          }
+
           const snapshot =
             snapshotCanvas(
               fabricCanvas,
               product,
               activePers
             );
-
           const prepressWarnings =
             withCanonicalDesignCanvas(
               fabricCanvas,
@@ -3448,6 +3761,8 @@ function bindDesignNextButton(
             null;
 
           const designData = {
+            imageQualityAcknowledgement:
+              resolution.acknowledgement,
             dataURL:
               snapshot.dataURL,
 
@@ -3997,6 +4312,136 @@ function getCanvasZoomBounds(
   };
 }
 
+// ─── CONTEXTUEEL ZIJPANEEL ──────────────────────────────────────────────────
+
+const TEXT_OBJECT_TYPES = [
+  'i-text',
+  'textbox',
+  'text',
+];
+
+function getSelectionContext(canvas) {
+  const object =
+    canvas?.getActiveObject?.();
+
+  if (!object) {
+    return 'none';
+  }
+
+  if (object.type === 'activeSelection') {
+    return 'multi';
+  }
+
+  if (TEXT_OBJECT_TYPES.includes(object.type)) {
+    return 'text';
+  }
+
+  if (object.type === 'image') {
+    return 'image';
+  }
+
+  return 'shape';
+}
+
+/**
+ * Toont alleen de zijpaneel-onderdelen die bij de huidige selectie horen.
+ * Onderdelen met data-context="text shape" zijn zichtbaar bij tekst of vormen, enz.
+ */
+function updateContextualSidebar(canvas = fabricCanvas) {
+  const sidebar =
+    document.getElementById(
+      'sidebar'
+    );
+
+  if (!sidebar) {
+    return;
+  }
+
+  const context =
+    getSelectionContext(
+      canvas
+    );
+
+  sidebar
+    .querySelectorAll('[data-context]')
+    .forEach(section => {
+      const contexts =
+        String(section.dataset.context || '')
+          .split(/\s+/)
+          .filter(Boolean);
+
+      section.hidden =
+        !contexts.includes(
+          context
+        );
+    });
+
+  sidebar.dataset.selection =
+    context;
+}
+
+// ─── SCHERP INZOOMEN ────────────────────────────────────────────────────────
+
+/**
+ * Laat Fabric op een hogere resolutie tekenen naarmate er verder is ingezoomd.
+ * De logische canvasmaat (getWidth/getHeight) blijft gelijk; alleen de
+ * interne pixelbuffer wordt groter. Zo blijft alle overige logica intact.
+ */
+function updateCanvasRenderResolution(
+  canvas,
+  zoom
+) {
+  if (
+    !canvas ||
+    typeof fabric === 'undefined'
+  ) {
+    return;
+  }
+
+  const longestSide =
+    Math.max(
+      canvas.getWidth(),
+      canvas.getHeight()
+    ) ||
+    1;
+
+  const wanted =
+    BASE_DEVICE_PIXEL_RATIO *
+    Math.max(
+      1,
+      zoom || 1
+    );
+
+  const next =
+    Math.max(
+      BASE_DEVICE_PIXEL_RATIO,
+      Math.min(
+        wanted,
+        CANVAS_MAX_BACKSTORE_SIDE_PX /
+        longestSide
+      )
+    );
+
+  if (
+    Math.abs(
+      (fabric.devicePixelRatio || 1) -
+      next
+    ) < 0.01
+  ) {
+    return;
+  }
+
+  fabric.devicePixelRatio =
+    next;
+
+  canvas.setDimensions({
+    width:
+      canvas.getWidth(),
+    height:
+      canvas.getHeight(),
+  });
+}
+
 function applyDesignCanvasDisplayZoom(
   canvas
 ) {
@@ -4030,6 +4475,15 @@ function applyDesignCanvasDisplayZoom(
       )
     );
 
+  updateCanvasRenderResolution(
+    canvas,
+    canvasZoom
+  );
+
+  resetCanvasDisplaySize(
+    canvas
+  );
+
   container.style.transform =
     Math.abs(
       canvasZoom -
@@ -4044,6 +4498,54 @@ function applyDesignCanvasDisplayZoom(
   canvas.calcOffset();
 
   updateCanvasZoomControls();
+}
+
+/**
+ * Zonder productzijden: verklein het canvas visueel als het vak te klein is,
+ * zodat er nooit een deel buiten beeld valt.
+ */
+function fitCanvasToArea(canvas) {
+  const container =
+    canvas?.wrapperEl ||
+    canvas?.lowerCanvasEl?.parentElement;
+
+  const available =
+    getCanvasWrapAvailableSize();
+
+  if (
+    !container ||
+    !available
+  ) {
+    return;
+  }
+
+  const fit =
+    Math.min(
+      1,
+      available.width /
+      Math.max(1, canvas.getWidth()),
+      available.height /
+      Math.max(1, canvas.getHeight())
+    );
+
+  updateCanvasRenderResolution(
+    canvas,
+    1
+  );
+
+  resetCanvasDisplaySize(
+    canvas
+  );
+
+  container.style.transform =
+    fit < 0.999
+      ? `scale(${fit})`
+      : 'none';
+
+  container.style.transformOrigin =
+    'center center';
+
+  canvas.calcOffset();
 }
 
 function applyCanvasZoom() {
@@ -4096,6 +4598,10 @@ function applyCanvasZoom() {
   );
 
   removeDesignViewClip(
+    fabricCanvas
+  );
+
+  fitCanvasToArea(
     fabricCanvas
   );
 
@@ -4435,6 +4941,11 @@ function initFabricTool(
   const clipShape =
     activePers?.clipShape ||
     null;
+
+  if (typeof fabric !== 'undefined') {
+    fabric.devicePixelRatio =
+      BASE_DEVICE_PIXEL_RATIO;
+  }
 
   fabricCanvas =
     new fabric.Canvas(
@@ -6948,6 +7459,9 @@ function bindFabricEvents(
   canvas.on(
     'selection:created',
     () => {
+      updateContextualSidebar(
+        canvas
+      );
       updateFabricStatus();
       updateLayerPanel();
 
@@ -6962,6 +7476,9 @@ function bindFabricEvents(
   canvas.on(
     'selection:updated',
     () => {
+      updateContextualSidebar(
+        canvas
+      );
       updateFabricStatus();
       updateLayerPanel();
 
@@ -6976,6 +7493,9 @@ function bindFabricEvents(
   canvas.on(
     'selection:cleared',
     () => {
+      updateContextualSidebar(
+        canvas
+      );
       removeCenterSnapGuides(
         canvas
       );
@@ -7699,7 +8219,7 @@ function getFabricImageDpiWarning(
       dpi,
 
       message:
-        `Waarschuwing: "${fileName}" lijkt te laag in resolutie voor drukwerk (${dpi} DPI). Gebruik een groter bestand of verklein de afbeelding in het ontwerp.`,
+        `"${fileName}" heeft een te lage resolutie voor drukwerk (${dpi} DPI). Minimaal ${IMAGE_DPI_MINIMUM} DPI is nodig: gebruik een groter bestand of maak de afbeelding kleiner in het ontwerp.`,
     };
   }
 
@@ -8737,7 +9257,10 @@ function fabricSaveHistory() {
 }
 
 function createTechnicalDesignCanvas(
-  canvas = fabricCanvas
+  canvas = fabricCanvas,
+  {
+    multiplier = 1,
+  } = {}
 ) {
   if (!canvas) {
     return null;
@@ -8745,7 +9268,8 @@ function createTechnicalDesignCanvas(
 
   const sourceCanvas =
     captureCanonicalDesignSourceCanvas(
-      canvas
+      canvas,
+      multiplier
     );
 
   return composeTechnicalDesignCanvas(
@@ -8755,10 +9279,24 @@ function createTechnicalDesignCanvas(
   );
 }
 
-function captureCanonicalDesignSourceCanvas(canvas) {
+/**
+ * multiplier > 1: Fabric tekent het ontwerp opnieuw op een groter formaat
+ * (tekst en vormen scherp, afbeeldingen op hun eigen resolutie) in plaats van
+ * het schermbeeld op te blazen. Wordt gebruikt voor het drukbestand.
+ */
+function captureCanonicalDesignSourceCanvas(canvas, multiplier = 1) {
   return withCanonicalDesignCanvas(
     canvas,
     () => {
+      if (
+        multiplier > 1.001 &&
+        typeof canvas.toCanvasElement === 'function'
+      ) {
+        return canvas.toCanvasElement(
+          multiplier
+        );
+      }
+
       const sourceCanvas =
         document.createElement(
           'canvas'
@@ -9162,16 +9700,95 @@ function applyInverseDesignViewTransform(
   return transformedCanvas;
 }
 
+/**
+ * Factor waarmee het canvas opnieuw getekend moet worden om direct
+ * op drukresolutie (300 DPI incl. afloop) uit te komen.
+ */
+function getPrintExportMultiplier(
+  canvas,
+  product,
+  activePers
+) {
+  const spec =
+    designViewContext?.spec ||
+    window.ProductPreview?.getPrintSpec?.(
+      activePers || {},
+      product || {}
+    ) ||
+    null;
+
+  const targetWidthPx =
+    Number(
+      spec?.exportWidthPx ||
+      activePers?.width_px ||
+      product?.width_px ||
+      0
+    );
+
+  const targetHeightPx =
+    Number(
+      spec?.exportHeightPx ||
+      activePers?.height_px ||
+      product?.height_px ||
+      0
+    );
+
+  const canvasWidth =
+    canvas?.getWidth?.() ||
+    0;
+
+  const canvasHeight =
+    canvas?.getHeight?.() ||
+    0;
+
+  if (
+    !targetWidthPx ||
+    !canvasWidth ||
+    !canvasHeight
+  ) {
+    return 1;
+  }
+
+  const multiplier =
+    targetWidthPx /
+    canvasWidth;
+
+  const largestSide =
+    Math.max(
+      canvasWidth * multiplier,
+      canvasHeight * multiplier,
+      targetHeightPx || 0
+    );
+
+  const capped =
+    largestSide > PRINT_EXPORT_MAX_SIDE_PX
+      ? multiplier * PRINT_EXPORT_MAX_SIDE_PX / largestSide
+      : multiplier;
+
+  return Math.max(
+    1,
+    capped
+  );
+}
+
 function snapshotCanvas(
   canvas,
   product,
   activePers
 ) {
+  // Het drukbestand wordt op drukresolutie getekend, niet op schermformaat.
   const technicalCanvas =
     createTechnicalDesignCanvas(
-      canvas
+      canvas,
+      {
+        multiplier:
+          getPrintExportMultiplier(
+            canvas,
+            product,
+            activePers
+          ),
+      }
     );
-
   if (!technicalCanvas) {
     throw new Error(
       'Het technische drukbestand kon niet worden opgebouwd.'
@@ -10290,16 +10907,15 @@ function buildUploadCheck(
 
       if (
         minimumDpi <
-        150
+        IMAGE_DPI_MINIMUM
       ) {
         status =
           'error';
-
         message =
-          `De afbeelding lijkt te laag in resolutie. Advies: minimaal ${requiredWidthPx} × ${requiredHeightPx}px voor 300 DPI.`;
+          `De afbeelding heeft een te lage resolutie (${minimumDpi} DPI). Minimaal ${IMAGE_DPI_MINIMUM} DPI is nodig. Advies: ${requiredWidthPx} × ${requiredHeightPx}px voor 300 DPI.`;
       } else if (
         minimumDpi <
-        300
+        IMAGE_DPI_RECOMMENDED
       ) {
         status =
           'warning';
