@@ -1852,3 +1852,36 @@ body {
     overflow-y: visible;
   }
 }
+
+/* ─── LEGENDA MARGE / AFLOOP ────────────────────────────────────────────── */
+
+.design-guide-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  padding: 6px 12px 8px;
+  border-top: 1px solid var(--color-border-tertiary);
+  background: var(--color-background-primary);
+  color: var(--text-3);
+  font-size: 11px;
+}
+
+.design-guide-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.design-guide-legend-margin::before {
+  content: "";
+  width: 16px;
+  border-top: 2px dashed var(--text-2);
+}
+
+.design-guide-legend-bleed::before {
+  content: "";
+  width: 14px;
+  height: 10px;
+  border-right: 1px solid #C0392B;
+  background: rgba(192, 57, 43, 0.14);
+}

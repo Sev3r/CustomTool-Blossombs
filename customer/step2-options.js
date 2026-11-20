@@ -96,7 +96,7 @@ function renderOptionsPage() {
           <label for="qty-custom">Anders:</label>
           <input type="number"
                  id="qty-custom"
-                 value="${!FIXED_QUANTITIES.includes(parseInt(quantity, 10)) && quantity ? escHtml(quantity) : ''}"
+                 value="${quantity ? escHtml(quantity) : ''}"
                  placeholder="stuks"
                  min="${minQuantity}">
           <label for="qty-custom">stuks</label>
@@ -300,19 +300,26 @@ function bindQuantitySelection(el, product, persTypes) {
 
       row.classList.add('highlighted');
 
+      // Het gekozen aantal ook in "Anders" tonen, zodat zichtbaar is wat er gekozen is.
       const customInput = document.getElementById('qty-custom');
 
       if (customInput) {
-        customInput.value = '';
+        customInput.value = row.dataset.qty;
       }
 
       saveOptions(el, product, persTypes);
     });
   });
 
-  document.getElementById('qty-custom')?.addEventListener('input', () => {
+  document.getElementById('qty-custom')?.addEventListener('input', event => {
+    const typed = parseInt(event.target.value, 10);
+
+    // Typt de klant een aantal uit de tabel, dan die rij markeren.
     el.querySelectorAll('.staffel-table tbody tr').forEach(row => {
-      row.classList.remove('highlighted');
+      row.classList.toggle(
+        'highlighted',
+        Number.isFinite(typed) && parseInt(row.dataset.qty, 10) === typed
+      );
     });
 
     saveOptions(el, product, persTypes);

@@ -3549,6 +3549,15 @@ function openOrderOverview(
         Download drukbestand met rillijnen
       </button>
     ` : ''}
+    ${showFiles && (pdfAvailable || rillinesPdfAvailable) ? `
+      <button
+        class="btn btn-secondary"
+        type="button"
+        onclick="downloadAllDesignPDFs('${order.id}')"
+      >
+        Alle PDF's (ZIP)
+      </button>
+    ` : ''}
 
     ${workflow.status === 'customer_approval_needed' ? `
       <button
@@ -4327,6 +4336,23 @@ function viewOrderFiles(
 
   body.style.cssText =
     'display:flex;flex-direction:column;gap:20px';
+
+  if (
+    getOrderPdfDataURL(order) ||
+    getOrderRillinesPdfDataURL(order)
+  ) {
+    body.innerHTML += `
+      <div>
+        <button
+          class="btn btn-primary btn-sm"
+          type="button"
+          onclick="downloadAllDesignPDFs('${escHtml(id)}')"
+        >
+          Alle ontwerp-PDF's downloaden (ZIP)
+        </button>
+      </div>
+    `;
+  }
 
   if (
     isImageFileRef(
@@ -5894,6 +5920,140 @@ function getOrderPdfDataURL(
   );
 }
 
+/**
+ * Alle ontwerp-PDF's van een order (drukbestand, met en zonder rillijnen)
+ * in één ZIP. Zonder JSZip worden ze los na elkaar gedownload.
+ */
+async function downloadAllDesignPDFs(
+  id
+) {
+  const order =
+    DS.getOrderById(
+      id
+    );
+
+  if (!order) {
+    return;
+  }
+
+  const orderNumber =
+    getDisplayOrderNumber(
+      order
+    );
+
+  const files = [
+    {
+      ref:
+        getOrderPdfDataURL(
+          order
+        ),
+      name:
+        `drukbestand-${orderNumber}.pdf`,
+    },
+    {
+      ref:
+        getOrderRillinesPdfDataURL(
+          order
+        ),
+      name:
+        `drukbestand-met-rillijnen-${orderNumber}.pdf`,
+    },
+  ].filter(file => file.ref);
+
+  if (!files.length) {
+    AdminUI.showToast(
+      'Geen ontwerp-PDF\'s beschikbaar voor deze order',
+      'error'
+    );
+    return;
+  }
+
+  if (typeof JSZip === 'undefined') {
+    files.forEach((file, index) => {
+      setTimeout(
+        () => downloadDataURL(file.ref, file.name),
+        index * 400
+      );
+    });
+    return;
+  }
+
+  AdminUI.showToast(
+    'ZIP wordt gemaakt...',
+    'success',
+    10000
+  );
+
+  try {
+    const zip =
+      new JSZip();
+
+    for (const file of files) {
+      const response =
+        await fetch(
+          file.ref
+        );
+
+      if (!response.ok) {
+        throw new Error(
+          `${file.name} kon niet worden opgehaald (${response.status}).`
+        );
+      }
+
+      zip.file(
+        file.name,
+        await response.blob()
+      );
+    }
+
+    const blob =
+      await zip.generateAsync({
+        type: 'blob',
+      });
+
+    const url =
+      URL.createObjectURL(
+        blob
+      );
+
+    const link =
+      document.createElement(
+        'a'
+      );
+
+    link.href = url;
+    link.download =
+      `ontwerpbestanden-${orderNumber}.zip`;
+
+    document.body.appendChild(
+      link
+    );
+
+    link.click();
+    link.remove();
+
+    setTimeout(
+      () => URL.revokeObjectURL(url),
+      10000
+    );
+
+    AdminUI.showToast(
+      'ZIP gedownload'
+    );
+  } catch (error) {
+    console.warn(
+      'ZIP maken mislukt',
+      error
+    );
+
+    AdminUI.showToast(
+      'ZIP maken mislukt. Download de bestanden los of probeer het opnieuw.',
+      'error',
+      7000
+    );
+  }
+}
+
 function getOrderRillinesPdfDataURL(
   order
 ) {
@@ -6794,6 +6954,9 @@ window.downloadPrintPDF =
 
 window.downloadRillinesPDF =
   downloadRillinesPDF;
+
+window.downloadAllDesignPDFs =
+  downloadAllDesignPDFs;
 
 window.downloadDefinitiveFile =
   downloadDefinitiveFile;

@@ -22,6 +22,10 @@ let fabricInitToken = 0;
 let fabricInitTimer = null;
 let canvasZoom = 1;
 
+// true = de productzijde vult automatisch het beschikbare vak.
+// Wordt false zodra de klant zelf in- of uitzoomt; bij wisselen van zijde weer true.
+let canvasZoomFitMode = true;
+
 // Basis-pixelverhouding van het scherm. Bij inzoomen tekent Fabric op een
 // hogere resolutie (fabric.devicePixelRatio), zodat het beeld scherp blijft.
 const BASE_DEVICE_PIXEL_RATIO =
@@ -30,7 +34,7 @@ const BASE_DEVICE_PIXEL_RATIO =
 const CANVAS_MAX_BACKSTORE_SIDE_PX = 4096;
 
 const CANVAS_ZOOM_MIN = 0.65;
-const CANVAS_ZOOM_MAX = 2.5;
+const CANVAS_ZOOM_MAX = 4;
 const CANVAS_ZOOM_STEP = 0.1;
 const CANVAS_ZOOM_SAFE_INSET_PX = 8;
 
@@ -445,6 +449,11 @@ function renderDesignPage() {
           <div id="status">
             Selecteer een element om te bewerken.
             Klik en sleep om te verplaatsen.
+          </div>
+
+          <div class="design-guide-legend" aria-hidden="true">
+            <span class="design-guide-legend-margin">Veilige marge: houd tekst en logo's hierbinnen</span>
+            <span class="design-guide-legend-bleed">Afloop: wordt weggesneden, laat achtergronden hier doorlopen</span>
           </div>
         </section>
 
@@ -1079,6 +1088,8 @@ function setActiveDesignView(
   designViewContext.activeViewId =
     viewId;
 
+  canvasZoomFitMode = true;
+
   persistDesignState(
     designViewContext.stateKey,
     {
@@ -1298,6 +1309,296 @@ function getDesignViewSourceBounds(
   });
 }
 
+// ─── AFLOOP (BLEED) ─────────────────────────────────────────────────────────
+
+const BLEED_GUIDE_FILL = 'rgba(192, 57, 43, 0.14)';
+const BLEED_GUIDE_STROKE = '#C0392B';
+const BLEED_GUIDE_FLAG = '_isBleedGuide';
+
+/**
+ * Afloop in canvaspixels. Het canvas beslaat het volledige exportformaat
+ * (eindformaat + afloop), dus de snijlijn ligt 'bleed' pixels binnen de rand.
+ */
+function getCanvasBleedPx(canvas) {
+  const spec =
+    designViewContext?.spec;
+
+  const width =
+    canvas?.getWidth?.() ||
+    0;
+
+  const height =
+    canvas?.getHeight?.() ||
+    0;
+
+  if (
+    !spec ||
+    !width ||
+    !height ||
+    !Number(spec.exportWidthMm) ||
+    !Number(spec.exportHeightMm)
+  ) {
+    return {
+      x: 0,
+      y: 0,
+    };
+  }
+
+  return {
+    x:
+      Number(spec.trimXmm || 0) /
+      Number(spec.exportWidthMm) *
+      width,
+    y:
+      Number(spec.trimYmm || 0) /
+      Number(spec.exportHeightMm) *
+      height,
+  };
+}
+
+/**
+ * Productzijde + afloop aan de kanten die op de snijlijn liggen.
+ * Gebruikt voor weergave en voor hoe ver objecten mogen doorlopen,
+ * zodat klanten achtergronden tot in de afloop kunnen laten lopen.
+ * Gedraaide of gespiegelde zijden blijven ongewijzigd.
+ */
+function expandBoundsWithBleed(
+  canvas,
+  view,
+  bounds
+) {
+  if (
+    !canvas ||
+    !view ||
+    !bounds
+  ) {
+    return bounds;
+  }
+
+  const zone =
+    view.sourceZone ||
+    {};
+
+  if (
+    normalizeDesignRotation(zone.rotation) !== 0 ||
+    zone.flipX ||
+    zone.flipY
+  ) {
+    return bounds;
+  }
+
+  const spec =
+    designViewContext?.spec;
+
+  const bleed =
+    getCanvasBleedPx(
+      canvas
+    );
+
+  if (
+    !spec ||
+    (!bleed.x && !bleed.y)
+  ) {
+    return bounds;
+  }
+
+  const width =
+    canvas.getWidth();
+
+  const height =
+    canvas.getHeight();
+
+  const trimRight =
+    width -
+    bleed.x;
+
+  const trimBottom =
+    height -
+    bleed.y;
+
+  // Tolerantie van ongeveer 1 mm.
+  const toleranceX =
+    width /
+    Number(spec.exportWidthMm || width);
+
+  const toleranceY =
+    height /
+    Number(spec.exportHeightMm || height);
+
+  let {
+    left,
+    top,
+    right,
+    bottom,
+  } = bounds;
+
+  if (Math.abs(left - bleed.x) <= toleranceX) {
+    left = 0;
+  }
+
+  if (Math.abs(top - bleed.y) <= toleranceY) {
+    top = 0;
+  }
+
+  if (Math.abs(right - trimRight) <= toleranceX) {
+    right = width;
+  }
+
+  if (Math.abs(bottom - trimBottom) <= toleranceY) {
+    bottom = height;
+  }
+
+  if (
+    left === bounds.left &&
+    top === bounds.top &&
+    right === bounds.right &&
+    bottom === bounds.bottom
+  ) {
+    return bounds;
+  }
+
+  return createDesignBounds({
+    left,
+    top,
+    width:
+      right -
+      left,
+    height:
+      bottom -
+      top,
+    viewId:
+      bounds.viewId,
+  });
+}
+
+/**
+ * Wat de editor toont: het VOLLEDIGE bedrukbare vlak van de productzijde
+ * (niet alleen het deel dat in het venster van de productfoto past) plus afloop.
+ * Het live productvoorbeeld gebruikt nog steeds de uitsnede voor de foto.
+ */
+function getDesignViewDisplayBounds(
+  canvas,
+  view = getActiveDesignView()
+) {
+  return expandBoundsWithBleed(
+    canvas,
+    view,
+    getDesignViewSourceBounds(
+      canvas,
+      view
+    )
+  );
+}
+
+/**
+ * Rode, half doorzichtige stroken voor de afloop tussen 'outer' en 'trim',
+ * met een rode snijlijn. Alleen aan de kanten waar afloop is.
+ */
+function createBleedGuideObjects(
+  outer,
+  trim,
+  extraFlags = {}
+) {
+  const objects = [];
+  const strips = [];
+  const lines = [];
+
+  if (trim.top - outer.top > 0.5) {
+    strips.push([outer.left, outer.top, outer.right - outer.left, trim.top - outer.top]);
+    lines.push([trim.left, trim.top, trim.right, trim.top]);
+  }
+
+  if (outer.bottom - trim.bottom > 0.5) {
+    strips.push([outer.left, trim.bottom, outer.right - outer.left, outer.bottom - trim.bottom]);
+    lines.push([trim.left, trim.bottom, trim.right, trim.bottom]);
+  }
+
+  if (trim.left - outer.left > 0.5) {
+    strips.push([outer.left, trim.top, trim.left - outer.left, trim.bottom - trim.top]);
+    lines.push([trim.left, trim.top, trim.left, trim.bottom]);
+  }
+
+  if (outer.right - trim.right > 0.5) {
+    strips.push([trim.right, trim.top, outer.right - trim.right, trim.bottom - trim.top]);
+    lines.push([trim.right, trim.top, trim.right, trim.bottom]);
+  }
+
+  const shared = {
+    selectable: false,
+    evented: false,
+    objectCaching: false,
+    excludeFromExport: true,
+    _isGuide: true,
+    [BLEED_GUIDE_FLAG]: true,
+    ...extraFlags,
+  };
+
+  strips.forEach(([left, top, width, height]) => {
+    objects.push(new fabric.Rect({
+      left,
+      top,
+      width,
+      height,
+      fill: BLEED_GUIDE_FILL,
+      strokeWidth: 0,
+      ...shared,
+    }));
+  });
+
+  lines.forEach(points => {
+    objects.push(new fabric.Line(points, {
+      stroke: BLEED_GUIDE_STROKE,
+      strokeWidth: 1,
+      strokeUniform: true,
+      ...shared,
+    }));
+  });
+
+  return objects;
+}
+
+/**
+ * Afloop tekenen in de editor zonder productzijden.
+ */
+function drawBleedGuides(canvas) {
+  if (
+    !canvas ||
+    designViewContext?.config?.enabled
+  ) {
+    return;
+  }
+
+  canvas
+    .getObjects()
+    .filter(object => object[BLEED_GUIDE_FLAG])
+    .forEach(object => canvas.remove(object));
+
+  const bleed =
+    getCanvasBleedPx(
+      canvas
+    );
+
+  if (!bleed.x && !bleed.y) {
+    return;
+  }
+
+  const width =
+    canvas.getWidth();
+
+  const height =
+    canvas.getHeight();
+
+  createBleedGuideObjects(
+    createDesignBounds({ left: 0, top: 0, width, height }),
+    createDesignBounds({
+      left: bleed.x,
+      top: bleed.y,
+      width: width - bleed.x * 2,
+      height: height - bleed.y * 2,
+    })
+  ).forEach(object => canvas.add(object));
+}
+
 function getDesignViewBounds(
   canvas,
   view = getActiveDesignView()
@@ -1496,7 +1797,7 @@ function hasExpectedDesignViewport(canvas) {
       ];
 
   const bounds =
-    getDesignViewBounds(
+    getDesignViewDisplayBounds(
       canvas
     );
 
@@ -1581,10 +1882,16 @@ function applyActiveDesignView(
       view
     );
 
+  // Volledig bedrukbaar vlak (zonder uitsnede voor de productfoto).
+  const contentBounds =
+    sourceBounds;
+
+  // Weergave inclusief afloop aan de kanten die op de snijlijn liggen.
   const bounds =
-    getDesignViewBounds(
+    expandBoundsWithBleed(
       canvas,
-      view
+      view,
+      contentBounds
     );
 
   if (
@@ -1622,7 +1929,7 @@ function applyActiveDesignView(
   normalizeActiveDesignViewObjects(
     canvas,
     view,
-    sourceBounds
+    bounds
   );
 
   updateDesignObjectInteractivity(
@@ -1631,6 +1938,7 @@ function applyActiveDesignView(
 
   addDesignViewGuides(
     canvas,
+    contentBounds,
     bounds
   );
 
@@ -2025,8 +2333,9 @@ function constrainObjectToActiveDesignView(
   canvas,
   object
 ) {
+  // Objecten mogen tot in de afloop doorlopen.
   const bounds =
-    getDesignViewBounds(
+    getDesignViewDisplayBounds(
       canvas
     );
 
@@ -2464,7 +2773,8 @@ function removeDesignViewGuides(canvas) {
 
 function addDesignViewGuides(
   canvas,
-  bounds
+  bounds,
+  displayBounds = bounds
 ) {
   const guideColor =
     getContrastingGuideColor(
@@ -2548,26 +2858,33 @@ function addDesignViewGuides(
     guide.set({
       strokeUniform:
         true,
-
       selectable:
         false,
-
       evented:
         false,
-
       objectCaching:
         false,
-
       excludeFromExport:
         true,
-
       _isGuide:
         true,
-
       [DESIGN_VIEW_GUIDE_FLAG]:
         true,
     });
 
+    canvas.add(guide);
+    canvas.bringToFront(guide);
+  });
+
+  // Afloop zichtbaar maken aan de kanten die op de snijlijn liggen.
+  createBleedGuideObjects(
+    displayBounds,
+    bounds,
+    {
+      [DESIGN_VIEW_GUIDE_FLAG]:
+        true,
+    }
+  ).forEach(guide => {
     canvas.add(guide);
     canvas.bringToFront(guide);
   });
@@ -2878,7 +3195,7 @@ function isObjectOutsideDesignViewMargin(
   }
 
   const bounds =
-    getDesignViewBounds(
+    getDesignViewSourceBounds(
       canvas,
       view
     );
@@ -4254,7 +4571,7 @@ function getCanvasZoomBounds(
   }
 
   const bounds =
-    getDesignViewBounds(
+    getDesignViewDisplayBounds(
       canvas
     );
 
@@ -4466,6 +4783,11 @@ function applyDesignCanvasDisplayZoom(
       canvas
     );
 
+  if (canvasZoomFitMode) {
+    canvasZoom =
+      zoomBounds.max;
+  }
+
   canvasZoom =
     Math.min(
       zoomBounds.max,
@@ -4560,7 +4882,7 @@ function applyCanvasZoom() {
       getActiveDesignView();
 
     const bounds =
-      getDesignViewBounds(
+      getDesignViewDisplayBounds(
         fabricCanvas,
         view
       );
@@ -4660,6 +4982,8 @@ function setCanvasZoom(nextZoom) {
 
   canvasZoom =
     clampedZoom;
+
+  canvasZoomFitMode = false;
 
   applyCanvasZoom();
   updateCanvasZoomControls();
@@ -4910,6 +5234,7 @@ function initFabricTool(
   fabricHistory = [];
 
   canvasZoom = 1;
+  canvasZoomFitMode = true;
   fabricActiveColor = '#1D9E75';
 
   fabricBackgroundColor =
@@ -6194,6 +6519,28 @@ function createCenteredLineSafeZone(lineData) {
   });
 }
 
+function getEffectiveCanvasMargin(
+  canvas,
+  margin
+) {
+  if (designViewContext?.config?.enabled) {
+    return margin;
+  }
+
+  const bleed =
+    getCanvasBleedPx(
+      canvas
+    );
+
+  return (
+    Number(margin || 0) +
+    Math.max(
+      bleed.x,
+      bleed.y
+    )
+  );
+}
+
 function redrawGuides(
   canvas,
   activePers,
@@ -6211,12 +6558,21 @@ function redrawGuides(
     canvas
   );
 
+  // Zonder productzijden beslaat het canvas ook de afloop:
+  // de veilige marge ligt dan binnen de snijlijn, dus afloop + marge.
   drawMarginRect(
     canvas,
-    margin,
+    getEffectiveCanvasMargin(
+      canvas,
+      margin
+    ),
     canvasWidth,
     canvasHeight,
     isWarning
+  );
+
+  drawBleedGuides(
+    canvas
   );
 
   drawBlockedZones(
@@ -6873,7 +7229,7 @@ function isCenterSnappableObject(object) {
 
 function getCanvasCenterPoint(canvas) {
   const bounds =
-    getDesignViewBounds(
+    getDesignViewSourceBounds(
       canvas
     );
 
@@ -7042,7 +7398,7 @@ function renderCenterSnapGuides(
   );
 
   const bounds =
-    getDesignViewBounds(
+    getDesignViewSourceBounds(
       canvas
     );
 
@@ -8095,8 +8451,13 @@ function getFabricImageDpiWarningForCanvas(
   const canvasHeight =
     canvas.getHeight();
 
+  // Het canvas beslaat het exportformaat (incl. afloop), dus daarmee rekenen.
+  const spec =
+    designViewContext?.spec;
+
   const widthMm =
     Number(
+      spec?.exportWidthMm ||
       activePers?.width_mm ||
       product?.width_mm ||
       0
@@ -8104,6 +8465,7 @@ function getFabricImageDpiWarningForCanvas(
 
   const heightMm =
     Number(
+      spec?.exportHeightMm ||
       activePers?.height_mm ||
       product?.height_mm ||
       0
@@ -8251,6 +8613,12 @@ function isOutsideMargin(
   canvasWidth,
   canvasHeight
 ) {
+  margin =
+    getEffectiveCanvasMargin(
+      fabricCanvas,
+      margin
+    );
+
   const bounds =
     object.getBoundingRect(
       true,
